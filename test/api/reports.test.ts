@@ -13,7 +13,6 @@ let ctx: Ctx;
 let admin: Client, reception: Client, planner: Client, tech: Client, hod: Client, reviewer: Client, signatory: Client, sales: Client;
 let team: Team;
 let fx: Awaited<ReturnType<typeof billingFixture>>;
-let densityId: string;
 
 beforeAll(async () => {
   ctx = await bootApp();
@@ -29,7 +28,7 @@ beforeAll(async () => {
   sales = await login(ctx, 'sales@r.example');
   team = { reception, planner, tech, hod };
   fx = await billingFixture(admin, ctx);
-  densityId = (await admin.post('/masters/test-parameters', { testId: fx.tests.d, code: 'DENSITY', name: 'Density', decimals: 3, accredited: true }).expect(201)).body.id;
+  await admin.post('/masters/test-parameters', { testId: fx.tests.d, code: 'DENSITY', name: 'Density', decimals: 3, accredited: true }).expect(201);
   await admin.post('/masters/test-parameters', { testId: fx.tests.a, code: 'APPEAR', name: 'Appearance', kind: 'TEXT' }).expect(201);
   await admin.post('/admin/terms', { kind: 'REPORT', body: 'Original report terms' }).expect(201);
 });

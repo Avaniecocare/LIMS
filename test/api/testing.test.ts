@@ -203,8 +203,8 @@ describe('stages and results', () => {
     const { sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
     const attach = (c: Client) => c.post('/files').field('entity', 'SampleTest').field('entityId', id).field('category', 'result-image').field('printWidthMm', '80').field('printHeightMm', '60').attach('file', PNG, 'micro.png');
     await attach(tech).expect(403); // not started
-    let d = (await tech.get(`/tests/${id}`).expect(200)).body;
-    d = (await tech.post(`/tests/${id}/start`, { version: d.version }).expect(200)).body;
+    const d = (await tech.get(`/tests/${id}`).expect(200)).body;
+    await tech.post(`/tests/${id}/start`, { version: d.version }).expect(200);
     const f = (await attach(tech).expect(201)).body;
     expect(f).toMatchObject({ printWidthMm: 80, printHeightMm: 60 });
     await attach(tech2).expect(403);

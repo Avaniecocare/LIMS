@@ -1,6 +1,12 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { CoreModule } from './core/core.module.js';
+import { DashboardModule } from './modules/dashboard/dashboard.module.js';
+import { MisModule } from './modules/mis/mis.module.js';
+import { NotificationsModule } from './modules/notifications/notifications.module.js';
+import { CancellationsModule } from './modules/cancellations/cancellations.module.js';
+import { DispatchModule } from './modules/dispatch/dispatch.module.js';
+import { InvoicesModule } from './modules/invoices/invoices.module.js';
 import { AdminController, SavedFiltersController } from './modules/admin/admin.controller.js';
 import { AdminService } from './modules/admin/admin.service.js';
 import { AuthGuard } from './modules/auth/auth.guard.js';
@@ -23,7 +29,7 @@ import { SearchModule } from './modules/search/search.module.js';
 import { TestingModule } from './modules/testing/testing.module.js';
 
 /** Business modules. The worker imports these too, so document handlers register in both processes. */
-export const DOMAIN_MODULES = [PdfModule, SchedulerModule, DocumentsModule, FilesModule, MastersModule, CustomersModule, OrdersModule, QuotationsModule, JobsModule, PlanningModule, SearchModule, TestingModule, ReportsModule];
+export const DOMAIN_MODULES = [PdfModule, SchedulerModule, DocumentsModule, FilesModule, MastersModule, CustomersModule, OrdersModule, QuotationsModule, JobsModule, PlanningModule, SearchModule, TestingModule, ReportsModule, InvoicesModule, DispatchModule, CancellationsModule, MisModule, DashboardModule, NotificationsModule];
 
 @Module({
   imports: [CoreModule, AuthModule, ...DOMAIN_MODULES],

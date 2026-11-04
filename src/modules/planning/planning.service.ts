@@ -35,6 +35,8 @@ export function isAccredited(flag: boolean, until: Date | null, on: Date): boole
 
 @Injectable()
 export class PlanningService implements OnModuleInit {
+  notifyAssigned: ((tx: Tx, sampleTestId: string, userId: string) => Promise<void>) | null = null;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -194,10 +196,12 @@ export class PlanningService implements OnModuleInit {
       assertTransition(TEST, 'PLANNED', 'ASSIGNED');
       await tx.sampleTest.update({ where: { id: t.id }, data: { status: 'ASSIGNED', assignedToId, assignedAt: new Date(), instrumentId: instrumentId ?? t.instrumentId, version: { increment: 1 } } });
       await this.audit.status(tx, { entity: 'SampleTest', entityId: t.id, from: 'PLANNED', to: 'ASSIGNED', jobId: t.sample.jobId, meta: { assignedToId } });
+      await this.notifyAssigned?.(tx, t.id, assignedToId);
     } else if (t.status === 'ASSIGNED' || t.status === 'IN_PROGRESS' || t.status === 'ON_HOLD') {
       // Reassignment keeps the status; it is still recorded who it moved from.
       await tx.sampleTest.update({ where: { id: t.id }, data: { assignedToId, assignedAt: new Date(), instrumentId: instrumentId ?? t.instrumentId, version: { increment: 1 } } });
       await this.audit.record({ action: 'SampleTest.reassign', entity: 'SampleTest', entityId: t.id, before: { assignedToId: t.assignedToId }, after: { assignedToId } }, tx);
+      if (t.assignedToId !== assignedToId) await this.notifyAssigned?.(tx, t.id, assignedToId);
     } else {
       throw rule('NOT_ASSIGNABLE', `${t.testName} is ${t.status.toLowerCase().replace('_', ' ')} and cannot be reassigned`);
     }
