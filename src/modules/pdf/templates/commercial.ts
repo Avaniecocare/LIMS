@@ -43,7 +43,7 @@ export function creditNoteHtml(c: CreditNotePdf): string {
   <table class="plain" style="margin:6px 0"><tr><td><span class="bold">Credit note no.:</span> ${esc(c.creditNoteNo)}</td><td class="right"><span class="bold">Date:</span> ${formatDate(c.issuedOn)}</td></tr>
   <tr><td><span class="bold">Against invoice:</span> ${esc(c.invoiceNo)} dated ${formatDate(c.invoiceDate)}</td><td></td></tr></table>
   ${customerBlock(c.customer, 'Customer')}<h2>Reason</h2><p>${multiline(c.reason)}</p>
-  ${taxTotalsTable(totals, formatINR as never)}<p class="bold">Amount in words: Rupees ${esc(c.amountInWords)}</p>
+  ${taxTotalsTable(totals, formatINR as never, 'Taxable value', 'Credit note total (₹)')}<p class="bold">Amount in words: Rupees ${esc(c.amountInWords)}</p>
   <p class="right" style="margin-top:28px">For <span class="bold">${esc(c.company.legalName)}</span></p>`);
 }
 

@@ -224,7 +224,7 @@ export class ReportsService implements OnModuleInit {
 
   private async renderPdf(revisionId: string) {
     const input = await this.renderInput(revisionId);
-    const buffer = await this.pdf.render(reportHtml(input), { company: input.company });
+    const buffer = await this.pdf.render(reportHtml(input), { company: input.company, reportVerification: true });
     const rev = await this.prisma.reportRevision.findUniqueOrThrow({ where: { id: revisionId }, select: { reportId: true } });
     return { buffer, filename: `Test Report ${input.reportNo} R${input.revisionNo}.pdf`.replace(/[/\\]/g, '-'), mimeType: 'application/pdf', entity: 'Report', entityId: rev.reportId };
   }

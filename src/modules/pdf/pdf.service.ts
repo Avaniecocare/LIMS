@@ -10,6 +10,8 @@ export interface RenderOptions {
   width?: string;
   height?: string;
   footer?: boolean;
+  /** the verification address belongs on test reports only */
+  reportVerification?: boolean;
   margin?: { top: string; bottom: string; left: string; right: string };
 }
 
@@ -40,7 +42,7 @@ export class PdfService implements OnModuleDestroy {
         margin: options.margin ?? { top: '12mm', bottom: useFooter ? '24mm' : '12mm', left: '12mm', right: '12mm' },
         displayHeaderFooter: useFooter,
         headerTemplate: '<span></span>',
-        footerTemplate: useFooter ? footer(options.company) : '<span></span>',
+        footerTemplate: useFooter ? footer(options.company, options.reportVerification === true) : '<span></span>',
         preferCSSPageSize: false,
       });
       return Buffer.from(pdf);
@@ -64,11 +66,11 @@ export class PdfService implements OnModuleDestroy {
   }
 }
 
-function footer(c: RenderOptions['company']): string {
+function footer(c: RenderOptions['company'], verification: boolean): string {
   const certification = c.accreditation.certificationText ? ` · ${esc(c.accreditation.certificationText)}` : '';
   return `<div style="width:100%;font-family:Arial,Helvetica,sans-serif;font-size:7.5px;color:#374151;padding:0 12mm;box-sizing:border-box">
     <div style="border-top:1px solid #9ca3af;padding-top:3px;display:flex;justify-content:space-between;gap:12px">
-      <div><strong>${esc(c.legalName)}</strong> · ${esc(c.labAddress)}<br>${esc(c.phone)} · ${esc(c.email)} · Report verification: ${esc(c.reportVerificationEmail)}${certification}</div>
+      <div><strong>${esc(c.legalName)}</strong> · ${esc(c.labAddress)}<br>${esc(c.phone)} · ${esc(c.email)}${verification ? ` · Report verification: ${esc(c.reportVerificationEmail)}` : ''}${certification}</div>
       <div style="white-space:nowrap">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>
     </div></div>`;
 }

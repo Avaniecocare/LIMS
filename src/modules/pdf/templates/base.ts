@@ -77,14 +77,14 @@ export function customerBlock(c: CustomerSnapshot, label = 'To'): string {
   ${c.contactName ? `<div>Attention: ${esc(c.contactName)}</div>` : ''}</div>`;
 }
 
-export function taxTotalsTable(t: { subtotal: unknown; discountAmount: unknown; taxableAmount: unknown; gstRate: unknown; cgst: unknown; sgst: unknown; igst: unknown; roundOff: unknown; grandTotal: unknown }, inr: (v: never) => string): string {
+export function taxTotalsTable(t: { subtotal: unknown; discountAmount: unknown; taxableAmount: unknown; gstRate: unknown; cgst: unknown; sgst: unknown; igst: unknown; roundOff: unknown; grandTotal: unknown }, inr: (v: never) => string, subtotalLabel = 'Subtotal', totalLabel = 'Grand total (₹)'): string {
   const fmt = (v: unknown) => inr(String(v) as never);
   const rate = Number(t.gstRate);
   const row = (label: string, v: unknown, bold = false) => `<tr class="${bold ? 'bold' : ''}"><td>${esc(label)}</td><td class="right">${fmt(v)}</td></tr>`;
-  return `<table class="totals">${row('Subtotal', t.subtotal)}
+  return `<table class="totals">${row(subtotalLabel, t.subtotal)}
   ${Number(t.discountAmount) ? row('Discount', t.discountAmount) : ''}
   ${Number(t.discountAmount) ? row('Taxable amount', t.taxableAmount) : ''}
   ${Number(t.igst) ? row(`IGST @ ${rate}%`, t.igst) : `${row(`CGST @ ${rate / 2}%`, t.cgst)}${row(`SGST @ ${rate / 2}%`, t.sgst)}`}
   ${Number(t.roundOff) ? row('Round off', t.roundOff) : ''}
-  ${row('Grand total (₹)', t.grandTotal, true)}</table>`;
+  ${row(totalLabel, t.grandTotal, true)}</table>`;
 }

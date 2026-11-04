@@ -133,7 +133,7 @@ export function reportHtml(r: ReportRenderInput): string {
   const remarks = c.tests.filter((t) => t.remarks || t.observations);
   const images = c.tests.flatMap((t) => t.images.map((i) => ({ ...i, testName: t.testName }))).filter((i) => i.dataUri);
   const signed = r.signature
-    ? `<div>${r.signature.imageDataUri ? `<img src="${r.signature.imageDataUri}" alt="" style="height:36px;display:block">` : ''}<div class="bold">${esc(r.signature.name)}</div><div>${esc(r.signature.designation)}</div><div class="small">Authorised Signatory</div></div>`
+    ? `<div>${r.signature.imageDataUri ? `<img src="${r.signature.imageDataUri}" alt="" style="height:36px;display:block">` : ''}<div class="bold">${esc(r.signature.name)}</div>${r.signature.designation && r.signature.designation !== 'Authorised Signatory' ? `<div>${esc(r.signature.designation)}</div>` : ''}<div class="small">Authorised Signatory</div></div>`
     : '<div class="muted">Not yet approved</div>';
   // Wording rule: this product applies no certificate, so it must never claim "Digitally Signed".
   const approval = r.signature ? `<p class="small">Electronically approved by ${esc(r.signature.name)} on ${formatDateTime(r.signature.signedAt)}. Report hash (SHA-256): <span style="word-break:break-all">${esc(r.signature.contentSha256)}</span></p>` : '';
