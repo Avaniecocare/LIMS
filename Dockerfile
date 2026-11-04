@@ -2,10 +2,10 @@
 FROM node:24-bookworm-slim AS build
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
-COPY package*.json prisma.config.ts ./
+# tsconfig.json must be present for generate: the client's import style follows it.
+COPY package*.json prisma.config.ts tsconfig.json nest-cli.json ./
 COPY prisma ./prisma
 RUN npm ci --ignore-scripts && npx prisma generate
-COPY tsconfig.json nest-cli.json ./
 COPY src ./src
 RUN npx nest build && npm rebuild argon2 && npm prune --omit=dev --ignore-scripts
 

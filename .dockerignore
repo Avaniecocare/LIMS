@@ -7,3 +7,5 @@ tmp
 coverage
 test
 load-test
+src/generated
+branding-demo
