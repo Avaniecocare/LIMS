@@ -49,29 +49,28 @@ export class DashboardService {
     const received = await this.mis.count('daily-collection-full', { from: t, to: t }, today);
     const receivedMonth = await this.mis.count('daily-collection-full', { from: monthFrom, to: t }, today);
     const crossed = await this.mis.count('tat-crossed', {}, today);
-    const urgent = await this.db.job.count({ where: { deletedAt: null, urgent: true, status: { notIn: ['COMPLETED', 'CANCELLED'] } } });
+    const urgent = await this.mis.count('pending-samples', { urgent: 'true' }, today);
+    const onHoldTests = await this.mis.count('result-pending', { status: 'ON_HOLD' }, today);
     const onHoldJobs = await this.db.job.count({ where: { deletedAt: null, status: 'ON_HOLD' } });
-    const onHoldTests = await this.db.sampleTest.count({ where: { deletedAt: null, status: 'ON_HOLD' } });
     // On time means approved on or before the due date, by the lab's calendar.
     const [{ total: approvedCount, onTime }] = await this.db.$queryRaw<{ total: number; onTime: number }[]>`
       SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE ("approvedAt" AT TIME ZONE 'Asia/Kolkata')::date <= "dueDate")::int AS "onTime"
       FROM "SampleTest" WHERE "deletedAt" IS NULL AND "status" = 'APPROVED' AND "dueDate" IS NOT NULL AND "approvedAt" BETWEEN ${dayStart(f.from!)} AND ${dayEnd(f.to!)}`;
     const compliance = approvedCount ? Math.round((onTime / approvedCount) * 1000) / 10 : 0;
     const byStatus = await this.db.sample.groupBy({ by: ['status'], where: { deletedAt: null, status: { not: 'CANCELLED' } }, _count: true });
-    const stages = await this.db.$queryRaw<{ stage: string; count: number }[]>`
-      SELECT COALESCE((SELECT s."name" FROM "SampleTestStage" s WHERE s."sampleTestId" = t."id" AND s."completedAt" IS NULL ORDER BY s."seq" LIMIT 1), 'Not started') AS stage, COUNT(*)::int AS count
-      FROM "SampleTest" t WHERE t."deletedAt" IS NULL AND t."status" IN ('ASSIGNED','IN_PROGRESS') GROUP BY 1 ORDER BY 2 DESC`;
+    const stages = await this.db.sampleTest.groupBy({ by: ['currentStage'], where: WHERE.resultPending({}), _count: true });
     return {
       metrics: [
         { key: 'received-today', label: 'Samples received today', value: received, display: null, link: reportLink('daily-collection-full', { from: t, to: t }) },
         { key: 'received-month', label: 'Samples this month', value: receivedMonth, display: null, link: reportLink('daily-collection-full', { from: monthFrom, to: t }) },
         { key: 'tat-crossed', label: 'TAT crossed', value: crossed, display: null, link: reportLink('tat-crossed') },
-        { key: 'urgent-jobs', label: 'Urgent jobs open', value: urgent, display: null, link: '/samples?urgent=true' },
-        { key: 'on-hold', label: 'On hold', value: onHoldJobs + onHoldTests, display: null, link: '/samples?status=ON_HOLD' },
+        { key: 'urgent-samples', label: 'Urgent samples open', value: urgent, display: null, link: reportLink('pending-samples', { urgent: 'true' }) },
+        { key: 'jobs-on-hold', label: 'Jobs on hold', value: onHoldJobs, display: null, link: '/samples?status=ON_HOLD' },
+        { key: 'tests-on-hold', label: 'Tests on hold', value: onHoldTests, display: null, link: reportLink('result-pending', { status: 'ON_HOLD' }) },
         { key: 'tat-compliance', label: 'TAT compliance', value: compliance, display: `${compliance}%`, link: reportLink('complete-test-detail', { from: f.from, to: f.to }) },
       ],
       samplesByStatus: byStatus.map((g) => ({ label: g.status, value: g._count, link: reportLink('sample-status', { status: g.status }) })),
-      testsByStage: stages.map((s) => ({ label: s.stage, value: s.count, link: reportLink('result-pending') })),
+      testsByStage: stages.filter((s) => s.currentStage).sort((x, y) => y._count - x._count).map((s) => ({ label: s.currentStage!, value: s._count, link: reportLink('result-pending', { stage: s.currentStage! }) })),
     };
   }
 
@@ -83,7 +82,7 @@ export class DashboardService {
     const testRejections = await this.db.statusEvent.findMany({ where: { entity: 'SampleTest', fromStatus: 'RESULTS_SUBMITTED', toStatus: 'IN_PROGRESS', at: period }, select: { reason: true } });
     const decided = await this.db.statusEvent.count({ where: { entity: 'SampleTest', fromStatus: 'RESULTS_SUBMITTED', at: period } });
     const rate = decided ? Math.round((testRejections.length / decided) * 1000) / 10 : 0;
-    const revisions = await this.db.reportRevision.count({ where: { revisionNo: { gt: 0 }, issuedAt: period } });
+    const revisions = await this.mis.count('revisions-issued', f);
     const reasons = new Map<string, number>();
     for (const r of [...rejections, ...testRejections]) reasons.set(r.reason ?? 'Not stated', (reasons.get(r.reason ?? 'Not stated') ?? 0) + 1);
     return {
@@ -91,7 +90,7 @@ export class DashboardService {
         { key: 'awaiting-review', label: 'Reports awaiting review', value: awaitingReview, display: null, link: '/approvals?tab=review' },
         { key: 'awaiting-approval', label: 'Reports awaiting approval', value: awaitingApproval, display: null, link: '/approvals?tab=sign' },
         { key: 'rejection-rate', label: 'Test rejection rate', value: rate, display: `${rate}%`, link: reportLink('technician-analysis', { from: f.from, to: f.to }) },
-        { key: 'revisions-issued', label: 'Revisions issued', value: revisions, display: null, link: '/approvals?tab=issued' },
+        { key: 'revisions-issued', label: 'Revisions issued', value: revisions, display: null, link: reportLink('revisions-issued', { from: f.from, to: f.to }) },
       ],
       rejectionReasons: [...reasons.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([reason, count]) => ({ reason, count })),
     };

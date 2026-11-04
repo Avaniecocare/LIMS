@@ -103,7 +103,7 @@ export class InvoicesService implements OnModuleInit {
 
   // ---------------------------------------------------------------- shapes
   private summary(i: SummaryRow, today = istToday()) {
-    const balance = balanceOf(i);
+    const balance = i.status === 'CANCELLED' ? new Decimal(0) : balanceOf(i);
     const open = OPEN.includes(i.status as 'ISSUED');
     const days = i.dueDate ? daysOverdue(i.dueDate, today) : 0;
     return {
@@ -447,8 +447,8 @@ export class InvoicesService implements OnModuleInit {
       deletedAt: null,
       status: { in: OPEN },
       ...(q.customerId ? { customerId: q.customerId } : {}),
-      ...(q.bucket ? { dueDate: bucketDueDateRange(q.bucket as AgeingBucket, today) } : {}),
-      ...(q.overdue === 'true' ? { dueDate: { lt: today } } : q.overdue === 'false' ? { dueDate: { gte: today } } : {}),
+      // Together, so neither filter replaces the other.
+      AND: [...(q.bucket ? [{ dueDate: bucketDueDateRange(q.bucket as AgeingBucket, today) }] : []), ...(q.overdue === 'true' ? [{ dueDate: { lt: today } }] : q.overdue === 'false' ? [{ dueDate: { gte: today } }] : [])],
       ...(q.q ? { OR: [{ invoiceNo: { contains: q.q, mode: 'insensitive' } }, { customer: { name: { contains: q.q, mode: 'insensitive' } } }] } : {}),
     };
   }

@@ -963,6 +963,8 @@ model SampleTest {
   remarks       String?
   observations  String?
   notes         String?
+  /// first stage not yet complete; kept here so stage counts and their report can filter on it
+  currentStage  String?
   /// financial — never serialised for roles without pricing permission
   rate          Decimal?   @db.Decimal(14, 2)
   rateSource    String?
@@ -982,6 +984,7 @@ model SampleTest {
   @@index([createdAt])
   @@index([approvedAt])
   @@index([testId, status])
+  @@index([status, currentStage])
 }
 
 model SampleTestStage {

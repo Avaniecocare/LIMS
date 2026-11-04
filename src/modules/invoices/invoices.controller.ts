@@ -1,16 +1,11 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { IsEmail, IsOptional } from 'class-validator';
 import { OkDto } from '../auth/auth.dto.js';
 import { Perm } from '../auth/decorators.js';
 import { AuditHistoryDto } from '../jobs/jobs.dto.js';
 import { EmailLogDto } from '../quotations/quotations.dto.js';
-import { ApplyAdvanceDto, CancelInvoiceDto, CreateCreditNoteDto, CreateInvoiceDto, CreatePaymentDto, DueQuery, DueSummaryDto, EmailInvoiceDto, InvoiceDto, InvoicePageDto, InvoiceQuery, IssueInvoiceDto, PaymentDto, PaymentPageDto, PaymentQuery, ReadyPageDto, ReversePaymentDto, UpdateDraftInvoiceDto } from './invoices.dto.js';
+import { ApplyAdvanceDto, CancelInvoiceDto, CreateCreditNoteDto, CreateInvoiceDto, CreatePaymentDto, DueQuery, DueSummaryDto, EmailInvoiceDto, InvoiceDto, InvoicePageDto, InvoiceQuery, IssueInvoiceDto, PaymentDto, PaymentPageDto, PaymentQuery, ReadyPageDto, RemindDto, ReversePaymentDto, UpdateDraftInvoiceDto } from './invoices.dto.js';
 import { InvoicesService } from './invoices.service.js';
-
-class RemindDto {
-  @IsOptional() @IsEmail() to?: string | null;
-}
 
 @ApiTags('invoices')
 @Controller()

@@ -51,9 +51,9 @@ afterAll(() => ctx.app.close());
 
 describe('reports module', () => {
   it('has all 24 reports, each runnable with on-screen rows', async () => {
-    expect(REPORTS.map((r) => r.no)).toEqual(Array.from({ length: 24 }, (_, i) => i + 1));
+    expect(REPORTS.map((r) => r.no).sort((a, b) => a - b)).toEqual(Array.from({ length: 25 }, (_, i) => i + 1));
     const catalog = (await admin.get('/mis').expect(200)).body;
-    expect(catalog).toHaveLength(24);
+    expect(catalog).toHaveLength(25);
     for (const r of catalog) {
       const res = await admin.get(`/mis/${r.key}?from=2020-01-01&to=2099-12-31&pageSize=5`);
       expect(res.status, r.key).toBe(200);
@@ -107,11 +107,13 @@ describe('dashboard', () => {
       const [path, query] = link.replace('/reports/', '').split('?');
       return (await admin.get(`/mis/${path}?pageSize=1${query ? `&${query}` : ''}`).expect(200)).body.meta.total;
     };
-    for (const key of ['received-today', 'received-month', 'tat-crossed']) {
+    for (const key of ['received-today', 'received-month', 'tat-crossed', 'urgent-samples', 'tests-on-hold']) {
       const m = metric(d.operations, key);
       expect(m.value, key).toBe(await reportTotal(m.link));
     }
-    for (const point of d.operations.samplesByStatus) expect(point.value, point.label).toBe(await reportTotal(point.link));
+    for (const point of [...d.operations.samplesByStatus, ...d.operations.testsByStage]) expect(point.value, point.label).toBe(await reportTotal(point.link));
+    const revisions = metric(d.quality, 'revisions-issued');
+    expect(revisions.value).toBe(await reportTotal(revisions.link));
     expect(metric(d.commercial, 'quotations-sent').value).toBeGreaterThanOrEqual(0);
     const summary = (await accounts.get('/invoices/due/summary').expect(200)).body;
     expect(metric(d.commercial, 'outstanding').value).toBe(Number(summary.total));

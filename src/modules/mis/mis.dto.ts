@@ -9,6 +9,8 @@ export class MisQuery extends PageQuery {
   @IsOptional() @IsUUID() departmentId?: string;
   @IsOptional() @IsUUID() technicianId?: string;
   @IsOptional() @IsString() @MaxLength(30) status?: string;
+  @IsOptional() @IsString() @MaxLength(5) urgent?: string;
+  @IsOptional() @IsString() @MaxLength(200) stage?: string;
 }
 
 export class MisColumnDto { key: string; label: string; type: string; }

@@ -253,7 +253,7 @@ export class AdminService {
       ...(q.q ? { OR: [{ userName: { contains: q.q, mode: 'insensitive' } }, { reason: { contains: q.q, mode: 'insensitive' } }] } : {}),
     };
     const [rows, total] = await Promise.all([
-      this.prisma.auditLog.findMany({ where, orderBy: { at: 'desc' }, ...skipTake(q) }),
+      this.prisma.auditLog.findMany({ where, orderBy: orderBy(q, ['at', 'action', 'entity', 'userName'], 'at'), ...skipTake(q) }),
       this.prisma.auditLog.count({ where }),
     ]);
     return toPage(rows.map((r) => ({ ...r, id: r.id.toString() })), total, q);

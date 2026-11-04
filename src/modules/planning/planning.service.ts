@@ -161,7 +161,7 @@ export class PlanningService implements OnModuleInit {
           const dueDate = await this.dueDate(tx, master, job.urgent, today);
           await tx.sampleTest.update({
             where: { id: row.id },
-            data: { planId: plan.id, plannedAt: new Date(), analysisMode: t.analysisMode ?? null, officeInstructions: t.officeInstructions ?? null, technicalData: t.technicalData ?? null, specificationId: dto.specificationId ?? null, dualSpecificationId: dto.dualSpecificationId ?? null, dueDate, urgent: job.urgent, instrumentId: t.instrumentId ?? null, version: { increment: 1 } },
+            data: { planId: plan.id, plannedAt: new Date(), analysisMode: t.analysisMode ?? null, officeInstructions: t.officeInstructions ?? null, technicalData: t.technicalData ?? null, specificationId: dto.specificationId ?? null, dualSpecificationId: dto.dualSpecificationId ?? null, dueDate, urgent: job.urgent, instrumentId: t.instrumentId ?? null, currentStage: stages[0], version: { increment: 1 } },
           });
           await tx.sampleTestStage.createMany({ data: stages.map((name, seq) => ({ sampleTestId: row!.id, seq, name })) });
           const methodOk = master.method ? isAccredited(master.method.accredited, master.method.accreditedUntil, today) : false;

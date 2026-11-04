@@ -11258,6 +11258,24 @@
             }
           },
           {
+            "name": "urgent",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 5,
+              "type": "string"
+            }
+          },
+          {
+            "name": "stage",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 200,
+              "type": "string"
+            }
+          },
+          {
             "name": "page",
             "required": false,
             "in": "query",
@@ -19718,7 +19736,14 @@
       },
       "RemindDto": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "to": {
+            "type": "string",
+            "nullable": true,
+            "description": "defaults to the customer's contact email",
+            "format": "email"
+          }
+        }
       },
       "PaymentDto": {
         "type": "object",

@@ -65,7 +65,7 @@ export class MisService implements OnModuleInit {
   }
 
   private filters(q: MisQuery): MisFilters {
-    return { from: q.from, to: q.to, customerId: q.customerId, departmentId: q.departmentId, technicianId: q.technicianId, status: q.status };
+    return { from: q.from, to: q.to, customerId: q.customerId, departmentId: q.departmentId, technicianId: q.technicianId, status: q.status, urgent: q.urgent, stage: q.stage };
   }
 
   /** The total for a report under given filters, the same number the report's own pager shows. */

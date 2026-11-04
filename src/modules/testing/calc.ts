@@ -40,6 +40,9 @@ export function passAgainst(value: string | null, limit: LimitSnapshot | undefin
   return true;
 }
 
+/** The results column holds 12 digits before the point. */
+const MAX_MAGNITUDE = new Decimal('1e12');
+
 function isNumber(raw: string): boolean {
   try {
     return new Decimal(raw).isFinite();
@@ -47,6 +50,8 @@ function isNumber(raw: string): boolean {
     return false;
   }
 }
+
+const inRange = (raw: Decimal.Value) => new Decimal(raw).abs().lessThan(MAX_MAGNITUDE);
 
 /**
  * Applies entered values to the parameter list. Calculated parameters resolve in dependency order,
@@ -65,6 +70,7 @@ export function computeResults(params: ParamRow[], entered: Record<string, strin
     if (raw !== '') {
       if (p.kind === 'NUMERIC') {
         if (!isNumber(raw)) row.error = 'Not a number';
+        else if (!inRange(raw)) row.error = 'Too large';
         else {
           row.numericValue = new Decimal(raw).toDecimalPlaces(p.decimals, Decimal.ROUND_HALF_UP).toFixed(p.decimals);
           values.set(p.code, row.numericValue);
@@ -106,6 +112,7 @@ export function computeResults(params: ParamRow[], entered: Record<string, strin
       if (!ready) continue;
       try {
         const r = runFormula(f.expression, inputs, p.decimals);
+        if (!inRange(r.value)) throw new FormulaError('The result is too large');
         row.numericValue = r.value;
         row.calculation = { formulaVersionId: f.versionId, inputs, working: r.working, result: r.value };
         values.set(p.code, r.value);

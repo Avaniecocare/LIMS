@@ -69,6 +69,11 @@ describe('auth', () => {
     expect(last).toBe(429);
   });
 
+  it('does not count successful sign-ins toward the limit', async () => {
+    await createUser(ctx, 'often@x.example', [ROLE_NAMES.sales]);
+    for (let i = 0; i < 13; i++) await ctx.http().post('/api/v1/auth/login').send({ email: 'often@x.example', password: PASSWORD }).expect(200);
+  });
+
   it('requires a session and a CSRF token', async () => {
     await ctx.http().get('/api/v1/auth/me').expect(401);
     await createUser(ctx, 'csrf@x.example', [ROLE_NAMES.admin]);

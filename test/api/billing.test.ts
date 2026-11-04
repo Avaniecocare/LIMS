@@ -234,7 +234,7 @@ describe('payments', () => {
     const { invoice: draft } = await invoiceFor(fx.intra.id, [fx.tests.a]);
     await accounts.post(`/invoices/${draft.id}/credit-notes`, { taxableAmount: '1', reason: 'x' }).expect(422);
     const cancelled = (await accounts.post(`/invoices/${draft.id}/cancel`, { version: draft.version, reason: 'Duplicate' }).expect(200)).body;
-    expect(cancelled).toMatchObject({ status: 'CANCELLED', cancelReason: 'Duplicate' });
+    expect(cancelled).toMatchObject({ status: 'CANCELLED', cancelReason: 'Duplicate', balance: '0.00' });
     // Cancelled lines free the tests for billing again.
     expect((await accounts.get('/invoices/ready?pageSize=100').expect(200)).body.data.map((d: { jobId: string }) => d.jobId)).toContain(draft.lines[0].jobId);
   }, 90000);
@@ -258,6 +258,7 @@ describe('due invoices', () => {
     expect(freshRow).toMatchObject({ overdue: false, ageingBucket: 'Not Due', daysOverdue: 0 });
     expect((await accounts.get(`/invoices/due?customerId=${cust.id}&bucket=90%2B`).expect(200)).body.data.map((d: { id: string }) => d.id)).toEqual([old.id]);
     expect((await accounts.get(`/invoices/due?customerId=${cust.id}&overdue=false`).expect(200)).body.data.map((d: { id: string }) => d.id)).toEqual([fresh.id]);
+    expect((await accounts.get(`/invoices/due?customerId=${cust.id}&bucket=90%2B&overdue=false`).expect(200)).body.data).toEqual([]); // both apply
     const summary = (await accounts.get(`/invoices/due/summary?customerId=${cust.id}`).expect(200)).body;
     expect(summary.total).toBe('1298.00');
     expect(summary.ageing.find((a: { bucket: string }) => a.bucket === '90+')).toMatchObject({ amount: '649.00', count: 1 });

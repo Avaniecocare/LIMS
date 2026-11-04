@@ -35,7 +35,7 @@ export class PlanningController {
     return this.planning.workload();
   }
 
-  @Get('technicians') @Perm('planning.view') @ApiOkResponse({ type: [TechnicianDto] })
+  @Get('technicians') @Perm('planning.view', 'mis.view') @ApiOkResponse({ type: [TechnicianDto] })
   technicians() {
     return this.planning.technicians();
   }

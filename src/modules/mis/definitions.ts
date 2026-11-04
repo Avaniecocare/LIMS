@@ -10,6 +10,8 @@ export interface MisFilters {
   departmentId?: string;
   technicianId?: string;
   status?: string;
+  urgent?: string;
+  stage?: string;
 }
 
 export interface MisColumn {
@@ -73,7 +75,7 @@ export const WHERE = {
 function sampleFilter(f: MisFilters): Prisma.SampleWhereInput {
   return {
     ...(f.status ? { status: f.status as never } : {}),
-    ...(f.customerId || between(f) ? { job: { ...(f.customerId ? { customerId: f.customerId } : {}), ...(between(f) ? { receivedAt: between(f) } : {}) } } : {}),
+    ...(f.customerId || between(f) || f.urgent === 'true' ? { job: { ...(f.customerId ? { customerId: f.customerId } : {}), ...(between(f) ? { receivedAt: between(f) } : {}), ...(f.urgent === 'true' ? { urgent: true } : {}) } } : {}),
     ...(f.departmentId || f.technicianId ? { tests: { some: { ...(f.departmentId ? { departmentId: f.departmentId } : {}), ...(f.technicianId ? { assignedToId: f.technicianId } : {}) } } } : {}),
   };
 }
@@ -81,6 +83,7 @@ function sampleFilter(f: MisFilters): Prisma.SampleWhereInput {
 function testFilter(f: MisFilters): Prisma.SampleTestWhereInput {
   return {
     ...(f.status ? { status: f.status as never } : {}),
+    ...(f.stage ? { currentStage: f.stage } : {}),
     ...(f.departmentId ? { departmentId: f.departmentId } : {}),
     ...(f.technicianId ? { assignedToId: f.technicianId } : {}),
     ...(f.customerId ? { sample: { job: { customerId: f.customerId } } } : {}),
@@ -278,6 +281,14 @@ export const REPORTS: MisReport[] = [
     key: 'payment-register', no: 23, title: 'Payment Register', group: 'Commercial', permission: 'mis.commercial', filters: ['date', 'customer'],
     columns: [{ key: 'paymentNo', label: 'Receipt no.' }, { key: 'paidOn', label: 'Date', type: 'date' }, { key: 'customer', label: 'Customer', customer: true }, { key: 'mode', label: 'Mode' }, { key: 'reference', label: 'Reference' }, { key: 'amount', label: 'Amount', type: 'money' }, { key: 'unapplied', label: 'On account', type: 'money' }],
     run: (c) => page((a) => c.db.payment.findMany({ where: WHERE.paymentsReceived(c.f), include: { customer: { select: { name: true } } }, orderBy: { paidOn: 'desc' }, ...a }).then((r) => r.map((p) => ({ paymentNo: p.paymentNo, paidOn: p.paidOn, customer: p.customer.name, mode: p.mode, reference: p.reference, amount: String(p.amount), unapplied: String(p.unapplied) }))), () => c.db.payment.count({ where: WHERE.paymentsReceived(c.f) }), c),
+  },
+  {
+    key: 'revisions-issued', no: 25, title: 'Report Revisions Issued', group: 'Quality', permission: 'mis.view', filters: ['date', 'customer'],
+    columns: [{ key: 'reportNo', label: 'Report no.' }, { key: 'revisionNo', label: 'Revision', type: 'number' }, { key: 'customer', label: 'Customer', customer: true }, { key: 'reason', label: 'Reason' }, { key: 'issuedAt', label: 'Issued', type: 'datetime' }],
+    run: (c) => {
+      const where: Prisma.ReportRevisionWhereInput = { revisionNo: { gt: 0 }, issuedAt: between(c.f) ?? { not: null }, ...(c.f.customerId ? { report: { sample: { job: { customerId: c.f.customerId } } } } : {}) };
+      return page((a) => c.db.reportRevision.findMany({ where, include: { report: { select: { reportNo: true, sample: { select: { job: { select: { customer: { select: { name: true } } } } } } } } }, orderBy: { issuedAt: 'desc' }, ...a }).then((r) => r.map((v) => ({ reportNo: v.report.reportNo, revisionNo: v.revisionNo, customer: v.report.sample.job.customer.name, reason: v.revisionReason, issuedAt: v.issuedAt }))), () => c.db.reportRevision.count({ where }), c);
+    },
   },
   {
     key: 'outstanding-ageing', no: 24, title: 'Outstanding and Ageing Report', group: 'Commercial', permission: 'mis.commercial', filters: ['customer'],

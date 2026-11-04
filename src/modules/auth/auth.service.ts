@@ -85,6 +85,8 @@ export class AuthService {
       await this.audit.record({ action: lock ? 'auth.account.locked' : 'auth.login.failed', entity: 'User', entityId: user.id });
       throw invalidLogin();
     }
+    // Only failures count: staff signing in repeatedly, or sharing an office IP, are not attackers.
+    await this.redis.client.del(`login-rate:${getContext()?.ip ?? 'unknown'}:${email}`);
     if (user.totpEnabled) {
       const totpChallenge = randomBytes(32).toString('base64url');
       await this.redis.client.set(`totp-challenge:${totpChallenge}`, user.id, 'EX', 300);

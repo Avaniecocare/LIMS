@@ -29,6 +29,7 @@ const detailInclude = {
 type DetailRow = Prisma.SampleTestGetPayload<{ include: typeof detailInclude }>;
 
 const EDITABLE: string[] = ['IN_PROGRESS'];
+export const ALL_STAGES_DONE = 'All stages complete';
 
 /** Hook set by the Reports module: when a sample's tests are all approved a draft is created. */
 export type AllApprovedHook = (tx: Tx, sampleId: string) => Promise<void>;
@@ -235,7 +236,8 @@ export class TestingService implements OnModuleInit {
       if (stage.completedAt) throw rule('STAGE_DONE', 'This stage is already complete');
       if (t.stages.some((s) => s.seq < seq && !s.completedAt)) throw rule('STAGE_ORDER', 'Complete the earlier stages first');
       await tx.sampleTestStage.update({ where: { id: stage.id }, data: { completedAt: new Date(), completedById: actorId(), completedByName: currentUser()!.name } });
-      await this.bump(tx, id, version, {});
+      const next = t.stages.find((s) => s.seq > seq && !s.completedAt);
+      await this.bump(tx, id, version, { currentStage: next?.name ?? ALL_STAGES_DONE });
       await this.audit.record({ action: 'SampleTest.stage', entity: 'SampleTest', entityId: id, after: { stage: stage.name } }, tx);
     });
     return this.detail(id);

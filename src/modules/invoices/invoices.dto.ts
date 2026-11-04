@@ -56,6 +56,11 @@ export class EmailInvoiceDto {
   @IsOptional() @IsEmail() cc?: string | null;
 }
 
+export class RemindDto {
+  /** defaults to the customer's contact email */
+  @IsOptional() @IsEmail() to?: string | null;
+}
+
 export class CreateCreditNoteDto {
   @IsNumberString() taxableAmount: string;
   @IsString() @Length(1, 1000) reason: string;

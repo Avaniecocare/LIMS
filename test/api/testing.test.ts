@@ -224,6 +224,10 @@ describe('bad entries', () => {
     const res = await tech.put(`/tests/${id}/results`, { version: d.version, values: [{ parameterId: densityParam, value: 'abc' }] }).expect(400);
     expect(res.body.error.code).toBe('RESULT_INVALID');
     expect(res.body.error.fields[0]).toMatchObject({ field: densityParam, message: 'Not a number' });
+    for (const value of ['1e20', '1e999', '-1e13']) {
+      const big = await tech.put(`/tests/${id}/results`, { version: d.version, values: [{ parameterId: densityParam, value }] });
+      expect(big.status, value).toBe(400);
+    }
     expect((await tech.get(`/tests/${id}`).expect(200)).body.assignedToMe).toBe(true);
   });
 });
