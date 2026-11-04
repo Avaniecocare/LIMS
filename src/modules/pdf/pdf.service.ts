@@ -24,7 +24,17 @@ export class PdfService implements OnModuleDestroy {
   private browser: Promise<Browser> | null = null;
 
   private launch(): Promise<Browser> {
-    this.browser ??= chromium.launch({ headless: true });
+    this.browser ??= chromium
+      // Playwright's own signal handlers would close the browser but keep the process alive,
+      // leaving a worker that takes jobs and fails them. The worker handles shutdown itself.
+      .launch({ headless: true, handleSIGTERM: false, handleSIGINT: false, handleSIGHUP: false })
+      .then((browser) => {
+        // A crashed browser must not stay cached: the next job starts a new one.
+        browser.on('disconnected', () => {
+          this.browser = null;
+        });
+        return browser;
+      });
     return this.browser;
   }
 
@@ -64,7 +74,7 @@ export class PdfService implements OnModuleDestroy {
   }
 
   async onModuleDestroy() {
-    if (this.browser) await (await this.browser).close();
+    if (this.browser) await (await this.browser).close().catch(() => undefined);
   }
 }
 

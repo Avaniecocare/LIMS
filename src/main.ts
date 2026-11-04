@@ -25,7 +25,22 @@ async function main() {
   const mode = process.argv[2] ?? 'api';
   if (mode === 'worker') {
     const { startWorker } = await import('./worker/worker.js');
-    await startWorker();
+    const worker = await startWorker();
+    // Finish running jobs, then exit, so a restart never leaves a half-closed worker behind.
+    const shutdown = (signal: string) => {
+      logger.info({ signal }, 'worker stopping');
+      const force = setTimeout(() => process.exit(1), 60_000);
+      force.unref();
+      worker.stop().then(
+        () => process.exit(0),
+        (e) => {
+          logger.error({ err: e }, 'worker stop failed');
+          process.exit(1);
+        },
+      );
+    };
+    process.once('SIGTERM', () => shutdown('SIGTERM'));
+    process.once('SIGINT', () => shutdown('SIGINT'));
     return;
   }
   if (mode !== 'api') {

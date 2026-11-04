@@ -300,3 +300,16 @@ describe('review follow-ups', () => {
     expect(seen.error).toBe('The document could not be produced. Please try again.');
   });
 });
+
+describe('PDF browser resilience', () => {
+  it('starts a new browser after the old one dies', async () => {
+    const { PdfService } = await import('../../src/modules/pdf/pdf.service.js');
+    const pdf = ctx.app.get(PdfService);
+    const company = { legalName: 'L', labAddress: 'A', phone: 'P', email: 'E', reportVerificationEmail: 'V', accreditation: { certificationText: null } } as never;
+    const html = '<!doctype html><p>hi</p>';
+    expect((await pdf.render(html, { company })).subarray(0, 5).toString()).toBe('%PDF-');
+    await (await pdf['launch']()).close();
+    await new Promise((r) => setTimeout(r, 100));
+    expect((await pdf.render(html, { company })).subarray(0, 5).toString()).toBe('%PDF-');
+  }, 60000);
+});
