@@ -19,8 +19,8 @@ export interface DocumentHandler {
   authorize(params: Record<string, unknown>): void | Promise<void>;
   /** Runs in the worker. */
   run(params: Record<string, unknown>): Promise<GeneratedDocument>;
-  /** PDFs of frozen documents can be reused rather than rendered again. */
-  cacheKey?(params: Record<string, unknown>): string | null;
+  /** Runs after the file is stored, e.g. to record it on the document it belongs to. */
+  after?(file: { id: string; sha256: string }, params: Record<string, unknown>): Promise<void>;
 }
 
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -77,7 +77,8 @@ export class DocumentsService {
     await this.prisma.documentJob.update({ where: { id: job.id }, data: { status: 'RUNNING' } });
     try {
       const params = job.params as Record<string, unknown>;
-      const doc = await this.handler(job.kind).run(params);
+      const handler = this.handler(job.kind);
+      const doc = await handler.run(params);
       const file = await this.storage.store({
         buffer: doc.buffer,
         originalName: doc.filename,
@@ -87,6 +88,7 @@ export class DocumentsService {
         entityId: doc.entityId,
       });
       await this.prisma.documentJob.update({ where: { id: job.id }, data: { status: 'DONE', fileId: file.id, finishedAt: new Date(), error: null } });
+      await handler.after?.(file, params);
       const email = params.email as QueueEmailInput | undefined;
       if (email) await this.mail.enqueue({ ...email, attachmentFileIds: [file.id] });
       return file;

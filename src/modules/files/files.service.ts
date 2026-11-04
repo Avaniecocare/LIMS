@@ -40,8 +40,10 @@ export class FilesService {
 
   /** Tests are visible to all reviewers of tests, or to the technician assigned to them. */
   private async canReachTest(sampleTestId: string, write: boolean): Promise<boolean> {
-    const test = await this.prisma.sampleTest.findUnique({ where: { id: sampleTestId }, select: { assignedToId: true } });
+    const test = await this.prisma.sampleTest.findUnique({ where: { id: sampleTestId }, select: { assignedToId: true, status: true } });
     if (!test) return false;
+    // Approval locks results, and that includes their images and worksheets.
+    if (write && test.status !== 'IN_PROGRESS') return false;
     if (can('tests.work') && test.assignedToId === currentUser()?.id) return true;
     return !write && can('tests.viewAll');
   }
