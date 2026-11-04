@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsEnum, IsOptional, IsString, IsUUID, MaxLength, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsEnum, IsObject, IsOptional, IsString, IsUUID, MaxLength, ValidateNested } from 'class-validator';
 import { PageQuery } from '../../common/pagination.dto.js';
 import { AnalysisMode } from '../../generated/prisma/client.js';
 import { PageMetaDto } from '../admin/admin.dto.js';
@@ -27,6 +27,8 @@ export class AssignDto {
   @IsArray() @ArrayMinSize(1) @ArrayMaxSize(500) @IsUUID(undefined, { each: true }) sampleTestIds: string[];
   @IsUUID() assignedToId: string;
   @IsOptional() @IsUUID() instrumentId?: string | null;
+  /** test id -> the version the user saw; a changed test is refused rather than overwritten */
+  @IsOptional() @IsObject() versions?: Record<string, number>;
 }
 
 export class SuggestQuery {

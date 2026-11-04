@@ -54,7 +54,9 @@ export class PdfService implements OnModuleDestroy {
   async mergeImagesToPdf(images: { bytes: Buffer; mimeType: string }[]): Promise<Buffer> {
     const doc = await PDFDocument.create();
     for (const img of images) {
-      const embedded = img.mimeType === 'image/png' ? await doc.embedPng(img.bytes) : await doc.embedJpg(img.bytes);
+      // A copy, not the Buffer itself: pdf-lib reads the underlying ArrayBuffer and ignores the offset of pooled Buffers.
+      const bytes = Uint8Array.from(img.bytes);
+      const embedded = img.mimeType === 'image/png' ? await doc.embedPng(bytes) : await doc.embedJpg(bytes);
       const page = doc.addPage([embedded.width, embedded.height]);
       page.drawImage(embedded, { x: 0, y: 0, width: embedded.width, height: embedded.height });
     }

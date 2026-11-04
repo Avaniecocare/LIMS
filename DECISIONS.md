@@ -9,6 +9,9 @@ Choices made where the brief left room. Each is the default; anything a lab may 
 - **OpenAPI from the Nest Swagger compiler plugin**, which reads DTO types and class-validator decorators. This avoids duplicate `@ApiProperty` annotations. DTOs must live in `*.dto.ts`.
 - **Own expression parser for formulas.** Common evaluator libraries have a history of sandbox escapes and use floats. See the formula module.
 
+## Storage
+- **Local Compose uses a small `s3rver` container, not MinIO.** The brief asks for MinIO, but in November 2026 official MinIO images no longer exist on Docker Hub, and macOS binaries return HTTP 410. The app speaks plain S3, so any S3-compatible service works by changing `S3_ENDPOINT`. Production's image is a required setting in `LIMS-Deploy`.
+
 ## Security
 - **CSRF:** a per-session token returned by `/auth/me` and login, sent as `X-CSRF-Token`, in addition to `SameSite=Lax`. The UI keeps it in memory.
 - **Lockout:** 5 failures lock an account for 15 minutes. Login is also rate limited to 10 attempts per minute per IP and email.

@@ -83,6 +83,7 @@ export class JobQuery extends PageQuery {
 export class SampleQuery extends PageQuery {
   @IsOptional() @IsEnum(SampleStatus) status?: SampleStatus;
   @IsOptional() @IsString() @MaxLength(5) returnable?: string;
+  @IsOptional() @IsString() @MaxLength(5) urgent?: string;
   @IsOptional() @IsDateString() from?: string;
   @IsOptional() @IsDateString() to?: string;
 }
@@ -109,7 +110,9 @@ export class DeviationDto {
   id: string; sampleId: string | null; typeId: string; typeLabel: string; remark: string | null; createdAt: Date;
 }
 export class SampleTestBriefDto {
-  id: string; testId: string; testCode: string; testName: string; status: string; dueDate: Date | null; assignedToName: string | null;
+  id: string; testId: string; testCode: string; testName: string; status: string;
+  /** false until the planner has taken it up; status alone reads PLANNED before that */
+  planned: boolean; dueDate: Date | null; assignedToName: string | null;
 }
 export class SampleDto {
   id: string; sampleNo: string; jobId: string; description: string; condition: string | null; quantity: string | null; size: string | null; returnable: boolean; status: SampleStatus; cancelReason: string | null;

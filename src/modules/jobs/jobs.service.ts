@@ -57,7 +57,7 @@ const jobFull = (j: JobRow) => {
       id: s.id, sampleNo: s.sampleNo, jobId: s.jobId, description: s.description, condition: s.condition, quantity: s.quantity, size: s.size, returnable: s.returnable, status: s.status, cancelReason: s.cancelReason,
       retentionUntil: s.retentionUntil, returnStatus: s.returnStatus, returnedAt: s.returnedAt, disposedAt: s.disposedAt, specificationId: s.specificationId, dualSpecificationId: s.dualSpecificationId, version: s.version,
       attributes: s.attributes.map((a) => ({ id: a.id, label: a.label, value: a.value })),
-      tests: s.tests.map((t) => ({ id: t.id, testId: t.testId, testCode: t.testCode, testName: t.testName, status: t.status, dueDate: t.dueDate, assignedToName: t.assignedTo?.name ?? null })),
+      tests: s.tests.map((t) => ({ id: t.id, testId: t.testId, testCode: t.testCode, testName: t.testName, status: t.status, planned: !!t.plannedAt, dueDate: t.dueDate, assignedToName: t.assignedTo?.name ?? null })),
     })),
   };
 };
@@ -116,7 +116,7 @@ export class JobsService implements OnModuleInit {
           const f = await this.storage.read(id);
           return { bytes: f.buffer, mimeType: f.mimeType };
         }));
-        return { buffer: await this.pdf.mergeImagesToPdf(images), filename: 'Customer letter.pdf', mimeType: 'application/pdf', entity: 'Job', entityId: String(p.jobId) };
+        return { buffer: await this.pdf.mergeImagesToPdf(images), filename: 'Customer letter.pdf', mimeType: 'application/pdf', entity: 'Job', entityId: String(p.jobId), category: 'letter' };
       },
     });
   }
@@ -157,7 +157,8 @@ export class JobsService implements OnModuleInit {
     const where: Prisma.SampleWhereInput = {
       deletedAt: null,
       ...(q.status ? { status: q.status } : {}),
-      ...(q.returnable === 'true' ? { returnable: true } : {}),
+      ...(q.returnable === 'true' ? { returnable: true } : q.returnable === 'false' ? { returnable: false } : {}),
+      ...(q.urgent === 'true' ? { job: { urgent: true } } : q.urgent === 'false' ? { job: { urgent: false } } : {}),
       ...(q.from || q.to ? { createdAt: { ...(q.from ? { gte: new Date(`${q.from}T00:00:00+05:30`) } : {}), ...(q.to ? { lte: new Date(`${q.to}T23:59:59.999+05:30`) } : {}) } } : {}),
       ...(q.q ? { OR: [{ sampleNo: { contains: q.q, mode: 'insensitive' } }, { description: { contains: q.q, mode: 'insensitive' } }, { job: { jobNo: { contains: q.q, mode: 'insensitive' } } }] } : {}),
     };

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { can, currentUser } from '../../common/context.js';
-import { badRequest, forbidden, notFound } from '../../common/errors.js';
+import { AppError, badRequest, forbidden, notFound } from '../../common/errors.js';
 import { Prisma, PrismaService } from '../../core/prisma.service.js';
 import { MailService, type QueueEmailInput } from '../../core/mail.service.js';
 import { QueueService } from '../../core/queue.service.js';
@@ -12,6 +12,8 @@ export interface GeneratedDocument {
   mimeType: string;
   entity?: string;
   entityId?: string;
+  /** defaults to generated */
+  category?: string;
 }
 
 export interface DocumentHandler {
@@ -86,7 +88,7 @@ export class DocumentsService {
         buffer: doc.buffer,
         originalName: doc.filename,
         mimeType: doc.mimeType,
-        category: 'generated',
+        category: doc.category ?? 'generated',
         entity: doc.entity,
         entityId: doc.entityId,
       });
@@ -98,7 +100,8 @@ export class DocumentsService {
     } catch (e) {
       await this.prisma.documentJob.update({
         where: { id: job.id },
-        data: { status: 'FAILED', finishedAt: new Date(), error: e instanceof Error ? e.message.slice(0, 500) : 'failed' },
+        data: { status: 'FAILED', finishedAt: new Date(), // Business errors are meant for users. Infrastructure errors go to the logs, not the screen.
+        error: e instanceof AppError ? e.message.slice(0, 500) : 'The document could not be produced. Please try again.' },
       });
       throw e;
     }

@@ -24,13 +24,12 @@ services:
     image: redis:8-alpine
     ports: ['6379:6379']
     healthcheck: { test: ['CMD', 'redis-cli', 'ping'], interval: 3s, timeout: 3s, retries: 20 }
+  # S3-compatible store for local development. Official MinIO images are no longer published;
+  # see DECISIONS.md. Point S3_ENDPOINT at any S3-compatible service to use another.
   minio:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
-    command: server /data --console-address ":9001"
-    environment: { MINIO_ROOT_USER: minioadmin, MINIO_ROOT_PASSWORD: minioadmin }
-    ports: ['9000:9000', '9001:9001']
+    build: docker/dev-s3
+    ports: ['9000:9000']
     volumes: ['miniodata:/data']
-    healthcheck: { test: ['CMD', 'mc', 'ready', 'local'], interval: 3s, timeout: 3s, retries: 20 }
   mailpit:
     image: axllent/mailpit:latest
     ports: ['8025:8025', '1025:1025']
@@ -47,7 +46,7 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
-      minio: { condition: service_healthy }
+      minio: { condition: service_started }
   worker:
     <<: *app
     command: ['node', 'dist/main.js', 'worker']
@@ -55,7 +54,7 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
-      minio: { condition: service_healthy }
+      minio: { condition: service_started }
 volumes:
   pgdata:
   miniodata:

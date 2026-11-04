@@ -270,3 +270,33 @@ describe('planning', () => {
     await tech.post('/documents', { kind: 'job-card', params: { jobId: j.id } }).expect(403);
   }, 60000);
 });
+
+describe('review follow-ups', () => {
+  it('filters samples by urgent and not-returnable, and reports whether a test is planned', async () => {
+    const j = await bookJob({ urgent: true, samples: [{ description: 'Filter me', returnable: false, testIds: [fx.tests.a] }] });
+    const urgent = (await reception.get('/samples?urgent=true&returnable=false&pageSize=100').expect(200)).body.data;
+    expect(urgent.map((s: { id: string }) => s.id)).toContain(j.samples[0].id);
+    expect(urgent.every((s: { urgent: boolean; returnable: boolean }) => s.urgent && !s.returnable)).toBe(true);
+    expect(j.samples[0].tests[0].planned).toBe(false);
+    const p = (await planner.post('/planning/plans', { sampleIds: [j.samples[0].id], tests: [{ testId: fx.tests.a }] }).expect(201)).body;
+    expect((await reception.get(`/jobs/${j.id}`).expect(200)).body.samples[0].tests[0].planned).toBe(true);
+    await planner.post('/planning/assign', { sampleTestIds: p.sampleTestIds, assignedToId: techUserId, versions: { [p.sampleTestIds[0]]: 999 } }).expect(409);
+  });
+
+  it('combines small JPEG pages, whose Buffers come from a shared pool', async () => {
+    const { PdfService } = await import('../../src/modules/pdf/pdf.service.js');
+    const tiny = Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=', 'base64');
+    const pooled = Buffer.from(tiny); // small Buffers share an ArrayBuffer at a non-zero offset
+    const pdf = await ctx.app.get(PdfService).mergeImagesToPdf([{ bytes: pooled, mimeType: 'image/jpeg' }]);
+    expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+  });
+
+  it('keeps infrastructure errors off the screen', async () => {
+    const docs = ctx.app.get(DocumentsService);
+    const job = await ctx.prisma.documentJob.create({ data: { kind: 'job-srf', params: { jobId: '00000000-0000-4000-8000-000000000000' }, createdById: reception.userId } });
+    await expect(docs.process(job.id)).rejects.toThrow();
+    const seen = (await reception.get(`/documents/${job.id}`).expect(200)).body;
+    expect(seen.status).toBe('FAILED');
+    expect(seen.error).toBe('The document could not be produced. Please try again.');
+  });
+});

@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { actorId } from '../../common/context.js';
 import { addWorkingDays } from '../../common/calendar.js';
-import { badRequest, notFound, rule } from '../../common/errors.js';
+import { badRequest, conflict, notFound, rule } from '../../common/errors.js';
 import { istToday } from '../../common/india.js';
 import { orderBy, skipTake, toPage } from '../../common/pagination.dto.js';
 import { assertTransition, TEST } from '../../common/workflow.js';
@@ -210,7 +210,14 @@ export class PlanningService implements OnModuleInit {
   /** Bulk assignment and reassignment. All or nothing. */
   async assign(dto: AssignDto) {
     await this.prisma.$transaction(async (tx) => {
-      for (const id of dto.sampleTestIds) await this.assignOne(tx, id, dto.assignedToId, dto.instrumentId ?? null);
+      for (const id of dto.sampleTestIds) {
+        const expected = dto.versions?.[id];
+        if (expected !== undefined) {
+          const current = await tx.sampleTest.findUnique({ where: { id }, select: { version: true } });
+          if (current?.version !== expected) throw conflict();
+        }
+        await this.assignOne(tx, id, dto.assignedToId, dto.instrumentId ?? null);
+      }
     });
     return { ok: true };
   }
