@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { ArrayMaxSize, IsArray, IsEmail, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, MaxLength, Min } from 'class-validator';
 import { PageQuery } from '../../common/pagination.dto.js';
 import { ReportStatus } from '../../generated/prisma/client.js';
@@ -53,11 +54,14 @@ export class ReportRowDto {
   id: string; reportNo: string; revisionId: string; revisionNo: number; status: ReportStatus; sampleId: string; sampleNo: string; jobId: string; jobNo: string; customerName: string | null; ulrNumber: string | null; createdAt: Date; issuedAt: Date | null; version: number;
 }
 export class ReportPageDto { data: ReportRowDto[]; meta: PageMetaDto; }
-export class ReportRejectionDto { id: string; stage: string; action: string; reason: string; byName: string | null; at: Date; sampleTestIds: string[] | null; }
+export class ReportRejectionDto { id: string; stage: string; action: string; reason: string; byName: string | null; at: Date;
+  @ApiProperty({ type: [String], nullable: true }) sampleTestIds: string[] | null;
+}
 export class SignatureDto { name: string; designation: string | null; signedAt: Date; contentSha256: string; }
 export class RevisionDto {
   id: string; revisionNo: number; status: ReportStatus; revisionReason: string | null; ulrNumber: string | null; reviewedByName: string | null; reviewedAt: Date | null; approvedByName: string | null; approvedAt: Date | null; issuedAt: Date | null; supersededAt: Date | null;
-  pdfReady: boolean; pdfSha256: string | null; version: number; rejections: ReportRejectionDto[]; signature: SignatureDto | null;
+  pdfReady: boolean; pdfSha256: string | null; version: number; rejections: ReportRejectionDto[];
+  @ApiProperty({ type: () => SignatureDto, nullable: true }) signature: SignatureDto | null;
 }
 export class ReportTestDto { sampleTestId: string; testName: string; status: string; }
 export class ReportDetailDto {

@@ -57,7 +57,7 @@ const jobFull = (j: JobRow) => {
       id: s.id, sampleNo: s.sampleNo, jobId: s.jobId, description: s.description, condition: s.condition, quantity: s.quantity, size: s.size, returnable: s.returnable, status: s.status, cancelReason: s.cancelReason,
       retentionUntil: s.retentionUntil, returnStatus: s.returnStatus, returnedAt: s.returnedAt, disposedAt: s.disposedAt, specificationId: s.specificationId, dualSpecificationId: s.dualSpecificationId, version: s.version,
       attributes: s.attributes.map((a) => ({ id: a.id, label: a.label, value: a.value })),
-      tests: s.tests.map((t) => ({ id: t.id, testId: t.testId, testCode: t.testCode, testName: t.testName, status: t.status, planned: !!t.plannedAt, dueDate: t.dueDate, assignedToName: t.assignedTo?.name ?? null })),
+      tests: s.tests.map((t) => ({ id: t.id, testId: t.testId, testCode: t.testCode, testName: t.testName, status: t.status, planned: !!t.plannedAt, dueDate: t.dueDate, assignedToName: t.assignedTo?.name ?? null, version: t.version })),
     })),
   };
 };

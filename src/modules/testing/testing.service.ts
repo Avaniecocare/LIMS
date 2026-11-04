@@ -184,6 +184,7 @@ export class TestingService implements OnModuleInit {
     return {
       ...(await this.listItem(t)),
       sampleId: t.sampleId, officeInstructions: t.officeInstructions, technicalData: t.technicalData, instrumentId: t.instrumentId, remarks: t.remarks, observations: t.observations, notes: t.notes, conductedByName: t.conductedByName,
+      assignedToMe: t.assignedToId === actorId(),
       canEdit: t.status === 'IN_PROGRESS' && t.assignedToId === actorId() && can('tests.work') && t.sample.job.status !== 'ON_HOLD',
       blockOverdueInstruments: await this.settings.get('controls.blockOverdueInstruments'),
       instrumentWarning: await this.instrumentWarning(t.instrumentId),
@@ -276,7 +277,13 @@ export class TestingService implements OnModuleInit {
         for (const v of dto.values) if (!known.has(v.parameterId)) throw badRequest('Unknown parameter', [{ field: 'values', message: 'Unknown parameter' }]);
         const results = t.results.filter((r) => r.kind !== 'CALCULATED');
         const entered = new Map(dto.values.filter((v) => results.some((r) => r.parameterId === v.parameterId)).map((v) => [v.parameterId, v.value ?? null]));
-        await this.persistValues(tx, t, entered);
+        const computed = await this.persistValues(tx, t, entered);
+        // A bad entry is refused, not stored as blank. Calculated rows only ever "wait" here.
+        const bad = computed.filter((c) => c.error && entered.has(c.parameterId));
+        if (bad.length) {
+          const names = new Map(t.results.map((r) => [r.parameterId, r.name]));
+          throw new AppError('RESULT_INVALID', 400, bad.map((b) => `${names.get(b.parameterId)}: ${b.error}`).join('; '), bad.map((b) => ({ field: b.parameterId, message: b.error! })));
+        }
       }
       if (dto.instrumentId !== undefined) await this.assertInstrument(tx, dto.instrumentId);
       await this.bump(tx, id, dto.version, {

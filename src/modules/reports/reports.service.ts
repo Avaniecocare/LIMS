@@ -246,9 +246,8 @@ export class ReportsService implements OnModuleInit {
 
   async list(q: ReportQuery) {
     const identity = can('customers.view');
-    const revisionFilter: Prisma.ReportRevisionWhereInput = q.status ? { status: q.status } : {};
     const where: Prisma.ReportWhereInput = {
-      ...(q.status ? { revisions: { some: revisionFilter } } : {}),
+      ...(q.status ? { latestStatus: q.status } : {}),
       ...(q.jobId ? { sample: { jobId: q.jobId } } : {}),
       ...(q.q ? { OR: [{ reportNo: { contains: q.q, mode: 'insensitive' } }, { sample: { sampleNo: { contains: q.q, mode: 'insensitive' } } }, ...(identity ? [{ sample: { job: { customer: { name: { contains: q.q, mode: 'insensitive' as const } } } } }] : [])] } : {}),
     };
@@ -287,7 +286,7 @@ export class ReportsService implements OnModuleInit {
       revisions: r.revisions.map((v) => this.revisionDto(v)),
       tests: tests.map((t) => ({ sampleTestId: t.id, testName: t.testName, status: t.status })),
       canReview: can('reports.review') && current.status !== 'APPROVED',
-      canApprove: can('reports.approve') && current.reviewedById !== me,
+      canApprove: can('reports.approve') && (current.reviewedById !== me || (await this.settings.get('controls.allowSameReviewerSignatory'))),
       withheld: await this.withheld(this.prisma, r),
       reportRemarks: content.reportRemarks, sampleDescription: content.sampleDescription, customerReference: content.customerReference, kindAttention: content.customer.kindAttention,
     };
@@ -310,6 +309,7 @@ export class ReportsService implements OnModuleInit {
   private async move(tx: Tx, rev: Revision, version: number, to: 'IN_REVIEW' | 'PENDING_APPROVAL' | 'DRAFT' | 'APPROVED' | 'ISSUED', data: Prisma.ReportRevisionUncheckedUpdateManyInput = {}) {
     const { count } = await tx.reportRevision.updateMany({ where: { id: rev.id, version }, data: { ...data, status: to, version: { increment: 1 } } });
     if (count !== 1) throw conflict();
+    await tx.report.update({ where: { id: rev.reportId }, data: { latestStatus: to } });
   }
 
   async submitForReview(id: string, version: number) {
@@ -488,6 +488,7 @@ export class ReportsService implements OnModuleInit {
       const next = await tx.reportRevision.create({
         data: { reportId: id, revisionNo: rev.revisionNo + 1, revisionReason: reason, replacesRevisionId: rev.id, ulrNumber: rev.ulrNumber, content: content as unknown as Prisma.InputJsonValue, companySnapshot: this.company.snapshot() as unknown as Prisma.InputJsonValue, createdById: actorId() },
       });
+      await tx.report.update({ where: { id }, data: { latestStatus: 'DRAFT' } });
       await this.audit.status(tx, { entity: 'Report', entityId: id, from: 'ISSUED', to: 'DRAFT', reason, jobId: r.sample.jobId, meta: { revisionNo: next.revisionNo } });
     });
     return this.get(id);

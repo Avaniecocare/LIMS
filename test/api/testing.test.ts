@@ -216,6 +216,18 @@ describe('stages and results', () => {
   });
 });
 
+describe('bad entries', () => {
+  it('refuses a non-numeric result instead of storing it as blank', async () => {
+    const { sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
+    let d = (await tech.get(`/tests/${id}`).expect(200)).body;
+    d = (await tech.post(`/tests/${id}/start`, { version: d.version }).expect(200)).body;
+    const res = await tech.put(`/tests/${id}/results`, { version: d.version, values: [{ parameterId: densityParam, value: 'abc' }] }).expect(400);
+    expect(res.body.error.code).toBe('RESULT_INVALID');
+    expect(res.body.error.fields[0]).toMatchObject({ field: densityParam, message: 'Not a number' });
+    expect((await tech.get(`/tests/${id}`).expect(200)).body.assignedToMe).toBe(true);
+  });
+});
+
 describe('HoD approval', () => {
   it('approves, locks results, and reject returns to the analyst with the reason', async () => {
     const { job, sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);

@@ -112,7 +112,7 @@ export class DeviationDto {
 export class SampleTestBriefDto {
   id: string; testId: string; testCode: string; testName: string; status: string;
   /** false until the planner has taken it up; status alone reads PLANNED before that */
-  planned: boolean; dueDate: Date | null; assignedToName: string | null;
+  planned: boolean; dueDate: Date | null; assignedToName: string | null; version: number;
 }
 export class SampleDto {
   id: string; sampleNo: string; jobId: string; description: string; condition: string | null; quantity: string | null; size: string | null; returnable: boolean; status: SampleStatus; cancelReason: string | null;

@@ -327,3 +327,18 @@ describe('signature image', () => {
     expect(html).toMatch(/<img src="data:image\/png;base64,[^"]+" alt="" style="height:36px/);
   }, 60000);
 });
+
+describe('report list status', () => {
+  it('filters on the newest revision, so a report under revision is not listed as issued', async () => {
+    const { row } = await approvedReport();
+    await toIssued(row.id);
+    const ids = async (status: string) => (await reviewer.get(`/reports?status=${status}&pageSize=200`).expect(200)).body.data.map((r: { id: string }) => r.id);
+    expect(await ids('ISSUED')).toContain(row.id);
+    await signatory.post(`/reports/${row.id}/revise`, { reason: 'Correction' }).expect(200);
+    expect(await ids('ISSUED')).not.toContain(row.id);
+    expect(await ids('DRAFT')).toContain(row.id);
+    await toIssued(row.id);
+    expect(await ids('ISSUED')).toContain(row.id);
+    expect(await ids('SUPERSEDED')).not.toContain(row.id);
+  }, 90000);
+});

@@ -1053,6 +1053,8 @@ model Report {
   sampleId     String
   sample       Sample   @relation(fields: [sampleId], references: [id])
   currentRevisionNo Int @default(0)
+  /// status of the newest revision, kept here so report lists can filter and page on it
+  latestStatus ReportStatus @default(DRAFT)
   isDemo       Boolean  @default(false)
   invoiced     Boolean  @default(false)
   createdAt    DateTime @default(now())
@@ -1060,6 +1062,7 @@ model Report {
   revisions    ReportRevision[]
   @@index([sampleId])
   @@index([createdAt])
+  @@index([latestStatus, createdAt])
 }
 
 model ReportRevision {
