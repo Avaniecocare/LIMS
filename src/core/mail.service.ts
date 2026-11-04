@@ -97,11 +97,9 @@ export class MailService {
         createdById: actorId(),
       },
     });
-    if (tx) {
-      // Queue only after commit so a rollback cannot send mail. Callers inside a transaction
-      // use this id with `dispatch` once committed; the sweeper covers anything missed.
-      return log.id;
-    }
+    // Queue only after commit so a rollback cannot send mail: a caller inside a transaction uses
+    // this id with `dispatch` once committed, and the scheduled sweep covers anything missed.
+    if (tx) return log.id;
     await this.dispatch(log.id);
     return log.id;
   }

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { can, currentUser } from '../../common/context.js';
 import { badRequest, forbidden, notFound } from '../../common/errors.js';
 import { Prisma, PrismaService } from '../../core/prisma.service.js';
+import { MailService, type QueueEmailInput } from '../../core/mail.service.js';
 import { QueueService } from '../../core/queue.service.js';
 import { StorageService } from '../../core/storage.service.js';
 
@@ -33,6 +34,7 @@ export class DocumentsService {
     private readonly prisma: PrismaService,
     private readonly queue: QueueService,
     private readonly storage: StorageService,
+    private readonly mail: MailService,
   ) {}
 
   register(kind: string, handler: DocumentHandler) {
@@ -52,6 +54,11 @@ export class DocumentsService {
     });
     await this.queue.documents.add('render', { documentJobId: job.id }, { jobId: `doc-${job.id}` });
     return this.describe(job.id);
+  }
+
+  /** For jobs the server creates itself, such as a PDF rendered and then emailed. */
+  async queueExisting(documentJobId: string) {
+    await this.queue.documents.add('render', { documentJobId }, { jobId: `doc-${documentJobId}` });
   }
 
   async describe(id: string) {
@@ -80,6 +87,8 @@ export class DocumentsService {
         entityId: doc.entityId,
       });
       await this.prisma.documentJob.update({ where: { id: job.id }, data: { status: 'DONE', fileId: file.id, finishedAt: new Date(), error: null } });
+      const email = params.email as QueueEmailInput | undefined;
+      if (email) await this.mail.enqueue({ ...email, attachmentFileIds: [file.id] });
       return file;
     } catch (e) {
       await this.prisma.documentJob.update({

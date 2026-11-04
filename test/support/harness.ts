@@ -28,6 +28,9 @@ export async function resetDb(ctx: Ctx) {
   await ctx.prisma.$executeRawUnsafe(`ALTER TABLE "AuditLog" DISABLE TRIGGER USER`);
   await ctx.prisma.$executeRawUnsafe(`TRUNCATE ${tables.map((t) => `"${t.tablename}"`).join(',')} CASCADE`);
   await ctx.prisma.$executeRawUnsafe(`ALTER TABLE "AuditLog" ENABLE TRIGGER USER`);
+  // Roles survive the reset so permissions need not be rebuilt, except those a test invented.
+  await ctx.prisma.rolePermission.deleteMany({ where: { role: { isSystem: false } } });
+  await ctx.prisma.role.deleteMany({ where: { isSystem: false } });
   await ctx.app.get(RedisService).client.flushdb();
 }
 
