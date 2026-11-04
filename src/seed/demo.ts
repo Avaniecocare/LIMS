@@ -105,7 +105,7 @@ const addDays = (d: Date, n: number) => new Date(d.getTime() + n * 86_400_000);
 
 /** Valid-format, fictional GSTINs only. */
 const CUSTOMERS = [
-  { name: 'Northwind Petrochem Pvt Ltd', gstin: '27AAAAA0000A1Z2', stateName: 'Maharashtra', stateCode: '27', city: 'Mumbai', contact: 'Neha Kulkarni', email: 'neha@northwind.example' },
+  { name: 'Northwind Petrochem Pvt Ltd', gstin: '27EEEEE4444E1ZE', stateName: 'Maharashtra', stateCode: '27', city: 'Mumbai', contact: 'Neha Kulkarni', email: 'neha@northwind.example' },
   { name: 'Contoso Forgings Ltd', gstin: '24CCCCC2222C1ZE', stateName: 'Gujarat', stateCode: '24', city: 'Vadodara', contact: 'Rohan Shah', email: 'rohan@contoso.example' },
   { name: 'Fabrikam Steels LLP', gstin: '07DDDDD3333D1ZV', stateName: 'Delhi', stateCode: '07', city: 'New Delhi', contact: 'Vikram Sethi', email: 'vikram@fabrikam.example' },
 ];
