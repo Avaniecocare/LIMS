@@ -313,3 +313,17 @@ describe('snapshots across an env change', () => {
     }
   }, 60000);
 });
+
+describe('signature image', () => {
+  it('is uploaded per user and printed on reports they sign', async () => {
+    const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+    const user = await ctx.prisma.user.findUniqueOrThrow({ where: { email: 'signatory@r.example' } });
+    const file = (await admin.post('/files').field('entity', 'User').field('entityId', user.id).field('category', 'signature').attach('file', PNG, 'sig.png').expect(201)).body;
+    await admin.post(`/admin/users/${admin.userId}/signature`, { version: 1, fileId: file.id }).expect(400);
+    await admin.post(`/admin/users/${user.id}/signature`, { version: user.version, fileId: file.id }).expect(200);
+    const { row } = await approvedReport();
+    await toIssued(row.id);
+    const { html } = (await signatory.get(`/reports/${row.id}/preview`).expect(200)).body;
+    expect(html).toMatch(/<img src="data:image\/png;base64,[^"]+" alt="" style="height:36px/);
+  }, 60000);
+});

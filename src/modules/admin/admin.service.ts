@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import argon2 from 'argon2';
 import { currentUser } from '../../common/context.js';
-import { badRequest, conflict, notFound } from '../../common/errors.js';
+import { badRequest, notFound } from '../../common/errors.js';
 import { orderBy, skipTake, toPage } from '../../common/pagination.dto.js';
 import { AuditService } from '../../core/audit.service.js';
 import { CompanyService } from '../../core/company.service.js';
@@ -315,7 +315,9 @@ export class AdminService {
 
   async setUserSignature(userId: string, fileId: string, version: number) {
     const file = await this.prisma.fileObject.findUnique({ where: { id: fileId } });
-    if (!file?.mimeType.startsWith('image/')) throw conflict('Signature must be an image');
+    if (!file?.mimeType.startsWith('image/') || file.entity !== 'User' || file.entityId !== userId) {
+      throw badRequest('Choose an image uploaded for this user', [{ field: 'fileId', message: 'Not an image for this user' }]);
+    }
     await updateVersioned(this.prisma.user as never, userId, version, { signatureFileId: fileId });
     await this.audit.record({ action: 'user.signature', entity: 'User', entityId: userId, after: { fileId } });
     return this.getUser(userId);

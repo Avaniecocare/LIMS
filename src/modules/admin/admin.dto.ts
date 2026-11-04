@@ -84,6 +84,15 @@ export class AdminResetPasswordDto {
   newPassword: string;
 }
 
+export class SetSignatureDto {
+  @IsInt() @Min(1)
+  version: number;
+
+  /** an uploaded image with entity "User", entityId this user, category "signature" */
+  @IsUUID()
+  fileId: string;
+}
+
 export class UserDto {
   id: string;
   email: string;

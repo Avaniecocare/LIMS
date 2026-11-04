@@ -18,6 +18,7 @@ import {
   HolidayDto,
   PermissionDto,
   RoleDto,
+  SetSignatureDto,
   SavedFilterDto,
   SettingDto,
   TermsDto,
@@ -64,6 +65,12 @@ export class AdminController {
   async resetPassword(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminResetPasswordDto) {
     await this.admin.adminResetPassword(id, dto.newPassword);
     return { ok: true };
+  }
+
+  /** The image printed on reports this person signs. */
+  @Post('users/:id/signature') @HttpCode(200) @Perm('admin.users') @ApiOkResponse({ type: UserDto })
+  signature(@Param('id', ParseUUIDPipe) id: string, @Body() dto: SetSignatureDto) {
+    return this.admin.setUserSignature(id, dto.fileId, dto.version);
   }
 
   @Get('permissions') @Perm('admin.roles') @ApiOkResponse({ type: [PermissionDto] })
