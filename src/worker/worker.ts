@@ -4,11 +4,13 @@ import { NestFactory } from '@nestjs/core';
 import { Worker } from 'bullmq';
 import { logger, reportError } from '../common/logger.js';
 import { INFRA_CONFIG, type InfraConfig } from '../config/infra.config.js';
+import { DOMAIN_MODULES } from '../app.module.js';
 import { CoreModule } from '../core/core.module.js';
 import { MailService } from '../core/mail.service.js';
-import { QUEUE_EMAIL, redisConnection } from '../core/queue.service.js';
+import { QUEUE_DOCUMENTS, QUEUE_EMAIL, redisConnection } from '../core/queue.service.js';
+import { DocumentsService } from '../modules/documents/documents.service.js';
 
-@Module({ imports: [CoreModule] })
+@Module({ imports: [CoreModule, ...DOMAIN_MODULES] })
 export class WorkerModule {}
 
 export interface WorkerHandle {
@@ -22,9 +24,11 @@ export async function startWorker(): Promise<WorkerHandle> {
   const infra = app.get<InfraConfig>(INFRA_CONFIG);
   const connection = redisConnection(infra.redisUrl);
   const mail = app.get(MailService);
+  const documents = app.get(DocumentsService);
 
   const workers = [
     new Worker(QUEUE_EMAIL, async (job) => mail.deliver(job.data.emailLogId), { connection, concurrency: 5 }),
+    new Worker(QUEUE_DOCUMENTS, async (job) => documents.process(job.data.documentJobId), { connection, concurrency: 2 }),
   ];
   for (const w of workers) {
     w.on('failed', (job, err) => {

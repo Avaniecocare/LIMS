@@ -1,5 +1,6 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { PrismaService, type Tx } from '../../core/prisma.service.js';
+import { loadBaseline } from './baseline.js';
 import { DEFAULT_ROLES, PERMISSIONS } from './catalog.js';
 
 /**
@@ -30,5 +31,6 @@ export class RbacBootstrap implements OnModuleInit {
 
   async onModuleInit() {
     await this.prisma.$transaction(syncPermissions);
+    await this.prisma.$transaction(loadBaseline);
   }
 }

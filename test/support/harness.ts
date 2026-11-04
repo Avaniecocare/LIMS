@@ -67,7 +67,10 @@ export async function login(ctx: Ctx, email: string, password = PASSWORD): Promi
     csrf,
     userId: res.body.user.id,
     get: (url) => wrap(ctx.http().get(`/api/v1${url}`)),
-    post: (url, body) => wrap(ctx.http().post(`/api/v1${url}`)).send(body ?? {}),
+    post: (url, body) => {
+      const t = wrap(ctx.http().post(`/api/v1${url}`));
+      return body === undefined ? t : t.send(body);
+    },
     put: (url, body) => wrap(ctx.http().put(`/api/v1${url}`)).send(body ?? {}),
     patch: (url, body) => wrap(ctx.http().patch(`/api/v1${url}`)).send(body ?? {}),
     del: (url) => wrap(ctx.http().delete(`/api/v1${url}`)),
