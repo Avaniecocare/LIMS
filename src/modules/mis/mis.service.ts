@@ -36,6 +36,7 @@ export class MisService implements OnModuleInit {
     for (const report of REPORTS) {
       this.documents.register(`mis:${report.key}`, {
         authorize: () => this.assertAccess(report),
+        prepare: (p) => ({ ...p, customerVisible: can('customers.view') }),
         run: (p) => this.exportFile(report, p as MisFilters & { format?: string; customerVisible?: boolean }),
       });
     }

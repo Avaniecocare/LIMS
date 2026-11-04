@@ -109,7 +109,7 @@ describe('quotation to job', () => {
     const acc = (await sales.post(`/quotations/${q.id}/accept`, { version: sent.version }).expect(200)).body;
     const conv = (await sales.post(`/quotations/${q.id}/convert`).expect(200)).body;
     await sales.post(`/quotations/${q.id}/convert`).expect(422);
-    const j = (await reception.get(`/jobs/${conv.jobId}`).expect(200)).body;
+    const j = (await sales.get(`/jobs/${conv.jobId}`).expect(200)).body;
     expect(j).toMatchObject({ jobNo: conv.jobNo, quotationId: q.id, customerId: fx.intra.id });
     expect(j.samples.map((s: { description: string }) => s.description).sort()).toEqual(['Sample A', 'Sample B']);
     const tests = await ctx.prisma.sampleTest.findMany({ where: { sample: { jobId: conv.jobId } } });

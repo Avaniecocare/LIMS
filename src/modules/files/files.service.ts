@@ -14,9 +14,10 @@ const READ: Record<string, string[]> = {
   Customer: ['customers.view'],
   Order: ['orders.view'],
   Quotation: ['quotations.view'],
-  Job: ['jobs.view'],
-  Sample: ['jobs.view'],
-  Report: ['reports.view'],
+  // Letters and images on jobs and samples can identify the customer.
+  Job: ['customers.view'],
+  Sample: ['customers.view'],
+  Report: ['customers.view'],
   Invoice: ['invoices.view'],
   CreditNote: ['invoices.view'],
   Dispatch: ['dispatch.view'],
@@ -54,6 +55,7 @@ export class FilesService {
       throw forbidden();
     }
     const allowed = entity ? (write ? WRITE : READ)[entity] : undefined;
+    if (entity === 'Report' && !write && !can('reports.view')) throw forbidden();
     if (!allowed || !allowed.some((p) => can(p))) throw forbidden();
   }
 

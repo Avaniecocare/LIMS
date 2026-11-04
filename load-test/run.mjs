@@ -39,7 +39,7 @@ const get = async (path) => {
   return { ms, body };
 };
 
-const techId = process.env.TECH_ID ?? 'load-tech-1';
+const techId = process.env.TECH_ID ?? '00000000-0000-4000-8000-000000000001';
 const ENDPOINTS = [
   '/planning/tests?view=assigned',
   '/planning/tests?view=assigned&page=5000&pageSize=25',

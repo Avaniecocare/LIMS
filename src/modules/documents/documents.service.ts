@@ -17,6 +17,8 @@ export interface GeneratedDocument {
 export interface DocumentHandler {
   /** Checked in the web request, with the caller's permissions. */
   authorize(params: Record<string, unknown>): void | Promise<void>;
+  /** Runs in the web request. Sets anything the caller's permissions decide; clients can't supply it. */
+  prepare?(params: Record<string, unknown>): Record<string, unknown>;
   /** Runs in the worker. */
   run(params: Record<string, unknown>): Promise<GeneratedDocument>;
   /** Runs after the file is stored, e.g. to record it on the document it belongs to. */
@@ -48,9 +50,10 @@ export class DocumentsService {
   }
 
   async enqueue(kind: string, params: Record<string, unknown>) {
-    await this.handler(kind).authorize(params);
+    const handler = this.handler(kind);
+    await handler.authorize(params);
     const job = await this.prisma.documentJob.create({
-      data: { kind, params: params as Prisma.InputJsonValue, createdById: currentUser()?.id },
+      data: { kind, params: (handler.prepare?.(params) ?? params) as Prisma.InputJsonValue, createdById: currentUser()?.id },
     });
     await this.queue.documents.add('render', { documentJobId: job.id }, { jobId: `doc-${job.id}` });
     return this.describe(job.id);

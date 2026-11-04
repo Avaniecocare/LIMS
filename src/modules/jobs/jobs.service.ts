@@ -83,7 +83,8 @@ export class JobsService implements OnModuleInit {
     this.quotations.converter = (tx, quotationId) => this.fromQuotation(tx, quotationId);
     const jobDoc = (kind: string, title: string, html: (j: JobDocument) => string) =>
       this.documents.register(kind, {
-        authorize: requirePermission('jobs.view'),
+        // These print the customer's name and contacts, so viewing jobs alone is not enough.
+        authorize: requirePermission('customers.view'),
         run: async (p) => {
           const j = await this.jobDocument(String(p.jobId));
           return { buffer: await this.pdf.render(html(j), { company: this.company.snapshot() }), filename: `${title} ${j.jobNo}.pdf`.replace(/[/\\]/g, '-'), mimeType: 'application/pdf', entity: 'Job', entityId: String(p.jobId) };

@@ -13,7 +13,7 @@ import { Prisma, PrismaService, type Tx } from '../../core/prisma.service.js';
 import { SettingsService } from '../../core/settings.service.js';
 import { StorageService } from '../../core/storage.service.js';
 import { AuthService } from '../auth/auth.service.js';
-import { DocumentsService, requirePermission } from '../documents/documents.service.js';
+import { DocumentsService } from '../documents/documents.service.js';
 import { JobsService } from '../jobs/jobs.service.js';
 import { PdfService } from '../pdf/pdf.service.js';
 import { esc } from '../pdf/templates/base.js';
@@ -52,7 +52,10 @@ export class ReportsService implements OnModuleInit {
   onModuleInit() {
     this.testing.onAllApproved = (tx, sampleId) => this.onSampleApproved(tx, sampleId);
     this.documents.register(REPORT_PDF, {
-      authorize: requirePermission('reports.view'),
+      authorize: () => {
+        // A report names the customer, so both permissions are needed.
+        if (!can('reports.view') || !can('customers.view')) throw forbidden();
+      },
       run: (p) => this.renderPdf(String(p.revisionId)),
       after: async (file, p) => {
         if (!p.final) return;

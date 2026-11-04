@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Decimal } from 'decimal.js';
 import { actorId, can } from '../../common/context.js';
 import { istToday } from '../../common/india.js';
-import { ReadPrismaService, Prisma } from '../../core/prisma.service.js';
+import { ReadPrismaService } from '../../core/prisma.service.js';
 import { InvoicesService } from '../invoices/invoices.service.js';
 import { dayEnd, dayStart, WHERE, type MisFilters } from '../mis/definitions.js';
 import { MisService } from '../mis/mis.service.js';
@@ -33,15 +33,14 @@ export class DashboardService {
     const from = q.from ?? iso(monthStart);
     const to = q.to ?? iso(today);
     const f: MisFilters = { from, to };
-    return {
-      from,
-      to,
-      operations: can('analytics.operations') ? await this.operations(f, today) : null,
-      quality: can('analytics.quality') ? await this.quality(f) : null,
-      people: can('analytics.people') ? await this.people(f, today) : null,
-      commercial: can('analytics.commercial') ? await this.commercial(f, today) : null,
-      myWork: await this.myWork(today),
-    };
+    const [operations, quality, people, commercial, myWork] = await Promise.all([
+      can('analytics.operations') ? this.operations(f, today) : null,
+      can('analytics.quality') ? this.quality(f) : null,
+      can('analytics.people') ? this.people(f, today) : null,
+      can('analytics.commercial') ? this.commercial(f, today) : null,
+      this.myWork(today),
+    ]);
+    return { from, to, operations, quality, people, commercial, myWork };
   }
 
   private async operations(f: MisFilters, today: Date) {
@@ -53,10 +52,11 @@ export class DashboardService {
     const urgent = await this.db.job.count({ where: { deletedAt: null, urgent: true, status: { notIn: ['COMPLETED', 'CANCELLED'] } } });
     const onHoldJobs = await this.db.job.count({ where: { deletedAt: null, status: 'ON_HOLD' } });
     const onHoldTests = await this.db.sampleTest.count({ where: { deletedAt: null, status: 'ON_HOLD' } });
-    const inPeriod: Prisma.SampleTestWhereInput = { deletedAt: null, status: 'APPROVED', approvedAt: { gte: dayStart(f.from!), lte: dayEnd(f.to!) }, dueDate: { not: null } };
-    const approved = await this.db.sampleTest.findMany({ where: inPeriod, select: { approvedAt: true, dueDate: true } });
-    const onTime = approved.filter((a) => istToday(a.approvedAt!).getTime() <= a.dueDate!.getTime()).length;
-    const compliance = approved.length ? Math.round((onTime / approved.length) * 1000) / 10 : 0;
+    // On time means approved on or before the due date, by the lab's calendar.
+    const [{ total: approvedCount, onTime }] = await this.db.$queryRaw<{ total: number; onTime: number }[]>`
+      SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE ("approvedAt" AT TIME ZONE 'Asia/Kolkata')::date <= "dueDate")::int AS "onTime"
+      FROM "SampleTest" WHERE "deletedAt" IS NULL AND "status" = 'APPROVED' AND "dueDate" IS NOT NULL AND "approvedAt" BETWEEN ${dayStart(f.from!)} AND ${dayEnd(f.to!)}`;
+    const compliance = approvedCount ? Math.round((onTime / approvedCount) * 1000) / 10 : 0;
     const byStatus = await this.db.sample.groupBy({ by: ['status'], where: { deletedAt: null, status: { not: 'CANCELLED' } }, _count: true });
     const stages = await this.db.$queryRaw<{ stage: string; count: number }[]>`
       SELECT COALESCE((SELECT s."name" FROM "SampleTestStage" s WHERE s."sampleTestId" = t."id" AND s."completedAt" IS NULL ORDER BY s."seq" LIMIT 1), 'Not started') AS stage, COUNT(*)::int AS count

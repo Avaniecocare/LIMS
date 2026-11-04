@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { Perm } from '../auth/decorators.js';
-import { ConvertedDto, EmailLogDto, QuotationDto, QuotationPageDto, QuotationQuery, ReasonDto, SaveQuotationDto, SendQuotationDto, StatusEventDto, UpdateQuotationDto, VersionedActionDto } from './quotations.dto.js';
+import { ConvertedDto, ConvertibleQuotationDto, EmailLogDto, QuotationDto, QuotationPageDto, QuotationQuery, ReasonDto, SaveQuotationDto, SendQuotationDto, StatusEventDto, UpdateQuotationDto, VersionedActionDto } from './quotations.dto.js';
 import { QuotationsService } from './quotations.service.js';
 
 @ApiTags('quotations')
@@ -12,6 +12,11 @@ export class QuotationsController {
   @Get() @Perm('quotations.view') @ApiOkResponse({ type: QuotationPageDto })
   list(@Query() q: QuotationQuery) {
     return this.quotations.list(q);
+  }
+
+  @Get('convertible') @Perm('quotations.convert') @ApiOkResponse({ type: [ConvertibleQuotationDto] })
+  convertible() {
+    return this.quotations.convertible();
   }
 
   @Get(':id') @Perm('quotations.view') @ApiOkResponse({ type: QuotationDto })

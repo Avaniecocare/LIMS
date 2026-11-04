@@ -84,3 +84,8 @@ export class ConvertedDto {
   jobId: string;
   jobNo: string;
 }
+
+/** What Reception sees to book from a quotation: no rates or totals. */
+export class ConvertibleQuotationDto {
+  id: string; quotationNo: string; customerId: string; customerName: string; acceptedAt: Date | null; samples: string[]; testCount: number;
+}

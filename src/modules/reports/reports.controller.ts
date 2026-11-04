@@ -1,11 +1,18 @@
 import { Body, Controller, Get, HttpCode, Param, ParseIntPipe, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { can } from '../../common/context.js';
+import { forbidden } from '../../common/errors.js';
 import { OkDto } from '../auth/auth.dto.js';
 import { Perm } from '../auth/decorators.js';
 import { AuditHistoryDto } from '../jobs/jobs.dto.js';
 import { EmailLogDto } from '../quotations/quotations.dto.js';
 import { ReportActionDto, ReportApproveDto, ReportCorrectDto, ReportDetailDto, ReportEmailDto, ReportIssueDto, ReportPageDto, ReportPreviewDto, ReportQuery, ReportRejectDto, ReportReviseDto, SignedPdfDto } from './reports.dto.js';
 import { ReportsService } from './reports.service.js';
+
+/** A report's document names the customer, so viewing reports alone is not enough to read it. */
+const assertCustomerAccess = () => {
+  if (!can('customers.view')) throw forbidden();
+};
 
 @ApiTags('reports')
 @Controller('reports')
@@ -19,6 +26,7 @@ export class ReportsController {
 
   @Get('revisions/:revisionId/pdf') @Perm('reports.view') @ApiOkResponse({ type: SignedPdfDto })
   pdf(@Param('revisionId', ParseUUIDPipe) id: string) {
+    assertCustomerAccess();
     return this.reports.pdfUrl(id);
   }
 
@@ -29,6 +37,7 @@ export class ReportsController {
 
   @Get(':id/preview') @Perm('reports.view') @ApiQuery({ name: 'revisionNo', required: false, type: Number }) @ApiOkResponse({ type: ReportPreviewDto })
   preview(@Param('id', ParseUUIDPipe) id: string, @Query('revisionNo', new ParseIntPipe({ optional: true })) revisionNo?: number) {
+    assertCustomerAccess();
     return this.reports.preview(id, revisionNo);
   }
 

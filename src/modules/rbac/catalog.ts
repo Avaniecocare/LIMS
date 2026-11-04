@@ -79,7 +79,7 @@ export const DEFAULT_ROLES: Record<string, { description: string; permissions: s
   },
   'Sample Reception': {
     description: 'Job booking, SRF, acknowledgements, labels, deviations',
-    permissions: ['customers.view', 'quotations.view', 'quotations.convert', 'jobs.view', 'jobs.create', 'jobs.createWithoutQuotation', 'jobs.edit', 'jobs.hold', 'masters.view', 'mis.view'],
+    permissions: ['customers.view', 'quotations.convert', 'jobs.view', 'jobs.create', 'jobs.createWithoutQuotation', 'jobs.edit', 'jobs.hold', 'masters.view', 'mis.view'],
   },
   'Lab Manager / Planner': {
     description: 'Test planning, assignment, job cards, workload',

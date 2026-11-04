@@ -100,6 +100,17 @@ export class QuotationsService implements OnModuleInit {
     return quotationHtml({ ...v, quotationNo: v.quotation.quotationNo, date: v.quotation.sentAt ?? v.createdAt, terms, company, customer });
   }
 
+  /** Accepted and not yet converted. Deliberately carries no prices. */
+  async convertible() {
+    const rows = await this.prisma.quotation.findMany({
+      where: { deletedAt: null, status: 'ACCEPTED', jobs: { none: {} } },
+      include: { customer: { select: { name: true } }, versions: { orderBy: { versionNo: 'desc' }, take: 1, include: { lines: { select: { sampleDescription: true } } } } },
+      orderBy: { acceptedAt: 'asc' },
+      take: 200,
+    });
+    return rows.map((q) => ({ id: q.id, quotationNo: q.quotationNo, customerId: q.customerId, customerName: q.customer.name, acceptedAt: q.acceptedAt, samples: [...new Set(q.versions[0].lines.map((l) => l.sampleDescription))], testCount: q.versions[0].lines.length }));
+  }
+
   async list(q: QuotationQuery) {
     const where: Prisma.QuotationWhereInput = {
       deletedAt: null,

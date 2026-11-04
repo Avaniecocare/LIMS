@@ -265,3 +265,56 @@ describe('technician isolation across the whole API', () => {
     expect(html).not.toContain('Customer:');
   });
 });
+
+/** Regression tests from the security review of who can reach customer identity and prices. */
+describe('customer identity and prices through documents', () => {
+  it('a planner cannot produce documents that name the customer', async () => {
+    const job = await ctx.prisma.job.findFirstOrThrow();
+    for (const kind of ['job-srf', 'job-acknowledgement']) await planner.post('/documents', { kind, params: { jobId: job.id } }).expect(403);
+    const report = await ctx.prisma.report.findFirstOrThrow({ include: { revisions: true } });
+    await planner.get(`/reports/${report.id}/preview`).expect(403);
+    await planner.post('/documents', { kind: 'report-pdf', params: { revisionId: report.revisions[0].id } }).expect(403);
+  });
+
+  it('report exports decide customer columns on the server, whatever the client sends', async () => {
+    const asked = (await planner.post('/documents', { kind: 'mis:pending-samples', params: { format: 'excel', customerVisible: true } }).expect(201)).body;
+    const stored = await ctx.prisma.documentJob.findUniqueOrThrow({ where: { id: asked.id } });
+    expect((stored.params as { customerVisible: boolean }).customerVisible).toBe(false);
+    const file = await ctx.app.get(DocumentsService).process(asked.id);
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load((await ctx.app.get(DocumentsService)['storage'].read(file!.id)).buffer as never);
+    const headers: string[] = [];
+    wb.worksheets[0].getRow(1).eachCell((c) => headers.push(String(c.value)));
+    expect(headers).not.toContain('Customer');
+    const allowed = (await admin.post('/documents', { kind: 'mis:pending-samples', params: { format: 'excel', customerVisible: false } }).expect(201)).body;
+    expect(((await ctx.prisma.documentJob.findUniqueOrThrow({ where: { id: allowed.id } })).params as { customerVisible: boolean }).customerVisible).toBe(true);
+  }, 60000);
+
+  it('reception converts quotations without seeing prices', async () => {
+    const q = (await sales.post('/quotations', { customerId: fx.intra.id, lines: [{ sampleDescription: 'To book', testId: fx.tests.a, quantity: 1 }] }).expect(201)).body;
+    const sent = (await sales.post(`/quotations/${q.id}/send`, { version: 1, to: 'b@c.example' }).expect(200)).body;
+    await sales.post(`/quotations/${q.id}/accept`, { version: sent.version }).expect(200);
+    await reception.get('/quotations').expect(403);
+    await reception.get(`/quotations/${q.id}`).expect(403);
+    const list = (await reception.get('/quotations/convertible').expect(200)).body;
+    const row = list.find((x: { id: string }) => x.id === q.id);
+    expect(row).toMatchObject({ customerName: fx.intra.name, samples: ['To book'], testCount: 1 });
+    expect(JSON.stringify(row)).not.toMatch(/rate|amount|total/i);
+    const conv = (await reception.post(`/quotations/${q.id}/convert`).expect(200)).body;
+    expect(conv.jobId).toBeTruthy();
+    expect((await reception.get('/quotations/convertible').expect(200)).body.find((x: { id: string }) => x.id === q.id)).toBeUndefined();
+  });
+
+  it('a temporary password only allows changing it', async () => {
+    const created = (await admin.post('/admin/users', { email: 'new@a.example', name: 'New Person', password: 'Temp-Password-1!', roleIds: [(await ctx.prisma.role.findUniqueOrThrow({ where: { name: ROLE_NAMES.sales } })).id] }).expect(201)).body;
+    const c = await login(ctx, 'new@a.example', 'Temp-Password-1!');
+    expect((await c.get('/auth/me').expect(200)).body.mustChangePassword).toBe(true);
+    const blocked = await c.get('/customers').expect(403);
+    expect(blocked.body.error.code).toBe('PASSWORD_CHANGE_REQUIRED');
+    await c.post('/auth/change-password', { currentPassword: 'Temp-Password-1!', newPassword: 'Chosen-Password-2!' }).expect(200);
+    const after = await login(ctx, 'new@a.example', 'Chosen-Password-2!');
+    await after.get('/customers').expect(200);
+    void created;
+  });
+});

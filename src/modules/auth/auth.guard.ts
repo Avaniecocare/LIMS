@@ -53,6 +53,11 @@ export class AuthGuard implements CanActivate {
       }
     }
 
+    // A temporary password only gets you as far as changing it.
+    if (user.mustChangePassword && !req.url.startsWith('/api/v1/auth/')) {
+      throw new AppError('PASSWORD_CHANGE_REQUIRED', 403, 'Choose a new password to continue');
+    }
+
     const activeRoles = user.roles.filter((r) => r.role.isActive && !r.role.deletedAt);
     const current: CurrentUser = {
       id: user.id,
