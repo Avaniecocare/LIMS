@@ -28,3 +28,25 @@ Choices made where the brief left room. Each is the default; anything a lab may 
 - Default roles are created once. After that an Admin owns the mapping; upgrades add new permission codes but never change an existing role's grants.
 - At least one role in use must keep user management, and Admins cannot remove their own access, so a deployment cannot lock itself out.
 - Changing a separation-of-duties or impartiality control requires a reason, written to the audit log.
+
+## Workflow
+- **Requested tests exist before they are planned.** Booking creates them with status `Planned` and no `plannedAt`, so rates are captured at booking. The API's `planned` flag says which they are.
+- **Rates freeze at booking:** accepted quotation, then customer rate, then standard rate. Invoices use the frozen rate, so a rate change later doesn't reach work already booked. Accounts can override a line on a draft invoice with a reason.
+- **Calculated results use inputs as reported,** at their stated decimals, so anyone can repeat the working from the printed figures.
+- **Stages complete strictly in order.** Submitting needs all stages complete and a value for every parameter.
+- **Report hash.** The signature stores a hash of the frozen content, which prints on the report, and the PDF's SHA-256, which can't print on itself. Both are recorded.
+- **Withheld reports** release only when every issued invoice for the job is paid, and at least one exists.
+- **A cancelled sample or job with an approved or issued report is refused.** The report must be revised instead. Lines on draft invoices are removed; issued invoices stay until corrected by a credit note.
+- **Payments are reversed, never deleted.** Issued invoices can only be cancelled if no payment or credit is held against them.
+- **Grand totals round to the nearest rupee,** with the difference shown as round-off.
+- **Soft-deleted master codes stay reserved,** so a code can't later mean something else on old records.
+
+## Access
+- **Customer identity needs `customers.view` everywhere,** including documents and attachments on jobs and samples. Planners and HoDs work from codes.
+- **Reception converts quotations through a price-free endpoint** and doesn't hold `quotations.view`.
+- **Notifications carry codes only,** since they reach technicians.
+
+## Operations
+- **Scheduled work runs in the worker** on Indian time: quotation expiry, TAT checks, invoice overdue checks, reminders, and a one-minute sweep that sends mail queued inside transactions.
+- **Infrastructure errors on document jobs are logged, not shown.** Users see a generic message.
+- **Images are large** (about 4.8 GB), since the backend's base image carries Chromium and its libraries. The API doesn't use Chromium, but sharing one image was asked for.

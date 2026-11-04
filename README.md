@@ -8,7 +8,9 @@ NestJS (Fastify) modular monolith for the white-label laboratory information man
 docker compose up
 ```
 
-This starts PostgreSQL, Redis, MinIO, Mailpit, the API (port 3000) and the worker. It runs migrations and loads the demo seed. All data and company details are fictional.
+This starts PostgreSQL, Redis, a local S3-compatible store, Mailpit (mail viewer on port 8025), the API (port 3000) and the worker. It runs migrations and loads the demo seed. All data and company details are fictional. Demo users are `<role>@demo.example` (admin, sales, reception, planner, tech, tech2, hod, reviewer, signatory, dispatch, accounts, management), password `Demo-Password-1!`.
+
+Note: the images use port 5432, 6379 and 9000 on your machine, so stop anything already using them.
 
 ## Without Docker
 
@@ -19,7 +21,7 @@ cp .env.example .env
 npm ci
 npx playwright install chromium
 npx prisma migrate deploy
-node scripts/dev-s3.mjs &           # S3-compatible store if MinIO isn't available
+node scripts/dev-s3.mjs &           # local S3-compatible store
 npm run build
 node --env-file=.env dist/main.js api
 node --env-file=.env dist/main.js worker
@@ -34,6 +36,8 @@ node --env-file=.env dist/main.js worker
 | `npm run build` | Compile to `dist/` |
 | `npm run openapi:generate` | Write `openapi.json` from the compiled code |
 | `npm run openapi:check` | Fail on a breaking change against `openapi/baseline.json` |
+| `npm run db:seed`, `npm run db:seed:remove` | Load the demo data, or remove it in one command |
+| `node load-test/run.mjs` | Load test; see below |
 
 Tests expect PostgreSQL at `TEST_DATABASE_URL` and Redis at `TEST_REDIS_URL`. The defaults are `postgresql://lims@localhost:5432/lims_test` and `redis://localhost:6379/1`. **The test database's schema is dropped on every run.**
 
@@ -54,6 +58,21 @@ Quote values containing `#` or spaces in env files: `COMPANY_PRIMARY_COLOR="#0f4
 - `src/modules/*` one NestJS module per business area
 - `src/worker` background processing (same image, `node dist/main.js worker`)
 - `prisma` schema and migrations
+
+## Load test
+
+Repeatable, against a dedicated database with 500,000 tests:
+
+```sh
+export DATABASE_URL=postgresql://lims@localhost:5432/lims_load
+npx prisma migrate deploy
+node load-test/run.mjs --seed
+node --env-file=.env dist/seed/cli.js seed      # for a user to sign in with
+# start the API against that database, then:
+API_URL=http://localhost:3000 EMAIL=admin@demo.example PASSWORD='Demo-Password-1!' node load-test/run.mjs
+```
+
+It fails if any endpoint's 95th percentile exceeds `P95_BUDGET_MS` (default 800).
 
 ## API contract
 
