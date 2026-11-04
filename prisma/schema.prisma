@@ -1,0 +1,1350 @@
+// LIMS data model. Conventions:
+//  - ids are UUIDv7 strings (time ordered, index friendly)
+//  - money is Decimal(14,2); measured values are Decimal(20,8). Never floats.
+//  - business records use soft deletion (deletedAt); nothing is hard-deleted
+//  - `version` carries optimistic concurrency on anything users edit
+//  - issued documents store JSON snapshots so later master/env changes cannot alter them
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------- identity
+
+model User {
+  id                String    @id @default(uuid(7))
+  email             String    @unique
+  name              String
+  passwordHash      String
+  designation       String?
+  phone             String?
+  departmentId      String?
+  department        Department? @relation(fields: [departmentId], references: [id])
+  signatureFileId   String?
+  isActive          Boolean   @default(true)
+  failedLogins      Int       @default(0)
+  lockedUntil       DateTime?
+  totpSecret        String?
+  totpEnabled       Boolean   @default(false)
+  passwordChangedAt DateTime  @default(now())
+  mustChangePassword Boolean  @default(false)
+  lastLoginAt       DateTime?
+  emailPreferences  Json      @default("{}")
+  isDemo            Boolean   @default(false)
+  version           Int       @default(1)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  roles             UserRole[]
+  resetTokens       PasswordResetToken[]
+  notifications     Notification[]
+  savedFilters      SavedFilter[]
+  assignedTests     SampleTest[] @relation("assignee")
+  @@index([isActive, name])
+  @@index([departmentId])
+}
+
+model Role {
+  id          String   @id @default(uuid(7))
+  name        String   @unique
+  description String?
+  isSystem    Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  users       UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  code        String @id
+  module      String
+  description String
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId         String
+  permissionCode String
+  role           Role       @relation(fields: [roleId], references: [id])
+  permission     Permission @relation(fields: [permissionCode], references: [code])
+  @@id([roleId, permissionCode])
+  @@index([permissionCode])
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User @relation(fields: [userId], references: [id])
+  role   Role @relation(fields: [roleId], references: [id])
+  @@id([userId, roleId])
+  @@index([roleId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid(7))
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------- settings
+
+model Setting {
+  key         String   @id
+  value       Json
+  version     Int      @default(1)
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}
+
+enum TermsKind {
+  QUOTATION
+  INVOICE
+  REPORT
+}
+
+/// Terms are long, editable and versioned; documents snapshot the version in force.
+model TermsVersion {
+  id          String    @id @default(uuid(7))
+  kind        TermsKind
+  versionNo   Int
+  body        String
+  createdById String?
+  createdAt   DateTime  @default(now())
+  @@unique([kind, versionNo])
+}
+
+model Holiday {
+  id        String    @id @default(uuid(7))
+  date      DateTime  @unique @db.Date
+  name      String
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+}
+
+model NumberSeries {
+  code      String
+  fy        String
+  nextValue Int      @default(1)
+  updatedAt DateTime @updatedAt
+  @@id([code, fy])
+}
+
+model AuditLog {
+  id        BigInt   @id @default(autoincrement())
+  at        DateTime @default(now())
+  userId    String?
+  userName  String?
+  ip        String?
+  requestId String?
+  action    String
+  entity    String
+  entityId  String?
+  before    Json?
+  after     Json?
+  reason    String?
+  @@index([entity, entityId, at])
+  @@index([userId, at])
+  @@index([action, at])
+  @@index([at])
+}
+
+/// Every workflow status change. Drives the timeline and rejection analytics.
+model StatusEvent {
+  id         String   @id @default(uuid(7))
+  entity     String
+  entityId   String
+  fromStatus String?
+  toStatus   String
+  reason     String?
+  meta       Json?
+  byId       String?
+  byName     String?
+  at         DateTime @default(now())
+  jobId      String?
+  @@index([entity, entityId, at])
+  @@index([jobId, at])
+  @@index([entity, toStatus, at])
+}
+
+model FileObject {
+  id           String   @id @default(uuid(7))
+  storageKey   String   @unique
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  sha256       String
+  category     String
+  entity       String?
+  entityId     String?
+  printWidthMm Int?
+  printHeightMm Int?
+  caption      String?
+  createdById  String?
+  createdAt    DateTime @default(now())
+  deletedAt    DateTime?
+  @@index([entity, entityId, category])
+}
+
+enum DocumentJobStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+}
+
+/// Background PDF / Excel production. Web requests only enqueue these.
+model DocumentJob {
+  id          String            @id @default(uuid(7))
+  kind        String
+  format      String            @default("pdf")
+  params      Json              @default("{}")
+  status      DocumentJobStatus @default(QUEUED)
+  fileId      String?
+  error       String?
+  createdById String?
+  createdAt   DateTime          @default(now())
+  finishedAt  DateTime?
+  @@index([createdById, createdAt])
+}
+
+model SavedFilter {
+  id        String   @id @default(uuid(7))
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  screen    String
+  name      String
+  filters   Json
+  createdAt DateTime @default(now())
+  @@unique([userId, screen, name])
+}
+
+// ---------------------------------------------------------------- masters
+
+model Department {
+  id        String    @id @default(uuid(7))
+  code      String    @unique
+  name      String
+  isActive  Boolean   @default(true)
+  isDemo    Boolean   @default(false)
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  users     User[]
+  tests     TestMaster[]
+  instruments Instrument[]
+}
+
+model Unit {
+  id        String    @id @default(uuid(7))
+  code      String    @unique
+  name      String
+  symbol    String
+  isActive  Boolean   @default(true)
+  isDemo    Boolean   @default(false)
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  parameters TestParameter[]
+  conversionsFrom UnitConversion[] @relation("from")
+  conversionsTo   UnitConversion[] @relation("to")
+}
+
+model UnitConversion {
+  id         String   @id @default(uuid(7))
+  fromUnitId String
+  toUnitId   String
+  factor     Decimal  @db.Decimal(30, 15)
+  isActive   Boolean  @default(true)
+  isDemo     Boolean  @default(false)
+  version    Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+  fromUnit   Unit     @relation("from", fields: [fromUnitId], references: [id])
+  toUnit     Unit     @relation("to", fields: [toUnitId], references: [id])
+  @@unique([fromUnitId, toUnitId])
+}
+
+model TestMethod {
+  id          String    @id @default(uuid(7))
+  code        String    @unique
+  name        String
+  standardRef String?
+  accredited  Boolean   @default(false)
+  accreditedUntil DateTime? @db.Date
+  isActive    Boolean   @default(true)
+  isDemo      Boolean   @default(false)
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  tests       TestMaster[]
+}
+
+enum TestCategory {
+  CHEMICAL
+  MECHANICAL
+  PHYSICAL
+  OTHER
+}
+
+model TestMaster {
+  id             String       @id @default(uuid(7))
+  code           String       @unique
+  name           String
+  category       TestCategory @default(OTHER)
+  departmentId   String?
+  department     Department?  @relation(fields: [departmentId], references: [id])
+  methodId       String?
+  method         TestMethod?  @relation(fields: [methodId], references: [id])
+  defaultTatDays Int          @default(5)
+  urgentTatDays  Int          @default(2)
+  accredited     Boolean      @default(false)
+  accreditedUntil DateTime?   @db.Date
+  stages         Json         @default("[\"Sample Received by Analyst\",\"Sample Preparation\",\"Analysis\",\"Calculation and Result Entry\"]")
+  isActive       Boolean      @default(true)
+  isDemo         Boolean      @default(false)
+  version        Int          @default(1)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+  parameters     TestParameter[]
+  groupItems     TestGroupItem[]
+  sampleTests    SampleTest[]
+  standardRates  StandardRate[]
+  customerRates  CustomerRate[]
+  @@index([departmentId])
+  @@index([isActive, name])
+}
+
+enum ParameterKind {
+  NUMERIC
+  TEXT
+  RESULT_SET
+  CALCULATED
+}
+
+model TestParameter {
+  id          String        @id @default(uuid(7))
+  testId      String
+  test        TestMaster    @relation(fields: [testId], references: [id])
+  code        String
+  name        String
+  kind        ParameterKind @default(NUMERIC)
+  unitId      String?
+  unit        Unit?         @relation(fields: [unitId], references: [id])
+  decimals    Int           @default(2)
+  resultSetId String?
+  resultSet   ResultSet?    @relation(fields: [resultSetId], references: [id])
+  formulaId   String?
+  formula     Formula?      @relation(fields: [formulaId], references: [id])
+  /// formula variable -> parameter code on the same test, or literal input name
+  formulaBindings Json?
+  accredited  Boolean       @default(false)
+  accreditedUntil DateTime? @db.Date
+  sortOrder   Int           @default(0)
+  isActive    Boolean       @default(true)
+  isDemo      Boolean       @default(false)
+  version     Int           @default(1)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  deletedAt   DateTime?
+  limits      SpecificationLimit[]
+  groupItems  TestGroupItem[]
+  @@unique([testId, code])
+  @@index([testId, sortOrder])
+}
+
+model Specification {
+  id         String    @id @default(uuid(7))
+  code       String
+  name       String
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  isActive   Boolean   @default(true)
+  isDemo     Boolean   @default(false)
+  version    Int       @default(1)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+  limits     SpecificationLimit[]
+  @@unique([code, customerId])
+  @@index([customerId])
+}
+
+model SpecificationLimit {
+  id              String        @id @default(uuid(7))
+  specificationId String
+  specification   Specification @relation(fields: [specificationId], references: [id])
+  parameterId     String
+  parameter       TestParameter @relation(fields: [parameterId], references: [id])
+  minValue        Decimal?      @db.Decimal(20, 8)
+  maxValue        Decimal?      @db.Decimal(20, 8)
+  textLimit       String?
+  deletedAt       DateTime?
+  @@unique([specificationId, parameterId])
+  @@index([parameterId])
+}
+
+enum TestGroupKind {
+  TEST
+  CHEMICAL
+}
+
+model TestGroup {
+  id        String        @id @default(uuid(7))
+  code      String        @unique
+  name      String
+  kind      TestGroupKind @default(TEST)
+  isActive  Boolean       @default(true)
+  isDemo    Boolean       @default(false)
+  version   Int           @default(1)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  deletedAt DateTime?
+  items     TestGroupItem[]
+}
+
+model TestGroupItem {
+  id          String         @id @default(uuid(7))
+  groupId     String
+  group       TestGroup      @relation(fields: [groupId], references: [id])
+  testId      String
+  test        TestMaster     @relation(fields: [testId], references: [id])
+  parameterId String?
+  parameter   TestParameter? @relation(fields: [parameterId], references: [id])
+  @@index([groupId])
+}
+
+model ResultSet {
+  id        String    @id @default(uuid(7))
+  code      String    @unique
+  name      String
+  isActive  Boolean   @default(true)
+  isDemo    Boolean   @default(false)
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  options   ResultSetOption[]
+  parameters TestParameter[]
+}
+
+model ResultSetOption {
+  id          String    @id @default(uuid(7))
+  resultSetId String
+  resultSet   ResultSet @relation(fields: [resultSetId], references: [id])
+  value       String
+  isPass      Boolean?
+  sortOrder   Int       @default(0)
+  @@unique([resultSetId, value])
+}
+
+model Formula {
+  id             String    @id @default(uuid(7))
+  code           String    @unique
+  name           String
+  description    String?
+  currentVersion Int       @default(1)
+  isActive       Boolean   @default(true)
+  isDemo         Boolean   @default(false)
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  versions       FormulaVersion[]
+  parameters     TestParameter[]
+}
+
+model FormulaVersion {
+  id         String   @id @default(uuid(7))
+  formulaId  String
+  formula    Formula  @relation(fields: [formulaId], references: [id])
+  versionNo  Int
+  expression String
+  variables  Json
+  decimals   Int      @default(2)
+  createdById String?
+  createdAt  DateTime @default(now())
+  records    CalculationRecord[]
+  @@unique([formulaId, versionNo])
+}
+
+model Instrument {
+  id                String    @id @default(uuid(7))
+  code              String    @unique
+  name              String
+  serialNo          String?
+  departmentId      String?
+  department        Department? @relation(fields: [departmentId], references: [id])
+  lastCalibratedAt  DateTime? @db.Date
+  calibrationDueAt  DateTime? @db.Date
+  certificateFileId String?
+  isActive          Boolean   @default(true)
+  isDemo            Boolean   @default(false)
+  version           Int       @default(1)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+  sampleTests       SampleTest[]
+  @@index([calibrationDueAt])
+  @@index([departmentId])
+}
+
+model StandardRate {
+  id            String     @id @default(uuid(7))
+  testId        String
+  test          TestMaster @relation(fields: [testId], references: [id])
+  rate          Decimal    @db.Decimal(14, 2)
+  effectiveFrom DateTime   @db.Date
+  effectiveTo   DateTime?  @db.Date
+  isActive      Boolean    @default(true)
+  isDemo        Boolean    @default(false)
+  version       Int        @default(1)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+  @@index([testId, effectiveFrom])
+}
+
+model CustomerRate {
+  id            String     @id @default(uuid(7))
+  customerId    String
+  customer      Customer   @relation(fields: [customerId], references: [id])
+  testId        String
+  test          TestMaster @relation(fields: [testId], references: [id])
+  rate          Decimal    @db.Decimal(14, 2)
+  effectiveFrom DateTime   @db.Date
+  effectiveTo   DateTime?  @db.Date
+  isActive      Boolean    @default(true)
+  isDemo        Boolean    @default(false)
+  version       Int        @default(1)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+  @@index([customerId, testId, effectiveFrom])
+}
+
+model RemarkTemplate {
+  id        String    @id @default(uuid(7))
+  code      String    @unique
+  text      String
+  testId    String?
+  /// optional suggestion trigger: PASS | FAIL | ANY
+  outcome   String    @default("ANY")
+  isActive  Boolean   @default(true)
+  isDemo    Boolean   @default(false)
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  @@index([testId])
+}
+
+enum LookupKind {
+  DEVIATION_TYPE
+  RECEIPT_MODE
+  DISPATCH_MODE
+}
+
+model LookupValue {
+  id        String     @id @default(uuid(7))
+  kind      LookupKind
+  code      String
+  label     String
+  isActive  Boolean    @default(true)
+  isDemo    Boolean    @default(false)
+  version   Int        @default(1)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  deletedAt DateTime?
+  @@unique([kind, code])
+}
+
+// ---------------------------------------------------------------- customers & orders
+
+model Customer {
+  id          String    @id @default(uuid(7))
+  crn         String    @unique
+  name        String
+  gstin       String?
+  pan         String?
+  stateName   String
+  stateCode   String
+  creditDays  Int       @default(30)
+  withholdReportUntilPaid Boolean @default(false)
+  notes       String?
+  ownerId     String?
+  isActive    Boolean   @default(true)
+  isDemo      Boolean   @default(false)
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  contacts    CustomerContact[]
+  addresses   CustomerAddress[]
+  orders      Order[]
+  quotations  Quotation[]
+  jobs        Job[]
+  invoices    Invoice[]
+  payments    Payment[]
+  rates       CustomerRate[]
+  specifications Specification[]
+  @@index([name])
+  @@index([gstin])
+  @@index([isActive, name])
+}
+
+model CustomerContact {
+  id          String    @id @default(uuid(7))
+  customerId  String
+  customer    Customer  @relation(fields: [customerId], references: [id])
+  name        String
+  email       String?
+  phone       String?
+  designation String?
+  isPrimary   Boolean   @default(false)
+  deletedAt   DateTime?
+  @@index([customerId])
+}
+
+enum AddressKind {
+  BILLING
+  REPORT
+  OTHER
+}
+
+model CustomerAddress {
+  id         String      @id @default(uuid(7))
+  customerId String
+  customer   Customer    @relation(fields: [customerId], references: [id])
+  kind       AddressKind
+  line1      String
+  line2      String?
+  city       String
+  stateName  String
+  stateCode  String
+  pincode    String?
+  deletedAt  DateTime?
+  @@index([customerId])
+}
+
+enum OrderSource {
+  EMAIL
+  PHONE
+  LETTER
+  WALK_IN
+}
+
+enum OrderStage {
+  NEW
+  QUOTED
+  WON
+  LOST
+}
+
+model Order {
+  id          String      @id @default(uuid(7))
+  orderNo     String      @unique
+  customerId  String
+  customer    Customer    @relation(fields: [customerId], references: [id])
+  source      OrderSource
+  reference   String?
+  description String?
+  receivedOn  DateTime    @db.Date
+  stage       OrderStage  @default(NEW)
+  ownerId     String?
+  isDemo      Boolean     @default(false)
+  version     Int         @default(1)
+  createdById String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deletedAt   DateTime?
+  quotations  Quotation[]
+  @@index([customerId])
+  @@index([stage, receivedOn])
+  @@index([ownerId])
+}
+
+// ---------------------------------------------------------------- quotations
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+model Quotation {
+  id             String          @id @default(uuid(7))
+  quotationNo    String          @unique
+  customerId     String
+  customer       Customer        @relation(fields: [customerId], references: [id])
+  orderId        String?
+  order          Order?          @relation(fields: [orderId], references: [id])
+  status         QuotationStatus @default(DRAFT)
+  currentVersionNo Int           @default(1)
+  validUntil     DateTime        @db.Date
+  grandTotal     Decimal         @default(0) @db.Decimal(14, 2)
+  rejectReason   String?
+  sentAt         DateTime?
+  acceptedAt     DateTime?
+  isDemo         Boolean         @default(false)
+  version        Int             @default(1)
+  createdById    String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  deletedAt      DateTime?
+  versions       QuotationVersion[]
+  jobs           Job[]
+  @@index([customerId, createdAt])
+  @@index([status, validUntil])
+  @@index([createdAt])
+}
+
+model QuotationVersion {
+  id            String    @id @default(uuid(7))
+  quotationId   String
+  quotation     Quotation @relation(fields: [quotationId], references: [id])
+  versionNo     Int
+  documentTitle String    @default("Quotation")
+  validUntil    DateTime  @db.Date
+  estimatedDays Int?
+  paymentTerms  String?
+  deliveryAddress String?
+  contactPerson String?
+  revisionNote  String?
+  discountPct   Decimal   @default(0) @db.Decimal(6, 3)
+  subtotal      Decimal   @default(0) @db.Decimal(14, 2)
+  discountAmount Decimal  @default(0) @db.Decimal(14, 2)
+  taxableAmount Decimal   @default(0) @db.Decimal(14, 2)
+  gstRate       Decimal   @default(0) @db.Decimal(6, 3)
+  cgst          Decimal   @default(0) @db.Decimal(14, 2)
+  sgst          Decimal   @default(0) @db.Decimal(14, 2)
+  igst          Decimal   @default(0) @db.Decimal(14, 2)
+  roundOff      Decimal   @default(0) @db.Decimal(14, 2)
+  grandTotal    Decimal   @default(0) @db.Decimal(14, 2)
+  amountInWords String    @default("")
+  customerSnapshot Json?
+  companySnapshot  Json?
+  termsSnapshot    String?
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lines         QuotationLine[]
+  @@unique([quotationId, versionNo])
+}
+
+model QuotationLine {
+  id            String           @id @default(uuid(7))
+  versionId     String
+  quotationVersion QuotationVersion @relation(fields: [versionId], references: [id])
+  seq           Int
+  sampleDescription String
+  requiredQuantity  String?
+  testId        String
+  testCode      String
+  testName      String
+  methodName    String?
+  quantity      Int              @default(1)
+  rate          Decimal          @db.Decimal(14, 2)
+  rateSource    String
+  overrideReason String?
+  discountPct   Decimal          @default(0) @db.Decimal(6, 3)
+  amount        Decimal          @db.Decimal(14, 2)
+  @@index([versionId, seq])
+}
+
+// ---------------------------------------------------------------- jobs & samples
+
+enum JobStatus {
+  RECEIVED
+  PLANNED
+  IN_TESTING
+  REPORTING
+  COMPLETED
+  ON_HOLD
+  CANCELLED
+}
+
+model Job {
+  id            String    @id @default(uuid(7))
+  jobNo         String    @unique
+  customerId    String
+  customer      Customer  @relation(fields: [customerId], references: [id])
+  quotationId   String?
+  quotation     Quotation? @relation(fields: [quotationId], references: [id])
+  noQuotationReason String?
+  status        JobStatus @default(RECEIVED)
+  statusBeforeHold JobStatus?
+  holdReason    String?
+  cancelReason  String?
+  urgent        Boolean   @default(false)
+  letterRef     String?
+  letterDate    DateTime? @db.Date
+  materialSpec  String?
+  poNumber      String?
+  poDate        DateTime? @db.Date
+  receiptModeId String?
+  reportIssueDetails String?
+  reportIssueAddress String?
+  kindAttention String?
+  contactEmail  String?
+  contactPhone  String?
+  sampleDrawnByLab Boolean @default(false)
+  receivedAt    DateTime  @default(now())
+  receivedById  String?
+  isDemo        Boolean   @default(false)
+  version       Int       @default(1)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+  samples       Sample[]
+  deviations    SampleDeviation[]
+  plans         Plan[]
+  dispatches    Dispatch[]
+  invoiceLines  InvoiceLine[]
+  @@index([customerId, receivedAt])
+  @@index([status, receivedAt])
+  @@index([receivedAt])
+  @@index([urgent, status])
+}
+
+enum SampleStatus {
+  RECEIVED
+  PLANNED
+  IN_TESTING
+  REPORTING
+  COMPLETED
+  CANCELLED
+}
+
+model Sample {
+  id            String       @id @default(uuid(7))
+  sampleNo      String       @unique
+  jobId         String
+  job           Job          @relation(fields: [jobId], references: [id])
+  description   String
+  condition     String?
+  quantity      String?
+  size          String?
+  returnable    Boolean      @default(false)
+  status        SampleStatus @default(RECEIVED)
+  cancelReason  String?
+  specificationId String?
+  dualSpecificationId String?
+  retentionUntil DateTime?   @db.Date
+  disposedAt    DateTime?    @db.Date
+  returnStatus  String?
+  returnedAt    DateTime?    @db.Date
+  isDemo        Boolean      @default(false)
+  version       Int          @default(1)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  deletedAt     DateTime?
+  attributes    SampleAttribute[]
+  deviations    SampleDeviation[]
+  tests         SampleTest[]
+  reports       Report[]
+  @@index([jobId])
+  @@index([status, createdAt])
+  @@index([returnable, returnStatus])
+  @@index([createdAt])
+}
+
+model SampleAttribute {
+  id       String @id @default(uuid(7))
+  sampleId String
+  sample   Sample @relation(fields: [sampleId], references: [id])
+  label    String
+  value    String
+  @@index([sampleId])
+}
+
+model SampleDeviation {
+  id        String   @id @default(uuid(7))
+  jobId     String
+  job       Job      @relation(fields: [jobId], references: [id])
+  sampleId  String?
+  sample    Sample?  @relation(fields: [sampleId], references: [id])
+  typeId    String
+  typeLabel String
+  remark    String?
+  createdById String?
+  createdAt DateTime @default(now())
+  @@index([jobId])
+  @@index([sampleId])
+}
+
+// ---------------------------------------------------------------- planning & testing
+
+model Plan {
+  id          String   @id @default(uuid(7))
+  planNo      String   @unique
+  jobId       String
+  job         Job      @relation(fields: [jobId], references: [id])
+  notes       String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  tests       SampleTest[]
+  @@index([jobId])
+  @@index([createdAt])
+}
+
+enum TestStatus {
+  PLANNED
+  ASSIGNED
+  IN_PROGRESS
+  RESULTS_SUBMITTED
+  APPROVED
+  ON_HOLD
+  CANCELLED
+}
+
+enum AnalysisMode {
+  SPECTRO
+  WET
+}
+
+model SampleTest {
+  id            String     @id @default(uuid(7))
+  sampleId      String
+  sample        Sample     @relation(fields: [sampleId], references: [id])
+  planId        String?
+  plan          Plan?      @relation(fields: [planId], references: [id])
+  testId        String
+  test          TestMaster @relation(fields: [testId], references: [id])
+  testCode      String
+  testName      String
+  methodName    String?
+  departmentId  String?
+  analysisMode  AnalysisMode?
+  specificationId String?
+  dualSpecificationId String?
+  status        TestStatus @default(PLANNED)
+  statusBeforeHold TestStatus?
+  holdReason    String?
+  cancelReason  String?
+  rejectionReason String?
+  officeInstructions String?
+  technicalData String?
+  assignedToId  String?
+  assignedTo    User?      @relation("assignee", fields: [assignedToId], references: [id])
+  instrumentId  String?
+  instrument    Instrument? @relation(fields: [instrumentId], references: [id])
+  urgent        Boolean    @default(false)
+  dueDate       DateTime?  @db.Date
+  plannedAt     DateTime?
+  assignedAt    DateTime?
+  startedAt     DateTime?
+  submittedAt   DateTime?
+  submittedById String?
+  approvedAt    DateTime?
+  approvedById  String?
+  conductedById String?
+  conductedByName String?
+  remarks       String?
+  observations  String?
+  notes         String?
+  /// financial — never serialised for roles without pricing permission
+  rate          Decimal?   @db.Decimal(14, 2)
+  rateSource    String?
+  isDemo        Boolean    @default(false)
+  version       Int        @default(1)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+  stages        SampleTestStage[]
+  results       ParameterResult[]
+  invoiceLines  InvoiceLine[]
+  @@index([sampleId])
+  @@index([assignedToId, status, dueDate])
+  @@index([status, dueDate])
+  @@index([instrumentId, status])
+  @@index([departmentId, status])
+  @@index([createdAt])
+  @@index([approvedAt])
+  @@index([testId, status])
+}
+
+model SampleTestStage {
+  id            String     @id @default(uuid(7))
+  sampleTestId  String
+  sampleTest    SampleTest @relation(fields: [sampleTestId], references: [id])
+  seq           Int
+  name          String
+  completedAt   DateTime?
+  completedById String?
+  completedByName String?
+  @@unique([sampleTestId, seq])
+}
+
+model ParameterResult {
+  id           String     @id @default(uuid(7))
+  sampleTestId String
+  sampleTest   SampleTest @relation(fields: [sampleTestId], references: [id])
+  parameterId  String
+  code         String
+  name         String
+  kind         ParameterKind
+  unit         String?
+  decimals     Int        @default(2)
+  accredited   Boolean    @default(false)
+  sortOrder    Int        @default(0)
+  numericValue Decimal?   @db.Decimal(20, 8)
+  textValue    String?
+  /// spec limits at the time of planning: [{spec, min, max, text}]
+  limits       Json?
+  passPrimary  Boolean?
+  passDual     Boolean?
+  enteredById  String?
+  enteredAt    DateTime?
+  version      Int        @default(1)
+  calculations CalculationRecord[]
+  @@unique([sampleTestId, parameterId])
+  @@index([parameterId])
+}
+
+model CalculationRecord {
+  id               String          @id @default(uuid(7))
+  parameterResultId String
+  parameterResult  ParameterResult @relation(fields: [parameterResultId], references: [id])
+  formulaVersionId String
+  formulaVersion   FormulaVersion  @relation(fields: [formulaVersionId], references: [id])
+  inputs           Json
+  working          String
+  result           Decimal         @db.Decimal(20, 8)
+  createdById      String?
+  createdAt        DateTime        @default(now())
+  @@index([parameterResultId, createdAt])
+}
+
+// ---------------------------------------------------------------- reports
+
+enum ReportStatus {
+  DRAFT
+  IN_REVIEW
+  PENDING_APPROVAL
+  APPROVED
+  ISSUED
+  SUPERSEDED
+}
+
+model Report {
+  id           String   @id @default(uuid(7))
+  reportNo     String   @unique
+  sampleId     String
+  sample       Sample   @relation(fields: [sampleId], references: [id])
+  currentRevisionNo Int @default(0)
+  isDemo       Boolean  @default(false)
+  invoiced     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  revisions    ReportRevision[]
+  @@index([sampleId])
+  @@index([createdAt])
+}
+
+model ReportRevision {
+  id           String       @id @default(uuid(7))
+  reportId     String
+  report       Report       @relation(fields: [reportId], references: [id])
+  revisionNo   Int
+  status       ReportStatus @default(DRAFT)
+  revisionReason String?
+  replacesRevisionId String?
+  ulrNumber    String?
+  /// frozen report content
+  content      Json
+  companySnapshot Json
+  termsSnapshot String?
+  reviewedById String?
+  reviewedByName String?
+  reviewedAt   DateTime?
+  approvedById String?
+  approvedByName String?
+  approvedAt   DateTime?
+  issuedAt     DateTime?
+  issuedById   String?
+  supersededAt DateTime?
+  pdfFileId    String?
+  pdfSha256    String?
+  version      Int          @default(1)
+  createdById  String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  rejections   ReportRejection[]
+  signature    ReportSignature?
+  @@unique([reportId, revisionNo])
+  @@index([status, createdAt])
+  @@index([issuedAt])
+}
+
+model ReportRejection {
+  id          String         @id @default(uuid(7))
+  revisionId  String
+  revision    ReportRevision @relation(fields: [revisionId], references: [id])
+  stage       String
+  action      String
+  reason      String
+  sampleTestIds Json?
+  byId        String?
+  byName      String?
+  at          DateTime       @default(now())
+  @@index([revisionId])
+  @@index([at])
+}
+
+model ReportSignature {
+  id          String         @id @default(uuid(7))
+  revisionId  String         @unique
+  revision    ReportRevision @relation(fields: [revisionId], references: [id])
+  userId      String
+  name        String
+  designation String?
+  signatureFileId String?
+  signedAt    DateTime       @default(now())
+  ip          String?
+  /// hash over the frozen report content at the moment of signing
+  contentSha256 String
+}
+
+// ---------------------------------------------------------------- dispatch
+
+model Dispatch {
+  id           String   @id @default(uuid(7))
+  dispatchNo   String   @unique
+  jobId        String
+  job          Job      @relation(fields: [jobId], references: [id])
+  dispatchDate DateTime @db.Date
+  modeId       String
+  modeLabel    String
+  courierName  String?
+  carrierName  String?
+  docketNo     String?
+  carrierContact String?
+  remarks      String?
+  items        Json     @default("[]")
+  companySnapshot Json?
+  isDemo       Boolean  @default(false)
+  createdById  String?
+  createdAt    DateTime @default(now())
+  deletedAt    DateTime?
+  @@index([jobId])
+  @@index([dispatchDate])
+}
+
+// ---------------------------------------------------------------- invoices
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+model Invoice {
+  id            String        @id @default(uuid(7))
+  invoiceNo     String?       @unique
+  customerId    String
+  customer      Customer      @relation(fields: [customerId], references: [id])
+  status        InvoiceStatus @default(DRAFT)
+  invoiceDate   DateTime?     @db.Date
+  dueDate       DateTime?     @db.Date
+  placeOfSupply String
+  placeOfSupplyCode String
+  isInterState  Boolean       @default(false)
+  subtotal      Decimal       @default(0) @db.Decimal(14, 2)
+  discountAmount Decimal      @default(0) @db.Decimal(14, 2)
+  taxableAmount Decimal       @default(0) @db.Decimal(14, 2)
+  gstRate       Decimal       @default(0) @db.Decimal(6, 3)
+  cgst          Decimal       @default(0) @db.Decimal(14, 2)
+  sgst          Decimal       @default(0) @db.Decimal(14, 2)
+  igst          Decimal       @default(0) @db.Decimal(14, 2)
+  roundOff      Decimal       @default(0) @db.Decimal(14, 2)
+  grandTotal    Decimal       @default(0) @db.Decimal(14, 2)
+  amountInWords String        @default("")
+  paidAmount    Decimal       @default(0) @db.Decimal(14, 2)
+  creditedAmount Decimal      @default(0) @db.Decimal(14, 2)
+  cancelReason  String?
+  customerSnapshot Json?
+  companySnapshot  Json?
+  termsSnapshot String?
+  notes         String?
+  isDemo        Boolean       @default(false)
+  version       Int           @default(1)
+  createdById   String?
+  issuedById    String?
+  issuedAt      DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
+  lines         InvoiceLine[]
+  allocations   PaymentAllocation[]
+  creditNotes   CreditNote[]
+  reminders     ReminderLog[]
+  @@index([customerId, invoiceDate])
+  @@index([status, dueDate])
+  @@index([invoiceDate])
+}
+
+model InvoiceLine {
+  id           String      @id @default(uuid(7))
+  invoiceId    String
+  invoice      Invoice     @relation(fields: [invoiceId], references: [id])
+  seq          Int
+  jobId        String?
+  job          Job?        @relation(fields: [jobId], references: [id])
+  sampleTestId String?
+  sampleTest   SampleTest? @relation(fields: [sampleTestId], references: [id])
+  description  String
+  sacCode      String
+  quantity     Int         @default(1)
+  rate         Decimal     @db.Decimal(14, 2)
+  rateSource   String?
+  amount       Decimal     @db.Decimal(14, 2)
+  @@index([invoiceId, seq])
+  @@index([jobId])
+  @@index([sampleTestId])
+}
+
+enum PaymentMode {
+  CASH
+  CHEQUE
+  NEFT
+  RTGS
+  IMPS
+  UPI
+  CARD
+  OTHER
+}
+
+model Payment {
+  id          String      @id @default(uuid(7))
+  paymentNo   String      @unique
+  customerId  String
+  customer    Customer    @relation(fields: [customerId], references: [id])
+  paidOn      DateTime    @db.Date
+  mode        PaymentMode
+  reference   String?
+  amount      Decimal     @db.Decimal(14, 2)
+  unapplied   Decimal     @default(0) @db.Decimal(14, 2)
+  isAdvance   Boolean     @default(false)
+  notes       String?
+  isDemo      Boolean     @default(false)
+  version     Int         @default(1)
+  createdById String?
+  createdAt   DateTime    @default(now())
+  deletedAt   DateTime?
+  allocations PaymentAllocation[]
+  @@index([customerId, paidOn])
+  @@index([paidOn])
+}
+
+model PaymentAllocation {
+  id        String   @id @default(uuid(7))
+  paymentId String
+  payment   Payment  @relation(fields: [paymentId], references: [id])
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id])
+  amount    Decimal  @db.Decimal(14, 2)
+  createdAt DateTime @default(now())
+  @@index([paymentId])
+  @@index([invoiceId])
+}
+
+model CreditNote {
+  id            String   @id @default(uuid(7))
+  creditNoteNo  String   @unique
+  invoiceId     String
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id])
+  issuedOn      DateTime @db.Date
+  reason        String
+  taxableAmount Decimal  @db.Decimal(14, 2)
+  gstRate       Decimal  @db.Decimal(6, 3)
+  cgst          Decimal  @default(0) @db.Decimal(14, 2)
+  sgst          Decimal  @default(0) @db.Decimal(14, 2)
+  igst          Decimal  @default(0) @db.Decimal(14, 2)
+  roundOff      Decimal  @default(0) @db.Decimal(14, 2)
+  total         Decimal  @db.Decimal(14, 2)
+  amountInWords String
+  customerSnapshot Json
+  companySnapshot  Json
+  isDemo        Boolean  @default(false)
+  createdById   String?
+  createdAt     DateTime @default(now())
+  @@index([invoiceId])
+  @@index([issuedOn])
+}
+
+model ReminderLog {
+  id         String   @id @default(uuid(7))
+  invoiceId  String
+  invoice    Invoice  @relation(fields: [invoiceId], references: [id])
+  kind       String
+  emailLogId String?
+  sentById   String?
+  at         DateTime @default(now())
+  @@index([invoiceId, at])
+}
+
+// ---------------------------------------------------------------- notifications
+
+model Notification {
+  id        String    @id @default(uuid(7))
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  type      String
+  title     String
+  body      String?
+  link      String?
+  dedupeKey String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  @@unique([userId, dedupeKey])
+  @@index([userId, readAt, createdAt])
+}
+
+enum EmailStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+model EmailLog {
+  id         String      @id @default(uuid(7))
+  toAddress  String
+  ccAddress  String?
+  subject    String
+  template   String
+  html       String
+  attachments Json       @default("[]")
+  entity     String?
+  entityId   String?
+  status     EmailStatus @default(QUEUED)
+  attempts   Int         @default(0)
+  lastError  String?
+  sentAt     DateTime?
+  createdById String?
+  createdAt  DateTime    @default(now())
+  @@index([entity, entityId, createdAt])
+  @@index([status, createdAt])
+}

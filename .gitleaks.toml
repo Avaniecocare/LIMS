@@ -1,0 +1,6 @@
+# Fictional fixtures only; these are placeholders, not secrets.
+[extend]
+useDefault = true
+[allowlist]
+description = "Fictional development values"
+paths = ['''\.env\.example$''', '''test/support/''', '''docker-compose\.yml$''']
