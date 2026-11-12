@@ -1,0 +1,225 @@
+{
+  "answerable": [
+    {
+      "q": "How do I book samples without a quotation?",
+      "pages": ["/help/features/booking/", "/help/guides/sample-reception/"]
+    },
+    {
+      "q": "How can I add photos of the samples when they arrive?",
+      "pages": ["/help/features/booking/", "/help/features/jobs-samples/", "/help/features/phone-upload/"]
+    },
+    {
+      "q": "How do I send the acknowledgement letter to the customer?",
+      "pages": ["/help/features/jobs-samples/", "/help/guides/sample-reception/", "/help/features/booking/"]
+    },
+    {
+      "q": "How do I add a new customer with GSTIN and address?",
+      "pages": ["/help/features/customers/", "/help/guides/sales/"]
+    },
+    {
+      "q": "How do I create and send a quotation?",
+      "pages": ["/help/features/orders-quotations/", "/help/guides/sales/"]
+    },
+    {
+      "q": "How do I assign tests to a technician?",
+      "pages": ["/help/features/planning/", "/help/guides/lab-manager-planner/"]
+    },
+    {
+      "q": "How do I enter results for a test and submit it?",
+      "pages": ["/help/features/testing/", "/help/guides/technician-analyst/"]
+    },
+    {
+      "q": "How does the head of department approve results?",
+      "pages": ["/help/features/approvals/", "/help/guides/head-of-department/"]
+    },
+    {
+      "q": "How do I sign and issue a test report?",
+      "pages": ["/help/features/approvals/", "/help/guides/authorised-signatory/", "/help/features/reports/"]
+    },
+    {
+      "q": "How do I revise a report that was already issued?",
+      "pages": ["/help/features/reports/", "/help/guides/authorised-signatory/", "/help/features/approvals/"]
+    },
+    {
+      "q": "How can a customer verify a report with the QR code?",
+      "pages": ["/help/features/reports/"]
+    },
+    {
+      "q": "How do I record a dispatch of reports and samples?",
+      "pages": ["/help/features/dispatch/", "/help/guides/dispatch/"]
+    },
+    {
+      "q": "How do I create an invoice for jobs that are ready to invoice?",
+      "pages": ["/help/features/invoices-payments/", "/help/guides/accounts/"]
+    },
+    {
+      "q": "How do I record a payment against an invoice?",
+      "pages": ["/help/features/invoices-payments/", "/help/guides/accounts/"]
+    },
+    {
+      "q": "How do I raise a credit note?",
+      "pages": ["/help/features/invoices-payments/", "/help/guides/accounts/"]
+    },
+    {
+      "q": "How do I send a payment reminder for an overdue invoice?",
+      "pages": ["/help/features/due-invoices/", "/help/guides/accounts/"]
+    },
+    {
+      "q": "How do I send a report to the customer on WhatsApp?",
+      "pages": ["/help/features/whatsapp/", "/help/guides/authorised-signatory/"]
+    },
+    {
+      "q": "How do I set up WhatsApp Business for the lab?",
+      "pages": ["/help/integrations/whatsapp/"]
+    },
+    {
+      "q": "How do I add a user and give them a role?",
+      "pages": ["/help/admin/users-roles/", "/help/guides/admin/"]
+    },
+    {
+      "q": "Which permissions does the Accounts role have?",
+      "pages": ["/help/admin/permissions/", "/help/guides/accounts/"]
+    },
+    {
+      "q": "How do I change the lab logo and colours?",
+      "pages": ["/help/admin/branding/"]
+    },
+    {
+      "q": "How do I edit the email templates?",
+      "pages": ["/help/admin/email-templates/"]
+    },
+    {
+      "q": "How do I turn off the billing module?",
+      "pages": ["/help/admin/modules/"]
+    },
+    {
+      "q": "How do I change the invoice number format?",
+      "pages": ["/help/admin/numbering/", "/help/admin/settings/"]
+    },
+    {
+      "q": "How do I add holidays so turnaround time skips them?",
+      "pages": ["/help/admin/terms-holidays/"]
+    },
+    {
+      "q": "How do I import tests and rates into masters?",
+      "pages": ["/help/admin/masters/"]
+    },
+    {
+      "q": "Where can I see who changed a record in the audit log?",
+      "pages": ["/help/admin/audit-log/"]
+    },
+    {
+      "q": "How do I handle a data erasure request under DPDP?",
+      "pages": ["/help/admin/privacy/", "/help/security/data-protection/"]
+    },
+    {
+      "q": "How do I record an equipment calibration?",
+      "pages": ["/help/features/quality/", "/help/guides/quality-manager/"]
+    },
+    {
+      "q": "How do I report a problem or non-conformance from a test?",
+      "pages": ["/help/features/quality/", "/help/features/testing/", "/help/guides/technician-analyst/"]
+    },
+    {
+      "q": "How do I scan a sample label with a barcode scanner?",
+      "pages": ["/help/features/search-scanning/"]
+    },
+    {
+      "q": "How do I export an MIS report to Excel?",
+      "pages": ["/help/features/mis-reports/", "/help/guides/management/"]
+    },
+    {
+      "q": "How do I configure SMTP so emails are sent?",
+      "pages": ["/help/integrations/email-smtp/", "/help/install/environment/"]
+    },
+    {
+      "q": "How do I back up and restore the database?",
+      "pages": ["/help/install/backup-restore/"]
+    },
+    {
+      "q": "How do I upgrade to a new version?",
+      "pages": ["/help/install/upgrades/"]
+    },
+    {
+      "q": "What does the error 'This record was changed by someone else' mean?",
+      "pages": ["/help/troubleshooting/error-messages/", "/help/troubleshooting/", "/help/developers/errors/"]
+    },
+    {
+      "q": "How do I use the LIMS on my phone?",
+      "pages": ["/help/guides/on-a-phone/", "/help/features/mobile/"]
+    },
+    {
+      "q": "How do I switch to dark mode?",
+      "pages": ["/help/features/account/", "/help/getting-started/quick-start/", "/help/troubleshooting/faq/"]
+    },
+    {
+      "q": "How do I set a limit on how much the AI help assistant can spend?",
+      "pages": ["/help/integrations/ai-assistant/"]
+    }
+  ],
+  "notInDocs": [
+    "How do I configure kubernetes autoscaling with helm charts?",
+    "Can I export data to SAP S/4HANA directly?",
+    "How do I integrate with Salesforce CRM?",
+    "Does it support blockchain notarisation of results?",
+    "How do I change my Gmail signature?",
+    "What is the best laptop to buy for gaming?",
+    "How do I file my income tax return?",
+    "How do I train a machine learning model on my samples?",
+    "How do I mine bitcoin?",
+    "Which football club won the league last year?"
+  ],
+  "heldOut": {
+    "answerable": [
+      {
+        "q": "Where do I put a job on hold?",
+        "pages": ["/help/features/jobs-samples/"]
+      },
+      {
+        "q": "How do I print sample labels?",
+        "pages": ["/help/features/jobs-samples/", "/help/features/documents/", "/help/guides/sample-reception/"]
+      },
+      {
+        "q": "Can a technician see the customer's name?",
+        "pages": ["/help/security/", "/help/guides/technician-analyst/", "/help/admin/permissions/", "/help/features/testing/"]
+      },
+      {
+        "q": "How do I cancel an invoice?",
+        "pages": ["/help/features/invoices-payments/", "/help/guides/accounts/"]
+      },
+      {
+        "q": "What happens when a sample is returnable?",
+        "pages": ["/help/features/dispatch/", "/help/getting-started/concepts/", "/help/features/booking/"]
+      },
+      {
+        "q": "How do I change the GST rate?",
+        "pages": ["/help/admin/settings/", "/help/features/invoices-payments/"]
+      },
+      {
+        "q": "How do I set the ULR number format for NABL?",
+        "pages": ["/help/admin/lab-profile/", "/help/admin/numbering/", "/help/features/reports/"]
+      },
+      {
+        "q": "How do I see which tests are overdue on TAT?",
+        "pages": ["/help/features/dashboard-analytics/", "/help/features/mis-reports/", "/help/guides/lab-manager-planner/", "/help/features/notifications/"]
+      },
+      {
+        "q": "How do I withdraw a staff authorisation for a test?",
+        "pages": ["/help/features/quality/", "/help/guides/quality-manager/"]
+      },
+      {
+        "q": "How do I send photos from my phone to a sample?",
+        "pages": ["/help/features/phone-upload/"]
+      },
+      {
+        "q": "How do I restore a backup?",
+        "pages": ["/help/install/backup-restore/"]
+      },
+      {
+        "q": "Which environment variable sets the SMTP server?",
+        "pages": ["/help/install/environment/", "/help/integrations/email-smtp/"]
+      }
+    ],
+    "notInDocs": ["How do I connect a Tally ERP export?", "What is the recipe for biryani?", "How do I book a flight to Mumbai?", "Explain quantum entanglement", "How do I reset my router password?"]
+  }
+}

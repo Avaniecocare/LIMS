@@ -25,6 +25,37 @@ export interface InfraConfig {
   logLevel: string;
   /** WhatsApp Business Cloud API; null when not set up */
   whatsapp: { apiUrl: string; token: string | null; phoneNumberId: string | null; transport: 'cloud' | 'json'; appSecret: string | null; verifyToken: string | null } | null;
+  /** The help site's "Ask AI" assistant; see HelpConfig. */
+  help: HelpConfig;
+}
+
+/** The help assistant. It answers from the published documentation only, through this server. */
+export interface HelpConfig {
+  /** ENABLE_AI_ASSISTANT=true and a usable provider; otherwise the help site shows search only */
+  enabled: boolean;
+  /** anthropic (Claude), or mock: an offline extractive answer, for development and tests */
+  provider: 'anthropic' | 'mock';
+  apiKey: string | null;
+  model: string;
+  embedding: { provider: 'none' | 'voyage'; apiKey: string | null; model: string };
+  /** where the docs build's help-index.json is read from: a file path, or a URL */
+  indexPath: string | null;
+  indexUrl: string;
+  perMinute: number;
+  perDay: number;
+  signedInPerDay: number;
+  /** US dollars; the assistant turns itself off for the rest of the day or month when reached */
+  dailyBudget: number;
+  monthlyBudget: number;
+  maxQuestionLength: number;
+  maxOutputTokens: number;
+  turnstileSiteKey: string | null;
+  turnstileSecretKey: string | null;
+  requireLogin: boolean;
+  /** origins allowed to call the assistant (the docs site); the app's own origin is always allowed */
+  allowedOrigins: string[];
+  supportEmail: string | null;
+  logRetentionDays: number;
 }
 
 export class InfraConfigError extends Error {}
@@ -90,6 +121,7 @@ export function loadInfraConfig(env: NodeJS.ProcessEnv = process.env): InfraConf
     pincodeLookupUrl: env.PINCODE_LOOKUP_URL === undefined ? 'https://api.postalpincode.in/pincode/' : env.PINCODE_LOOKUP_URL.trim() || null,
     errorTrackingDsn: env.ERROR_TRACKING_DSN?.trim() || null,
     logLevel: env.LOG_LEVEL ?? 'info',
+    help: loadHelpConfig(env, req('FRONTEND_ORIGIN')),
   };
   if (missing.length) throw new InfraConfigError(`Missing required environment variables: ${missing.join(', ')}`);
   if (secret.length < 32) throw new InfraConfigError('SESSION_SECRET must be at least 32 characters');
@@ -98,6 +130,54 @@ export function loadInfraConfig(env: NodeJS.ProcessEnv = process.env): InfraConf
     throw new InfraConfigError('SESSION_SECRET is the public example value. Generate a new random secret for production.');
   }
   return config;
+}
+
+// TODO(product-decision): the help assistant's limits. Low by default so a public docs site cannot run up a bill.
+function loadHelpConfig(env: NodeJS.ProcessEnv, frontendOrigin: string): HelpConfig {
+  const int = (name: string, fallback: number, min = 1) => {
+    const raw = env[name]?.trim();
+    const n = raw ? Number(raw) : fallback;
+    return Number.isFinite(n) && n >= min ? Math.floor(n) : fallback;
+  };
+  const money = (name: string, fallback: number) => {
+    // An empty value (as a deployment template writes it) means "use the default", not zero.
+    const raw = env[name]?.trim();
+    const n = raw ? Number(raw) : fallback;
+    return Number.isFinite(n) && n >= 0 ? n : fallback;
+  };
+  const provider = env.AI_PROVIDER?.trim() === 'mock' ? 'mock' : 'anthropic';
+  const apiKey = env.AI_API_KEY?.trim() || null;
+  const usable = provider === 'mock' || !!apiKey;
+  const origins = (env.ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map((o) => o.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+  return {
+    enabled: env.ENABLE_AI_ASSISTANT === 'true' && usable,
+    provider,
+    apiKey,
+    model: env.AI_MODEL?.trim() || 'claude-haiku-5-5',
+    embedding: {
+      provider: env.EMBEDDING_PROVIDER?.trim() === 'voyage' ? 'voyage' : 'none',
+      apiKey: env.EMBEDDING_API_KEY?.trim() || null,
+      model: env.EMBEDDING_MODEL?.trim() || 'voyage-3.5-lite',
+    },
+    indexPath: env.HELP_INDEX_PATH?.trim() || null,
+    indexUrl: env.HELP_INDEX_URL?.trim() || `${frontendOrigin.replace(/\/+$/, '')}/help/help-index.json`,
+    perMinute: int('RATE_LIMIT_PER_MINUTE', 10),
+    perDay: int('RATE_LIMIT_PER_DAY', 50),
+    signedInPerDay: int('SIGNED_IN_RATE_LIMIT_PER_DAY', 200),
+    dailyBudget: money('DAILY_BUDGET_LIMIT', 1),
+    monthlyBudget: money('MONTHLY_BUDGET_LIMIT', 20),
+    maxQuestionLength: Math.min(int('MAX_QUESTION_LENGTH', 500, 20), 2000),
+    maxOutputTokens: Math.min(int('MAX_OUTPUT_TOKENS', 800, 100), 4000),
+    turnstileSiteKey: env.TURNSTILE_SITE_KEY?.trim() || null,
+    turnstileSecretKey: env.TURNSTILE_SECRET_KEY?.trim() || null,
+    requireLogin: env.AI_REQUIRE_LOGIN === 'true',
+    allowedOrigins: [...new Set([frontendOrigin.replace(/\/+$/, ''), ...origins])],
+    supportEmail: env.HELP_SUPPORT_EMAIL?.trim() || null,
+    logRetentionDays: int('HELP_LOG_RETENTION_DAYS', 90),
+  };
 }
 
 export const INFRA_CONFIG = Symbol('INFRA_CONFIG');

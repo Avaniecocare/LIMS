@@ -38,6 +38,7 @@ import { TestingModule } from './modules/testing/testing.module.js';
 
 /** Business modules. The worker imports these too, so document handlers register in both processes. */
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module.js';
+import { HelpModule } from './modules/help/help.module.js';
 
 export const DOMAIN_MODULES = [
   PdfModule,
@@ -66,6 +67,7 @@ export const DOMAIN_MODULES = [
   DashboardModule,
   NotificationsModule,
   WhatsappModule,
+  HelpModule,
 ];
 
 @Module({

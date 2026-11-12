@@ -1,0 +1,71 @@
+{
+  "version": "fixture1",
+  "builtAt": "2026-11-12T00:00:00Z",
+  "embeddingModel": null,
+  "chunks": [
+    {
+      "id": "booking-1",
+      "title": "Book samples",
+      "url": "/help/features/booking/#book-samples-without-a-quotation",
+      "heading": "Book samples without a quotation",
+      "access": "public",
+      "text": "Open Samples and choose Book samples. Pick the customer, fill in Reason for no quotation, add each sample with its description and tests, then choose Book job. The job number appears at the top of the job page."
+    },
+    {
+      "id": "booking-2",
+      "title": "Book samples",
+      "url": "/help/features/booking/#photos",
+      "heading": "Photos of samples",
+      "access": "public",
+      "text": "Add photos of each sample as received with Add photos or Use camera. Photos are optional and can go on the acknowledgement letter."
+    },
+    {
+      "id": "invoice-1",
+      "title": "Invoices and payments",
+      "url": "/help/features/invoices-payments/#record-a-payment",
+      "heading": "Record a payment",
+      "access": "public",
+      "text": "Open the invoice and choose Record payment. Enter the amount, the payment mode and the reference, then save. The invoice shows Partially paid or Paid."
+    },
+    {
+      "id": "report-1",
+      "title": "Reports",
+      "url": "/help/features/reports/#issue-a-report",
+      "heading": "Issue a report",
+      "access": "public",
+      "text": "An approved report is issued by the Authorised Signatory. Open the report and choose Issue. Optionally enter Email to so the PDF is emailed to the customer."
+    },
+    {
+      "id": "users-1",
+      "title": "Users and roles",
+      "url": "/help/admin/users-roles/#add-a-user",
+      "heading": "Add a user",
+      "access": "public",
+      "text": "Go to Admin, Users and choose Add user. Enter the name, email and a temporary password, tick the roles, then save."
+    },
+    {
+      "id": "whatsapp-1",
+      "title": "WhatsApp",
+      "url": "/help/integrations/whatsapp/#connect",
+      "heading": "Connect WhatsApp",
+      "access": "public",
+      "text": "Set WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID in the server settings, then send a test message from Admin, WhatsApp."
+    },
+    {
+      "id": "staff-1",
+      "title": "Runbook for lab IT",
+      "url": "/help/install/runbook/#rotate-storage-credentials",
+      "heading": "Rotate storage credentials",
+      "access": "staff",
+      "text": "To rotate the zebracorn storage credentials, update S3_ACCESS_KEY and S3_SECRET_KEY in secrets.env and redeploy."
+    },
+    {
+      "id": "quick-1",
+      "title": "Quick start",
+      "url": "/help/getting-started/quick-start/",
+      "heading": "Quick start",
+      "access": "public",
+      "text": "Sign in with your email and password. The dashboard shows My work. Use the search box to find any job, sample, report or invoice."
+    }
+  ]
+}

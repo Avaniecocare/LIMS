@@ -49,13 +49,16 @@ export async function createApp(options: { trustProxy?: boolean } = {}): Promise
     contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } },
     crossOriginResourcePolicy: { policy: 'same-site' },
   });
-  await app.register(cors as never, {
+  const appCors = {
     origin: infra.frontendOrigin,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'X-CSRF-Token', 'X-Request-Id'],
+    allowedHeaders: ['Content-Type', 'X-CSRF-Token', 'X-Request-Id', 'X-Requested-With'],
     exposedHeaders: ['X-Request-Id'],
-  });
+  };
+  // The help site may live on another address (ALLOWED_ORIGINS); it is allowed for the help endpoints only.
+  const helpCors = { ...appCors, origin: infra.help.allowedOrigins, methods: ['GET', 'POST'] };
+  await app.register(cors as never, () => (req: { url: string }, cb: (e: Error | null, o: object) => void) => cb(null, req.url.startsWith('/api/v1/help/') ? helpCors : appCors));
   await app.register(cookie as never);
   await app.register(multipart as never, { limits: { fileSize: infra.maxUploadBytes, files: 1 } });
 

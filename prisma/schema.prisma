@@ -1646,3 +1646,44 @@ model WhatsappMessage {
   @@index([status, createdAt])
   @@index([providerMessageId])
 }
+
+enum HelpOutcome {
+  ANSWERED
+  CACHED
+  NOT_FOUND
+  OFF_TOPIC
+  BLOCKED
+  RATE_LIMITED
+  CAPTCHA_FAILED
+  BUDGET_REACHED
+  ERROR
+}
+
+/** One question to the help assistant. No IP address or account is stored; the text is scrubbed of emails and numbers. */
+model HelpQuestion {
+  id           String      @id @default(uuid(7))
+  question     String?
+  outcome      HelpOutcome
+  /** doc pages the answer was drawn from */
+  sources      Json        @default("[]")
+  model        String?
+  inputTokens  Int         @default(0)
+  outputTokens Int         @default(0)
+  /** millionths of a US dollar */
+  costMicros   Int         @default(0)
+  latencyMs    Int         @default(0)
+  signedIn     Boolean     @default(false)
+  helpful      Boolean?
+  createdAt    DateTime    @default(now())
+  @@index([createdAt])
+  @@index([outcome, createdAt])
+}
+
+/** "Was this page helpful?" on the help site. */
+model HelpPageFeedback {
+  id        String   @id @default(uuid(7))
+  path      String
+  helpful   Boolean
+  createdAt DateTime @default(now())
+  @@index([path, createdAt])
+}
