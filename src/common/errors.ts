@@ -103,7 +103,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     if (status === 403 && code === 'FORBIDDEN') {
       const userId = getContext()?.user?.id;
-      if (userId && forbiddenHook) void forbiddenHook(userId).catch(() => undefined);
+      // The refusal still goes out; a failure to record it for the security alerts is logged, not shown to the user.
+      if (userId && forbiddenHook) void forbiddenHook(userId).catch((err: unknown) => logger.warn({ err }, 'could not record a refused request'));
     }
     if (status >= 500) {
       logger.error({ err: exception, requestId }, 'unhandled error');

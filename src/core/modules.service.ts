@@ -111,6 +111,7 @@ export class ModulesService implements OnModuleInit, OnModuleDestroy {
       await this.audit.record({ action: 'modules.update', entity: 'Setting', entityId: KEY, before, after: next }, tx);
     });
     this.cache = null;
-    await this.redis.client.publish(CHANNEL, '1').catch(() => undefined);
+    // Other processes also re-read within a minute, so a failed announcement only delays them.
+    await this.redis.client.publish(CHANNEL, '1').catch((err: unknown) => logger.warn({ err }, 'could not announce the module change'));
   }
 }

@@ -212,7 +212,8 @@ export class CompanyService implements OnModuleInit, OnModuleDestroy {
       await this.audit.record({ action, entity: 'Setting', entityId: key, before, after: value }, tx);
     });
     await this.reload();
-    await this.redis.client.publish(CHANNEL, key).catch(() => undefined);
+    // Other processes also re-read within a minute, so a failed announcement only delays them.
+    await this.redis.client.publish(CHANNEL, key).catch((err: unknown) => logger.warn({ err }, 'could not announce the lab profile change'));
   }
 
   async saveProfile(profile: CompanyProfile, expectedVersion: number) {

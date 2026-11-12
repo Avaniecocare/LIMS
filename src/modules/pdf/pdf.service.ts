@@ -74,6 +74,7 @@ export class PdfService implements OnModuleDestroy {
   }
 
   async onModuleDestroy() {
+    // Shutting down: a browser that has already exited is fine.
     if (this.browser) await (await this.browser).close().catch(() => undefined);
   }
 }
