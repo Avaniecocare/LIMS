@@ -19,7 +19,7 @@ import { AuthService } from '../auth/auth.service.js';
 import { DocumentsService } from '../documents/documents.service.js';
 import { JobsService } from '../jobs/jobs.service.js';
 import { PdfService } from '../pdf/pdf.service.js';
-import { reportHtml, type ReportContent, type ReportFormat, type ReportPhoto } from '../pdf/templates/report.js';
+import { reportAnnexes, reportHtml, type ReportContent, type ReportFormat, type ReportPhoto } from '../pdf/templates/report.js';
 import { SchedulerService } from '../scheduler/scheduler.service.js';
 import { TestingService } from '../testing/testing.service.js';
 import type { ReportCorrectDto, ReportIssueDto, ReportQuery, ReportRejectDto, ReportVerificationDto } from './reports.dto.js';
@@ -100,14 +100,19 @@ export class ReportsService implements OnModuleInit {
       include: {
         deviations: true,
         job: { include: { deviations: { where: { sampleId: null } }, customer: { include: { contacts: { where: { deletedAt: null } }, addresses: { where: { deletedAt: null } } } } } },
-        tests: { where: { deletedAt: null, status: 'APPROVED' }, orderBy: { createdAt: 'asc' }, include: { results: { orderBy: { sortOrder: 'asc' } } } },
+        tests: {
+          where: { deletedAt: null, status: 'APPROVED' },
+          orderBy: { createdAt: 'asc' },
+          include: { results: { orderBy: { sortOrder: 'asc' } }, instrument: { select: { code: true, name: true } } },
+        },
       },
     });
     const cust = s.job.customer;
     const contact = cust.contacts.find((c) => c.isPrimary) ?? cust.contacts[0];
     const addr = cust.addresses.find((a) => a.kind === 'REPORT') ?? cust.addresses.find((a) => a.kind === 'BILLING') ?? cust.addresses[0];
     const files = await tx.fileObject.findMany({
-      where: { entity: 'SampleTest', entityId: { in: s.tests.map((t) => t.id) }, category: 'result-image', deletedAt: null },
+      // Only what the analyst left ticked "Print on report"; raw data and worksheets never print.
+      where: { entity: 'SampleTest', entityId: { in: s.tests.map((t) => t.id) }, category: { in: ['result-image', 'instrument-report'] }, printOnReport: true, deletedAt: null },
       orderBy: { createdAt: 'asc' },
     });
     const specIds = [s.specificationId, s.dualSpecificationId].filter(Boolean) as string[];
@@ -157,7 +162,13 @@ export class ReportsService implements OnModuleInit {
             passDual: r.passDual,
             accredited: r.accredited,
           })),
-        images: files.filter((f) => f.entityId === t.id).map((f) => ({ fileId: f.id, widthMm: f.printWidthMm ?? 80, heightMm: f.printHeightMm ?? 60, caption: f.caption })),
+        instrument: t.instrument ? `${t.instrument.code} ${t.instrument.name}` : null,
+        images: files
+          .filter((f) => f.entityId === t.id && f.category === 'result-image')
+          .map((f) => ({ fileId: f.id, widthMm: f.printWidthMm ?? 80, heightMm: f.printHeightMm ?? 60, caption: f.caption, recordedAt: f.createdAt.toISOString() })),
+        annexes: files
+          .filter((f) => f.entityId === t.id && f.category === 'instrument-report')
+          .map((f) => ({ fileId: f.id, title: f.caption || f.originalName.replace(/\.pdf$/i, ''), pages: f.pageCount ?? 1, sha256: f.sha256, recordedAt: f.createdAt.toISOString() })),
       })),
       reportRemarks: edits.reportRemarks ?? null,
       samplePhotos: edits.samplePhotos ?? [],
@@ -327,7 +338,24 @@ export class ReportsService implements OnModuleInit {
 
   private async renderPdf(revisionId: string) {
     const input = await this.renderInput(revisionId);
-    const buffer = await this.pdf.render(reportHtml(input), { company: input.company, reportVerification: true });
+    const html = reportHtml(input);
+    const annexes = reportAnnexes(input.content);
+    let buffer = await this.pdf.render(html, { company: input.company, reportVerification: true });
+    if (annexes.length) {
+      // The body's own footer must count the annexure pages too: measure the body, then render it with the full total.
+      const files = await Promise.all(annexes.map((a) => this.storage.read(a.fileId)));
+      // The file must be the one fingerprinted when the report was signed.
+      files.forEach((f, i) => {
+        if (createHash('sha256').update(f.buffer).digest('hex') !== annexes[i].sha256) throw new AppError('ANNEX_CHANGED', 409, `Annexure ${annexes[i].letter} is not the file that was approved.`);
+      });
+      const totalPages = (await this.pdf.pageCount(buffer)) + annexes.reduce((s, a) => s + a.pages, 0);
+      buffer = await this.pdf.render(html, { company: input.company, reportVerification: true, totalPages });
+      buffer = await this.pdf.appendAnnexes(
+        buffer,
+        annexes.map((a, i) => ({ letter: a.letter, testName: a.testName, title: a.title, bytes: files[i].buffer })),
+        { reportNo: input.reportNo, legalName: input.company.legalName },
+      );
+    }
     const rev = await this.prisma.reportRevision.findUniqueOrThrow({ where: { id: revisionId }, select: { reportId: true } });
     return { buffer, filename: `Test Report ${input.reportNo} R${input.revisionNo}.pdf`.replace(/[/\\]/g, '-'), mimeType: 'application/pdf', entity: 'Report', entityId: rev.reportId };
   }

@@ -52,6 +52,8 @@ export interface StoreInput {
   entity?: string | null;
   entityId?: string | null;
   printWidthMm?: number | null;
+  printOnReport?: boolean;
+  pageCount?: number | null;
   printHeightMm?: number | null;
   caption?: string | null;
 }
@@ -106,6 +108,17 @@ export class StorageService {
     return this.store({ ...input, mimeType: sniffed }, tx);
   }
 
+  /**
+   * A test's raw data: the instrument's own files, in whatever format its software writes. Kept as the original
+   * record and never opened in the browser: anything that is not a recognised document downloads as a plain file.
+   */
+  async storeRawData(input: StoreInput, tx?: Tx) {
+    if (input.buffer.length === 0) throw badRequest('The file is empty', [{ field: 'file', message: 'The file is empty' }]);
+    if (input.buffer.length > this.cfg.maxUploadBytes) throw badRequest('The file is too large', [{ field: 'file', message: 'The file is too large' }]);
+    const sniffed = sniffLibraryMime(input.buffer, input.originalName) ?? 'application/octet-stream';
+    return this.store({ ...input, mimeType: sniffed }, tx);
+  }
+
   /** System-generated files (PDF, Excel). */
   async store(input: StoreInput, tx?: Tx) {
     await this.ensureBucket();
@@ -122,6 +135,8 @@ export class StorageService {
         entity: input.entity ?? null,
         entityId: input.entityId ?? null,
         printWidthMm: input.printWidthMm ?? null,
+        printOnReport: input.printOnReport ?? false,
+        pageCount: input.pageCount ?? null,
         printHeightMm: input.printHeightMm ?? null,
         caption: input.caption ?? null,
         createdById: actorId(),

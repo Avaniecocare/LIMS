@@ -1,9 +1,9 @@
-import { Controller, Delete, Get, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
 import { ApiBody, ApiConsumes, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 import { badRequest } from '../../common/errors.js';
 import { OkDto } from '../auth/auth.dto.js';
-import { FileDto, SignedUrlDto } from './files.dto.js';
+import { FileDto, SignedUrlDto, UpdateFileDto } from './files.dto.js';
 import { SignedIn } from '../auth/decorators.js';
 import { FilesService } from './files.service.js';
 
@@ -60,6 +60,7 @@ export class FilesController {
       caption: f.field('caption')?.slice(0, 200),
       printWidthMm: num('printWidthMm'),
       printHeightMm: num('printHeightMm'),
+      ...(f.field('printOnReport') !== undefined && f.field('printOnReport') !== null ? { printOnReport: f.field('printOnReport') === 'true' } : {}),
     });
   }
 
@@ -67,6 +68,12 @@ export class FilesController {
   @ApiOkResponse({ type: [FileDto] })
   list(@Query('entity') entity: string, @Query('entityId') entityId: string, @Query('category') category?: string) {
     return this.files.list(entity, entityId, category);
+  }
+
+  @Patch(':id')
+  @ApiOkResponse({ type: FileDto })
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateFileDto) {
+    return this.files.update(id, dto);
   }
 
   @Get(':id/url')

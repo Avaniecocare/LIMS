@@ -155,6 +155,8 @@ export class TestMasterInput extends Versioned {
   @IsOptional() @IsBoolean() accredited?: boolean;
   @IsOptional() @IsDateString() accreditedUntil?: string | null;
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @MinLength(1, { each: true }) stages?: string[];
+  /** new result images and instrument reports on this test print on the report unless the analyst unticks them */
+  @IsOptional() @IsBoolean() printAttachments?: boolean;
 }
 export class TestMasterDto {
   id: string;
@@ -170,6 +172,7 @@ export class TestMasterDto {
   accredited: boolean;
   accreditedUntil: Date | null;
   stages: string[];
+  printAttachments: boolean;
   parameterCount: number;
   isActive: boolean;
   version: number;

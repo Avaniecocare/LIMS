@@ -180,6 +180,7 @@ export const MASTERS: MasterDef[] = [
       accredited: r.accredited,
       accreditedUntil: r.accreditedUntil,
       stages: r.stages,
+      printAttachments: r.printAttachments,
       parameterCount: r._count.parameters,
       isActive: r.isActive,
       version: r.version,
@@ -198,6 +199,7 @@ export const MASTERS: MasterDef[] = [
         accredited: i.accredited,
         accreditedUntil: date(i.accreditedUntil),
         stages: i.stages,
+        printAttachments: i.printAttachments,
       };
     },
     inUse: async (tx, id) => ((await tx.sampleTest.count({ where: { testId: id } })) ? inUseMessage('samples') : null),

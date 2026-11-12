@@ -194,6 +194,10 @@ model FileObject {
   printWidthMm Int?
   printHeightMm Int?
   caption      String?
+  /// result images and instrument reports: print it on the test report (figure or annexure)
+  printOnReport Boolean @default(false)
+  /// PDFs: number of pages, checked at upload (instrument reports become annexure pages)
+  pageCount    Int?
   /// library files only: the folder it is filed in, and a short note
   folderId     String?
   folder       FileFolder? @relation(fields: [folderId], references: [id])
@@ -340,6 +344,8 @@ model TestMaster {
   urgentTatDays  Int          @default(2)
   accredited     Boolean      @default(false)
   accreditedUntil DateTime?   @db.Date
+  /// new result images and instrument reports on this test are printed on the report unless the analyst unticks them
+  printAttachments Boolean    @default(true)
   stages         Json         @default("[\"Sample Received by Analyst\",\"Sample Preparation\",\"Analysis\",\"Calculation and Result Entry\"]")
   isActive       Boolean      @default(true)
   isDemo         Boolean      @default(false)
