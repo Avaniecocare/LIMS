@@ -24,7 +24,10 @@
     "db:seed:remove": "node dist/seed/cli.js remove",
     "openapi:generate": "node dist/openapi.js openapi.json",
     "openapi:check": "node scripts/openapi-breaking.mjs",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "format:check": "prettier --check src test",
+    "knip": "knip",
+    "prepare": "husky || true"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1161.0",
@@ -68,6 +71,9 @@
     "@types/qrcode": "^1.5.6",
     "@types/supertest": "^7.2.1",
     "eslint": "^10.14.0",
+    "husky": "^9.1.7",
+    "knip": "^5.88.1",
+    "lint-staged": "^16.4.0",
     "prettier": "^3.9.10",
     "prisma": "7.10",
     "s3rver": "^3.7.1",
@@ -82,5 +88,11 @@
     "exceljs": {
       "uuid": "^11.1.1"
     }
+  },
+  "lint-staged": {
+    "*.ts": [
+      "prettier --write",
+      "eslint --max-warnings=0 --no-warn-ignored"
+    ]
   }
 }

@@ -33,11 +33,15 @@ node --env-file=.env dist/main.js worker
 |---|---|
 | `npm test` | Unit and API tests against a real PostgreSQL |
 | `npm run lint`, `npm run typecheck` | Static checks |
+| `npm run format`, `npm run format:check` | Apply or check Prettier formatting (`.prettierrc.json`) |
+| `npm run knip` | Fail on unused files, exports or dependencies (`knip.json` lists the entry points) |
 | `npm run build` | Compile to `dist/` |
 | `npm run openapi:generate` | Write `openapi.json` from the compiled code |
 | `npm run openapi:check` | Fail on a breaking change against `openapi/baseline.json` |
 | `npm run db:seed`, `npm run db:seed:remove` | Load the demo data, or remove it in one command |
 | `node load-test/run.mjs` | Load test; see below |
+
+A pre-commit hook (husky and lint-staged, installed by `npm install`) formats and lints the files being committed. CI runs the same checks on the whole repository.
 
 Tests expect PostgreSQL at `TEST_DATABASE_URL` and Redis at `TEST_REDIS_URL`. The defaults are `postgresql://lims@localhost:5432/lims_test` and `redis://localhost:6379/1`. **The test database's schema is dropped on every run.**
 

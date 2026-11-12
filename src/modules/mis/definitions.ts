@@ -399,21 +399,19 @@ export const REPORTS: MisReport[] = [
       };
       return page(
         (a) =>
-          c.db.parameterResult
-            .findMany({ where, include: { sampleTest: { include: testInclude } }, orderBy: [{ sampleTest: { submittedAt: 'desc' } }, { sortOrder: 'asc' }], ...a })
-            .then((rows) =>
-              rows.map((r) => ({
-                sampleNo: r.sampleTest.sample.sampleNo,
-                customer: r.sampleTest.sample.job.customer.name,
-                testName: r.sampleTest.testName,
-                parameter: r.name,
-                value: enteredValue(r),
-                unit: r.unit,
-                pass: r.passPrimary === null ? '' : r.passPrimary ? 'Pass' : 'Fail',
-                conductedBy: r.sampleTest.conductedByName,
-                submittedAt: r.sampleTest.submittedAt,
-              })),
-            ),
+          c.db.parameterResult.findMany({ where, include: { sampleTest: { include: testInclude } }, orderBy: [{ sampleTest: { submittedAt: 'desc' } }, { sortOrder: 'asc' }], ...a }).then((rows) =>
+            rows.map((r) => ({
+              sampleNo: r.sampleTest.sample.sampleNo,
+              customer: r.sampleTest.sample.job.customer.name,
+              testName: r.sampleTest.testName,
+              parameter: r.name,
+              value: enteredValue(r),
+              unit: r.unit,
+              pass: r.passPrimary === null ? '' : r.passPrimary ? 'Pass' : 'Fail',
+              conductedBy: r.sampleTest.conductedByName,
+              submittedAt: r.sampleTest.submittedAt,
+            })),
+          ),
         () => c.db.parameterResult.count({ where }),
         c,
       );
@@ -647,19 +645,17 @@ export const REPORTS: MisReport[] = [
     run: (c) =>
       page(
         (a) =>
-          c.db.quotation
-            .findMany({ where: WHERE.quotations(c.f), include: { customer: { select: { name: true } } }, orderBy: { createdAt: 'desc' }, ...a })
-            .then((r) =>
-              r.map((q) => ({
-                quotationNo: q.quotationNo,
-                createdAt: q.createdAt,
-                customer: q.customer.name,
-                status: q.status,
-                versionNo: q.currentVersionNo,
-                validUntil: q.validUntil,
-                grandTotal: String(q.grandTotal),
-              })),
-            ),
+          c.db.quotation.findMany({ where: WHERE.quotations(c.f), include: { customer: { select: { name: true } } }, orderBy: { createdAt: 'desc' }, ...a }).then((r) =>
+            r.map((q) => ({
+              quotationNo: q.quotationNo,
+              createdAt: q.createdAt,
+              customer: q.customer.name,
+              status: q.status,
+              versionNo: q.currentVersionNo,
+              validUntil: q.validUntil,
+              grandTotal: String(q.grandTotal),
+            })),
+          ),
         () => c.db.quotation.count({ where: WHERE.quotations(c.f) }),
         c,
       ),
@@ -688,24 +684,22 @@ export const REPORTS: MisReport[] = [
     run: (c) =>
       page(
         (a) =>
-          c.db.invoice
-            .findMany({ where: WHERE.invoicesIssued(c.f), include: { customer: { select: { name: true, gstin: true } } }, orderBy: { invoiceDate: 'desc' }, ...a })
-            .then((r) =>
-              r.map((i) => ({
-                invoiceNo: i.invoiceNo,
-                invoiceDate: i.invoiceDate,
-                customer: i.customer.name,
-                gstin: i.customer.gstin,
-                placeOfSupply: `${i.placeOfSupply} (${i.placeOfSupplyCode})`,
-                taxable: String(i.taxableAmount),
-                cgst: String(i.cgst),
-                sgst: String(i.sgst),
-                igst: String(i.igst),
-                roundOff: String(i.roundOff),
-                total: String(i.grandTotal),
-                status: i.status,
-              })),
-            ),
+          c.db.invoice.findMany({ where: WHERE.invoicesIssued(c.f), include: { customer: { select: { name: true, gstin: true } } }, orderBy: { invoiceDate: 'desc' }, ...a }).then((r) =>
+            r.map((i) => ({
+              invoiceNo: i.invoiceNo,
+              invoiceDate: i.invoiceDate,
+              customer: i.customer.name,
+              gstin: i.customer.gstin,
+              placeOfSupply: `${i.placeOfSupply} (${i.placeOfSupplyCode})`,
+              taxable: String(i.taxableAmount),
+              cgst: String(i.cgst),
+              sgst: String(i.sgst),
+              igst: String(i.igst),
+              roundOff: String(i.roundOff),
+              total: String(i.grandTotal),
+              status: i.status,
+            })),
+          ),
         () => c.db.invoice.count({ where: WHERE.invoicesIssued(c.f) }),
         c,
       ),
@@ -794,21 +788,19 @@ export const REPORTS: MisReport[] = [
     run: (c) =>
       page(
         (a) =>
-          c.db.invoice
-            .findMany({ where: WHERE.outstanding(c.f), include: { customer: { select: { name: true } } }, orderBy: { dueDate: 'asc' }, ...a })
-            .then((r) =>
-              r.map((i) => ({
-                customer: i.customer.name,
-                invoiceNo: i.invoiceNo,
-                invoiceDate: i.invoiceDate,
-                dueDate: i.dueDate,
-                total: String(i.grandTotal),
-                paid: String(i.paidAmount),
-                balance: balanceOf(i).toFixed(2),
-                daysOverdue: Math.max(0, daysOverdue(i.dueDate!, c.today)),
-                bucket: ageingBucket(i.dueDate!, c.today),
-              })),
-            ),
+          c.db.invoice.findMany({ where: WHERE.outstanding(c.f), include: { customer: { select: { name: true } } }, orderBy: { dueDate: 'asc' }, ...a }).then((r) =>
+            r.map((i) => ({
+              customer: i.customer.name,
+              invoiceNo: i.invoiceNo,
+              invoiceDate: i.invoiceDate,
+              dueDate: i.dueDate,
+              total: String(i.grandTotal),
+              paid: String(i.paidAmount),
+              balance: balanceOf(i).toFixed(2),
+              daysOverdue: Math.max(0, daysOverdue(i.dueDate!, c.today)),
+              bucket: ageingBucket(i.dueDate!, c.today),
+            })),
+          ),
         () => c.db.invoice.count({ where: WHERE.outstanding(c.f) }),
         c,
       ),
