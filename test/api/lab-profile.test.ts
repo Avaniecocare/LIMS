@@ -195,6 +195,8 @@ describe('modules', () => {
       ['analytics', true],
       ['quality', true],
       ['whatsapp', true],
+      // Off until an administrator turns it on, even though the test server is set up for it.
+      ['einvoice', false],
     ]);
     await tech.put('/admin/lab/modules', { version: list.version, enabled: { billing: false } }).expect(403);
     await admin.put('/admin/lab/modules', { version: list.version, enabled: { warp: false } }).expect(400);

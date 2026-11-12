@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, ArrayMinSize, IsArray, IsDateString, IsEmail, IsEnum, IsIn, IsInt, IsNumberString, IsOptional, IsString, IsUUID, Length, MaxLength, Min, ValidateNested } from 'class-validator';
 import { PageQuery } from '../../common/pagination.dto.js';
@@ -49,6 +50,8 @@ export class IssueInvoiceDto {
 export class CancelInvoiceDto {
   @IsInt() @Min(1) version: number;
   @IsString() @Length(1, 1000) reason: string;
+  /** When the invoice has an IRN: the IRP's reason code (1 duplicate, 2 data entry mistake, 3 order cancelled, 4 other). */
+  @IsOptional() @IsIn(['1', '2', '3', '4']) irnCancelReason?: '1' | '2' | '3' | '4';
 }
 
 export class EmailInvoiceDto {
@@ -138,6 +141,25 @@ export class AllocationDto {
   reference: string | null;
   amount: string;
 }
+/** The document's registration at the GST Invoice Registration Portal. */
+export class EInvoiceDto {
+  @ApiProperty({ enum: ['PENDING', 'GENERATED', 'FAILED', 'CANCELLED'] }) status: 'PENDING' | 'GENERATED' | 'FAILED' | 'CANCELLED';
+  provider: string;
+  environment: string;
+  /** a test IRN (mock provider or sandbox): not valid for GST */
+  test: boolean;
+  irn: string | null;
+  ackNo: string | null;
+  ackDate: Date | null;
+  lastError: string | null;
+  attempts: number;
+  cancelledAt: Date | null;
+  cancelReason: string | null;
+  /** until when the IRN can still be cancelled at the IRP; null once it cannot */
+  cancellableUntil: Date | null;
+  /** the signed QR code as a PNG data URI */
+  qrDataUri: string | null;
+}
 export class CreditNoteDto {
   id: string;
   creditNoteNo: string;
@@ -150,6 +172,7 @@ export class CreditNoteDto {
   roundOff: string;
   total: string;
   amountInWords: string;
+  einvoice: EInvoiceDto | null;
 }
 export class ReminderDto {
   id: string;
@@ -176,6 +199,9 @@ export class InvoiceDto extends InvoiceSummaryDto {
   allocations: AllocationDto[];
   creditNotes: CreditNoteDto[];
   reminders: ReminderDto[];
+  /** e-invoicing is on and the customer has a GSTIN, so the invoice must carry an IRN */
+  einvoiceRequired: boolean;
+  einvoice: EInvoiceDto | null;
 }
 export class InvoicePageDto {
   data: InvoiceSummaryDto[];

@@ -1254,6 +1254,7 @@ model Invoice {
   allocations   PaymentAllocation[]
   creditNotes   CreditNote[]
   reminders     ReminderLog[]
+  einvoice      EInvoice?
   @@index([customerId, invoiceDate])
   @@index([status, dueDate])
   @@index([invoiceDate])
@@ -1344,8 +1345,53 @@ model CreditNote {
   isDemo        Boolean  @default(false)
   createdById   String?
   createdAt     DateTime @default(now())
+  einvoice      EInvoice?
   @@index([invoiceId])
   @@index([issuedOn])
+}
+
+// ---------------------------------------------------------------- GST e-invoicing
+
+enum EInvoiceStatus {
+  PENDING
+  GENERATED
+  FAILED
+  CANCELLED
+}
+
+/// The IRN registered for one invoice or credit note at the GST Invoice Registration Portal (IRP).
+/// The signed QR code and invoice are kept exactly as the IRP returned them; they are what the printed document shows.
+model EInvoice {
+  id              String         @id @default(uuid(7))
+  invoiceId       String?        @unique
+  invoice         Invoice?       @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  creditNoteId    String?        @unique
+  creditNote      CreditNote?    @relation(fields: [creditNoteId], references: [id], onDelete: Restrict)
+  /// INV or CRN, as sent to the IRP
+  docType         String
+  docNo           String
+  docDate         DateTime       @db.Date
+  status          EInvoiceStatus @default(PENDING)
+  /// mock (testing only, not registered anywhere) or nic (the government IRP)
+  provider        String
+  /// sandbox or production
+  environment     String
+  irn             String?        @unique
+  ackNo           String?
+  ackDate         DateTime?
+  signedInvoice   String?
+  signedQrCode    String?
+  /// the INV-01 JSON sent, for the record and for support
+  payload         Json?
+  lastError       String?
+  attempts        Int            @default(0)
+  cancelledAt     DateTime?
+  cancelReasonCode String?
+  cancelRemark    String?
+  createdById     String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  @@index([status])
 }
 
 model ReminderLog {

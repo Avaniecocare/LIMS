@@ -14,6 +14,8 @@ Object.assign(process.env, {
   SMTP_FROM: 'lab@bluepeak.example',
   SMTP_TRANSPORT: 'json',
   WHATSAPP_TRANSPORT: 'json',
+  // Test IRNs only; the module itself stays off until a test turns it on.
+  EINVOICE_PROVIDER: 'mock',
   ENABLE_AI_ASSISTANT: 'true',
   AI_PROVIDER: 'mock',
   HELP_INDEX_PATH: new URL('../fixtures/help-index.json', import.meta.url).pathname,

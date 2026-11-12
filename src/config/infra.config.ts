@@ -27,6 +27,27 @@ export interface InfraConfig {
   whatsapp: { apiUrl: string; token: string | null; phoneNumberId: string | null; transport: 'cloud' | 'json'; appSecret: string | null; verifyToken: string | null } | null;
   /** The help site's "Ask AI" assistant; see HelpConfig. */
   help: HelpConfig;
+  /** GST e-invoicing (IRN from the Invoice Registration Portal); null when not set up. See EInvoiceConfig. */
+  einvoice: EInvoiceConfig | null;
+}
+
+/**
+ * GST e-invoicing. `nic` talks to the government IRP directly with the lab's API credentials (from the e-invoice
+ * portal's API registration); `mock` makes test IRNs locally, for development and demos, and every document it
+ * touches is printed as a test. The credentials live only in server settings, never in the database or a browser.
+ */
+export interface EInvoiceConfig {
+  provider: 'nic' | 'mock';
+  environment: 'sandbox' | 'production';
+  baseUrl: string;
+  clientId: string;
+  clientSecret: string;
+  username: string;
+  password: string;
+  /** the lab's GSTIN as registered for the API; must match the lab profile */
+  gstin: string;
+  /** the IRP's RSA public key (PEM) for the environment */
+  publicKey: string;
 }
 
 /** The help assistant. It answers from the published documentation only, through this server. */
@@ -122,6 +143,7 @@ export function loadInfraConfig(env: NodeJS.ProcessEnv = process.env): InfraConf
     errorTrackingDsn: env.ERROR_TRACKING_DSN?.trim() || null,
     logLevel: env.LOG_LEVEL ?? 'info',
     help: loadHelpConfig(env, req('FRONTEND_ORIGIN')),
+    einvoice: loadEInvoiceConfig(env),
   };
   if (missing.length) throw new InfraConfigError(`Missing required environment variables: ${missing.join(', ')}`);
   if (secret.length < 32) throw new InfraConfigError('SESSION_SECRET must be at least 32 characters');
@@ -181,3 +203,39 @@ function loadHelpConfig(env: NodeJS.ProcessEnv, frontendOrigin: string): HelpCon
 }
 
 export const INFRA_CONFIG = Symbol('INFRA_CONFIG');
+
+// Production: NIC's IRP 1 (IRP 2 is api.einvoice2.gst.gov.in). The sandbox's addresses are shown only after signing in
+// to einv-apisandbox.nic.in, so a sandbox needs EINVOICE_BASE_URL.
+const EINVOICE_PRODUCTION_URL = 'https://api.einvoice1.gst.gov.in';
+
+/**
+ * EINVOICE_PROVIDER=nic needs every credential (a half-configured provider would fail at the worst moment, when
+ * an invoice is issued), so a missing one is a startup error. Unset means e-invoicing is not set up.
+ */
+export function loadEInvoiceConfig(env: NodeJS.ProcessEnv): EInvoiceConfig | null {
+  const provider = env.EINVOICE_PROVIDER?.trim();
+  if (!provider) return null;
+  if (provider !== 'nic' && provider !== 'mock') throw new InfraConfigError('EINVOICE_PROVIDER must be nic or mock');
+  const environment = env.EINVOICE_ENV?.trim() || 'sandbox';
+  if (environment !== 'sandbox' && environment !== 'production') throw new InfraConfigError('EINVOICE_ENV must be sandbox or production');
+  if (provider === 'mock' && environment === 'production') throw new InfraConfigError('EINVOICE_PROVIDER=mock makes test IRNs only; it cannot be used with EINVOICE_ENV=production');
+  const pem = (env.EINVOICE_PUBLIC_KEY ?? '').replace(/\\n/g, '\n').trim();
+  const config: EInvoiceConfig = {
+    provider,
+    environment,
+    baseUrl: (env.EINVOICE_BASE_URL?.trim() || (environment === 'production' ? EINVOICE_PRODUCTION_URL : '')).replace(/\/+$/, ''),
+    clientId: env.EINVOICE_CLIENT_ID?.trim() ?? '',
+    clientSecret: env.EINVOICE_CLIENT_SECRET?.trim() ?? '',
+    username: env.EINVOICE_USERNAME?.trim() ?? '',
+    password: env.EINVOICE_PASSWORD ?? '',
+    gstin: (env.EINVOICE_GSTIN?.trim() ?? '').toUpperCase(),
+    publicKey: pem,
+  };
+  if (provider === 'nic') {
+    const missing = (['EINVOICE_CLIENT_ID', 'EINVOICE_CLIENT_SECRET', 'EINVOICE_USERNAME', 'EINVOICE_PASSWORD', 'EINVOICE_GSTIN', 'EINVOICE_PUBLIC_KEY'] as const).filter((k) => !env[k]?.trim());
+    if (missing.length) throw new InfraConfigError(`EINVOICE_PROVIDER=nic needs ${missing.join(', ')}`);
+    if (!config.baseUrl) throw new InfraConfigError('EINVOICE_ENV=sandbox needs EINVOICE_BASE_URL, the sandbox address shown after signing in to einv-apisandbox.nic.in');
+    if (!pem.includes('BEGIN PUBLIC KEY')) throw new InfraConfigError('EINVOICE_PUBLIC_KEY must be the IRP public key in PEM form (-----BEGIN PUBLIC KEY-----)');
+  }
+  return config;
+}

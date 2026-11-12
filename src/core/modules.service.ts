@@ -22,11 +22,16 @@ export const MODULES = {
   analytics: { label: 'Analytics and MIS reports', description: 'Charts across the lab, and MIS reports with Excel and PDF export.' },
   quality: { label: 'Quality management', description: 'Equipment calibration and maintenance, staff authorisations and training, and non-conformance and CAPA.' },
   whatsapp: { label: 'WhatsApp', description: 'Send reports, invoices, sample-received letters and payment reminders to customers on WhatsApp.' },
+  einvoice: { label: 'GST e-invoicing', description: 'Register B2B tax invoices and credit notes at the GST Invoice Registration Portal (IRN and signed QR code).' },
 } as const;
 /** Modules that also need the server set up; they stay off until it is. */
 const NEEDS_SETUP: Partial<Record<keyof typeof MODULES, (infra: InfraConfig) => string | null>> = {
   whatsapp: (infra) => (infra.whatsapp ? null : 'Needs WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID in the server settings.'),
+  einvoice: (infra) => (infra.einvoice ? null : 'Needs EINVOICE_PROVIDER and the e-invoice API credentials in the server settings.'),
 };
+/** Modules that stay off until an administrator turns them on, even once the server is set up: switching them on
+ *  changes what issuing an invoice does, so it must be a decision, not a side effect of a deployment. */
+const OFF_UNTIL_TURNED_ON: ReadonlySet<string> = new Set(['einvoice']);
 export type ModuleKey = keyof typeof MODULES;
 export const MODULE_KEYS = Object.keys(MODULES) as ModuleKey[];
 
@@ -68,7 +73,7 @@ export class ModulesService implements OnModuleInit, OnModuleDestroy {
     if (this.cache && Date.now() - this.cache.at < 60_000) return this.cache;
     const row = await this.prisma.setting.findUnique({ where: { key: KEY } });
     const saved = (row?.value as Partial<Record<ModuleKey, boolean>> | undefined) ?? {};
-    const map = Object.fromEntries(MODULE_KEYS.map((k) => [k, saved[k] !== false && !this.setupNeeded(k)])) as Record<ModuleKey, boolean>;
+    const map = Object.fromEntries(MODULE_KEYS.map((k) => [k, (OFF_UNTIL_TURNED_ON.has(k) ? saved[k] === true : saved[k] !== false) && !this.setupNeeded(k)])) as Record<ModuleKey, boolean>;
     this.cache = { at: Date.now(), map, version: row?.version ?? 0 };
     return this.cache;
   }

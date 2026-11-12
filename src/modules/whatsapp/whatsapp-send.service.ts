@@ -9,6 +9,7 @@ import { ModulesService } from '../../core/modules.service.js';
 import { PrismaService } from '../../core/prisma.service.js';
 import { WhatsappService, whatsappNumber, type WhatsappInput } from '../../core/whatsapp.service.js';
 import { DocumentsService } from '../documents/documents.service.js';
+import { EInvoiceService } from '../einvoice/einvoice.service.js';
 import { daysOverdue } from '../invoices/ageing.js';
 import { balanceOf } from '../invoices/invoices.service.js';
 import type { WhatsappSendDto } from './whatsapp.dto.js';
@@ -35,6 +36,7 @@ export class WhatsappSendService {
     private readonly documents: DocumentsService,
     private readonly company: CompanyService,
     private readonly audit: AuditService,
+    private readonly einvoice: EInvoiceService,
   ) {}
 
   async send(dto: WhatsappSendDto) {
@@ -71,8 +73,11 @@ export class WhatsappSendService {
         documentName: `Report ${r.reportNo}${rev.revisionNo ? ` rev ${rev.revisionNo}` : ''}.pdf`.replace(/[/\\]/g, '-'),
       });
     } else if (dto.kind === 'invoice' || dto.kind === 'reminder') {
-      const inv = await this.prisma.invoice.findFirst({ where: { id: dto.entityId, deletedAt: null } });
+      const inv = await this.prisma.invoice.findFirst({ where: { id: dto.entityId, deletedAt: null }, include: { einvoice: true } });
       if (!inv) throw notFound('Invoice');
+      // The invoice PDF goes with both kinds; a B2B invoice is not sent before it has its IRN (as for email).
+      if ((await this.einvoice.requiredFor(inv.customerSnapshot as never, inv.customerId)) && inv.einvoice?.status !== 'GENERATED')
+        throw rule('IRN_MISSING', 'This invoice must be registered at the GST portal (IRN) before it is sent. Register it from the invoice page first.');
       const company = inv.companySnapshot as unknown as CompanySnapshot;
       const common = {
         ...this.lab(company),

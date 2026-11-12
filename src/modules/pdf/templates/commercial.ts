@@ -2,6 +2,32 @@ import type { CompanySnapshot } from '../../../config/company.config.js';
 import { formatDate, formatINR } from '../../../common/india.js';
 import { bankBlock, customerBlock, esc, letterhead, multiline, page, taxTotalsTable, type CustomerSnapshot } from './base.js';
 
+/** The IRN block a registered document prints: IRN, acknowledgement and the signed QR code. */
+export interface PrintedIrn {
+  irn: string;
+  ackNo: string | null;
+  ackDate: Date | string | null;
+  qrDataUri: string | null;
+  /** a test IRN: never valid for GST, and printed as such */
+  test: boolean;
+  cancelled: boolean;
+}
+
+export function irnBlock(e: PrintedIrn | null | undefined): string {
+  if (!e) return '';
+  const when = e.ackDate ? new Date(e.ackDate).toLocaleString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+  const flag = e.cancelled
+    ? '<div class="bold" style="color:#b91c1c">IRN CANCELLED</div>'
+    : e.test
+      ? '<div class="bold" style="color:#b91c1c">TEST IRN: not registered with the GST portal, not valid for GST</div>'
+      : '';
+  return `<table class="plain" style="margin:6px 0"><tr>
+    <td style="vertical-align:top">${flag}<div><span class="bold">IRN:</span> <span style="font-family:monospace;font-size:8.5px;word-break:break-all">${esc(e.irn)}</span></div>
+    <div><span class="bold">Ack no.:</span> ${esc(e.ackNo ?? '')} &nbsp; <span class="bold">Ack date:</span> ${esc(when)}</div></td>
+    ${e.qrDataUri ? `<td class="right" style="width:34mm"><img src="${e.qrDataUri}" alt="e-invoice QR code" style="width:32mm;height:32mm"></td>` : ''}
+  </tr></table>`;
+}
+
 export interface InvoicePdf {
   invoiceNo: string | null;
   draft: boolean;
@@ -24,6 +50,7 @@ export interface InvoicePdf {
   company: CompanySnapshot;
   customer: CustomerSnapshot;
   lines: { seq: number; description: string; sacCode: string; quantity: number; rate: unknown; amount: unknown }[];
+  einvoice?: PrintedIrn | null;
 }
 
 export function invoiceHtml(i: InvoicePdf): string {
@@ -39,6 +66,7 @@ export function invoiceHtml(i: InvoicePdf): string {
     `${letterhead(i.company)}<h1>Tax Invoice${i.draft ? ' — DRAFT' : ''}</h1>
   <table class="plain" style="margin:6px 0"><tr><td><span class="bold">Invoice no.:</span> ${esc(i.invoiceNo ?? 'Not issued')}</td><td class="right"><span class="bold">Date:</span> ${formatDate(i.invoiceDate)} &nbsp; <span class="bold">Due:</span> ${formatDate(i.dueDate)}</td></tr>
   <tr><td><span class="bold">Place of supply:</span> ${esc(i.placeOfSupply)} (${esc(i.placeOfSupplyCode)})</td><td class="right"><span class="bold">Reverse charge:</span> No</td></tr></table>
+  ${irnBlock(i.einvoice)}
   ${customerBlock(i.customer, 'Bill to')}
   <h2>Services</h2><table><thead><tr><th class="center">S.No</th><th>Description</th><th>SAC</th><th class="right">Qty</th><th class="right">Rate (₹)</th><th class="right">Taxable value (₹)</th></tr></thead><tbody>${rows}</tbody></table>
   ${taxTotalsTable(i, formatINR as never)}
@@ -65,6 +93,7 @@ export interface CreditNotePdf {
   amountInWords: string;
   company: CompanySnapshot;
   customer: CustomerSnapshot;
+  einvoice?: PrintedIrn | null;
 }
 
 export function creditNoteHtml(c: CreditNotePdf): string {
@@ -85,6 +114,7 @@ export function creditNoteHtml(c: CreditNotePdf): string {
     `${letterhead(c.company)}<h1>Credit Note</h1>
   <table class="plain" style="margin:6px 0"><tr><td><span class="bold">Credit note no.:</span> ${esc(c.creditNoteNo)}</td><td class="right"><span class="bold">Date:</span> ${formatDate(c.issuedOn)}</td></tr>
   <tr><td><span class="bold">Against invoice:</span> ${esc(c.invoiceNo)} dated ${formatDate(c.invoiceDate)}</td><td></td></tr></table>
+  ${irnBlock(c.einvoice)}
   ${customerBlock(c.customer, 'Customer')}<h2>Reason</h2><p>${multiline(c.reason)}</p>
   ${taxTotalsTable(totals, formatINR as never, 'Taxable value', 'Credit note total (₹)')}<p class="bold">Amount in words: Rupees ${esc(c.amountInWords)}</p>
   <p class="right" style="margin-top:28px">For <span class="bold">${esc(c.company.legalName)}</span></p>`,

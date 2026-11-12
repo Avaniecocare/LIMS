@@ -16,6 +16,7 @@ import { Prisma, PrismaService, ReadPrismaService, type Tx } from '../../core/pr
 import { SettingsService } from '../../core/settings.service.js';
 import { computeTax } from '../billing/tax.js';
 import { DocumentsService, requirePermission, XLSX_MIME } from '../documents/documents.service.js';
+import { EInvoiceService } from '../einvoice/einvoice.service.js';
 import { MastersService } from '../masters/masters.service.js';
 import { buildWorkbook } from '../masters/excel.js';
 import { PdfService } from '../pdf/pdf.service.js';
@@ -31,8 +32,9 @@ const fullInclude = {
   ...summaryInclude,
   lines: { orderBy: { seq: 'asc' } },
   allocations: { orderBy: { createdAt: 'asc' }, include: { payment: { select: { paymentNo: true, paidOn: true, mode: true, reference: true } } } },
-  creditNotes: { orderBy: { createdAt: 'asc' } },
+  creditNotes: { orderBy: { createdAt: 'asc' }, include: { einvoice: true } },
   reminders: { orderBy: { at: 'desc' } },
+  einvoice: true,
 } as const;
 type SummaryRow = Prisma.InvoiceGetPayload<{ include: typeof summaryInclude }>;
 type FullRow = Prisma.InvoiceGetPayload<{ include: typeof fullInclude }>;
@@ -61,6 +63,7 @@ export class InvoicesService implements OnModuleInit {
     private readonly mail: MailService,
     private readonly masters: MastersService,
     private readonly scheduler: SchedulerService,
+    private readonly einvoice: EInvoiceService,
   ) {}
 
   onModuleInit() {
@@ -71,7 +74,7 @@ export class InvoicesService implements OnModuleInit {
         const company = (inv.companySnapshot as unknown as CompanySnapshot | null) ?? this.company.snapshot();
         const customer = (inv.customerSnapshot as unknown as CustomerSnapshot | null) ?? (await customerSnapshot(this.prisma as never, inv.customerId));
         const terms = inv.termsSnapshot ?? (await this.prisma.termsVersion.findFirst({ where: { kind: 'INVOICE' }, orderBy: { versionNo: 'desc' } }))?.body ?? null;
-        const html = invoiceHtml({ ...inv, draft: inv.status === 'DRAFT', terms, company, customer });
+        const html = invoiceHtml({ ...inv, draft: inv.status === 'DRAFT', terms, company, customer, einvoice: await this.printedIrn(inv.einvoice) });
         return {
           buffer: await this.pdf.render(html, { company }),
           filename: `Tax Invoice ${inv.invoiceNo ?? 'Draft'}.pdf`.replace(/[/\\]/g, '-'),
@@ -84,9 +87,16 @@ export class InvoicesService implements OnModuleInit {
     this.documents.register('credit-note-pdf', {
       authorize: requirePermission('invoices.view'),
       run: async (p) => {
-        const cn = await this.prisma.creditNote.findUniqueOrThrow({ where: { id: String(p.creditNoteId) }, include: { invoice: true } });
+        const cn = await this.prisma.creditNote.findUniqueOrThrow({ where: { id: String(p.creditNoteId) }, include: { invoice: true, einvoice: true } });
         const company = cn.companySnapshot as unknown as CompanySnapshot;
-        const html = creditNoteHtml({ ...cn, invoiceNo: cn.invoice.invoiceNo, invoiceDate: cn.invoice.invoiceDate, company, customer: cn.customerSnapshot as unknown as CustomerSnapshot });
+        const html = creditNoteHtml({
+          ...cn,
+          invoiceNo: cn.invoice.invoiceNo,
+          invoiceDate: cn.invoice.invoiceDate,
+          company,
+          customer: cn.customerSnapshot as unknown as CustomerSnapshot,
+          einvoice: await this.printedIrn(cn.einvoice),
+        });
         return {
           buffer: await this.pdf.render(html, { company }),
           filename: `Credit Note ${cn.creditNoteNo}.pdf`.replace(/[/\\]/g, '-'),
@@ -169,7 +179,25 @@ export class InvoicesService implements OnModuleInit {
     };
   }
 
-  private full(i: FullRow) {
+  /** What the printed document carries for its IRN: only a registered (or cancelled) one. */
+  private async printedIrn(row: FullRow['einvoice']) {
+    if (!row?.irn || (row.status !== 'GENERATED' && row.status !== 'CANCELLED')) return null;
+    return {
+      irn: row.irn,
+      ackNo: row.ackNo,
+      ackDate: row.ackDate,
+      qrDataUri: await this.einvoice.qrDataUri(row),
+      test: row.provider === 'mock' || row.environment !== 'production',
+      cancelled: row.status === 'CANCELLED',
+    };
+  }
+
+  private async einvoiceDto(row: FullRow['einvoice']) {
+    const v = this.einvoice.view(row);
+    return v ? { ...v, qrDataUri: v.status === 'GENERATED' ? await this.einvoice.qrDataUri(row) : null } : null;
+  }
+
+  private async full(i: FullRow) {
     return {
       ...this.summary(i),
       placeOfSupply: i.placeOfSupply,
@@ -219,8 +247,11 @@ export class InvoicesService implements OnModuleInit {
         roundOff: str(c.roundOff),
         total: str(c.total),
         amountInWords: c.amountInWords,
+        einvoice: this.einvoice.view(c.einvoice) ? { ...this.einvoice.view(c.einvoice)!, qrDataUri: null } : null,
       })),
       reminders: i.reminders.map((r) => ({ id: r.id, kind: r.kind, at: r.at, emailLogId: r.emailLogId })),
+      einvoiceRequired: i.status !== 'DRAFT' && (await this.einvoice.requiredFor(i.customerSnapshot as never, i.customerId)),
+      einvoice: await this.einvoiceDto(i.einvoice),
     };
   }
 
@@ -231,7 +262,7 @@ export class InvoicesService implements OnModuleInit {
   }
 
   async get(id: string) {
-    return this.full(await this.load(id));
+    return await this.full(await this.load(id));
   }
 
   async list(q: InvoiceQuery) {
@@ -437,13 +468,46 @@ export class InvoicesService implements OnModuleInit {
       if (count !== 1) throw conflict();
       await this.audit.status(tx, { entity: 'Invoice', entityId: id, from: 'DRAFT', to: 'ISSUED', meta: { invoiceNo } });
     });
-    if (dto.emailTo) await this.email(id, dto.emailTo, dto.emailCc ?? null);
+    // B2B invoices are registered at the IRP straight away, outside the transaction (the IRP is a network call).
+    // A failure leaves the invoice issued, with the reason shown on it and a retry; it is not emailed without its IRN.
+    const issued = await this.load(id);
+    if ((await this.settings.get('einvoice.autoOnIssue')) && (await this.einvoice.requiredFor(issued.customerSnapshot as never, issued.customerId))) {
+      await this.einvoice.registerInvoice(id).catch((e: unknown) => this.logIrnSkip(id, e));
+    }
+    if (dto.emailTo && (await this.irnReady(id))) await this.email(id, dto.emailTo, dto.emailCc ?? null);
     return this.get(id);
+  }
+
+  /** Registering can refuse for set-up reasons (module off, B2C); those are not failures of the invoice. */
+  private logIrnSkip(id: string, e: unknown) {
+    if (!(e instanceof Error)) throw e;
+    void this.audit.record({ action: 'EInvoice.skipped', entity: 'Invoice', entityId: id, after: { reason: e.message.slice(0, 300) } });
+  }
+
+  /** False when this invoice must carry an IRN and does not have one yet. */
+  private async irnReady(id: string): Promise<boolean> {
+    const inv = await this.prisma.invoice.findUniqueOrThrow({ where: { id }, include: { einvoice: true } });
+    if (!(await this.einvoice.requiredFor(inv.customerSnapshot as never, inv.customerId))) return true;
+    return inv.einvoice?.status === 'GENERATED';
+  }
+
+  /** Registers (or retries registering) an issued invoice at the IRP. */
+  async registerIrn(id: string) {
+    await this.einvoice.registerInvoice(id);
+    return this.get(id);
+  }
+
+  async registerCreditNoteIrn(creditNoteId: string) {
+    const cn = await this.prisma.creditNote.findUnique({ where: { id: creditNoteId }, select: { invoiceId: true } });
+    if (!cn) throw notFound('Credit note');
+    await this.einvoice.registerCreditNote(creditNoteId);
+    return this.get(cn.invoiceId);
   }
 
   async email(id: string, to: string, cc: string | null) {
     const inv = await this.load(id);
     if (inv.status === 'DRAFT' || inv.status === 'CANCELLED') throw rule('NOT_ISSUED', 'Only an issued invoice can be emailed');
+    if (!(await this.irnReady(id))) throw rule('IRN_MISSING', 'This invoice must be registered at the GST portal (IRN) before it is sent. Register it from the invoice page first.');
     const company = inv.companySnapshot as unknown as CompanySnapshot;
     const mail = await this.templates.render('invoice', {
       ...this.templates.commonValues(company),
@@ -476,7 +540,13 @@ export class InvoicesService implements OnModuleInit {
     });
   }
 
-  async cancel(id: string, version: number, reason: string) {
+  async cancel(id: string, version: number, reason: string, irnCancelReason?: '1' | '2' | '3' | '4') {
+    const before = await this.load(id);
+    assertTransition(INVOICE, before.status, 'CANCELLED', reason);
+    if (Number(before.paidAmount) > 0 || Number(before.creditedAmount) > 0) throw rule('HAS_PAYMENTS', 'This invoice has payments or credit notes. Reverse them first.');
+    if (before.version !== version) throw conflict();
+    // An IRN is cancelled at the IRP first: if the IRP refuses, the invoice stays issued, matching the IRP.
+    await this.einvoice.cancelInvoiceIrn(id, irnCancelReason, reason);
     await this.prisma.$transaction(async (tx) => {
       const inv = await this.load(id, tx);
       assertTransition(INVOICE, inv.status, 'CANCELLED', reason);
@@ -507,7 +577,7 @@ export class InvoicesService implements OnModuleInit {
 
   // ---------------------------------------------------------------- credit notes
   async createCreditNote(invoiceId: string, dto: CreateCreditNoteDto) {
-    await this.prisma.$transaction(async (tx) => {
+    const creditNoteId = await this.prisma.$transaction(async (tx) => {
       const inv = await this.load(invoiceId, tx);
       if (!['ISSUED', 'PARTIALLY_PAID', 'PAID'].includes(inv.status)) throw rule('NOT_ISSUED', 'A credit note needs an issued invoice');
       const taxable = dec(dto.taxableAmount);
@@ -539,7 +609,13 @@ export class InvoicesService implements OnModuleInit {
       });
       await this.applyMoney(tx, invoiceId, { credited: total });
       await this.audit.record({ action: 'CreditNote.create', entity: 'Invoice', entityId: invoiceId, after: { creditNoteNo, total: t.grandTotal, id: cn.id }, reason: dto.reason }, tx);
+      return cn.id;
     });
+    // A credit note against a B2B invoice is registered at the IRP too, like the invoice.
+    const inv = await this.load(invoiceId);
+    if ((await this.settings.get('einvoice.autoOnIssue')) && (await this.einvoice.requiredFor(inv.customerSnapshot as never, inv.customerId))) {
+      await this.einvoice.registerCreditNote(creditNoteId).catch((e: unknown) => this.logIrnSkip(invoiceId, e));
+    }
     return this.get(invoiceId);
   }
 

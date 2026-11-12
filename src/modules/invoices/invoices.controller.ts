@@ -95,7 +95,7 @@ export class InvoicesController {
   @Perm('invoices.edit')
   @ApiOkResponse({ type: InvoiceDto })
   cancel(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CancelInvoiceDto) {
-    return this.invoices.cancel(id, dto.version, dto.reason);
+    return this.invoices.cancel(id, dto.version, dto.reason, dto.irnCancelReason);
   }
 
   @Post('invoices/:id/email')
@@ -126,6 +126,24 @@ export class InvoicesController {
   @ApiOkResponse({ type: InvoiceDto })
   creditNote(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateCreditNoteDto) {
     return this.invoices.createCreditNote(id, dto);
+  }
+
+  /** Registers the invoice at the GST portal (IRN), or tries again after a failure. */
+  @Post('invoices/:id/einvoice')
+  @HttpCode(200)
+  @Perm('invoices.edit')
+  @ApiOkResponse({ type: InvoiceDto })
+  registerIrn(@Param('id', ParseUUIDPipe) id: string) {
+    return this.invoices.registerIrn(id);
+  }
+
+  /** Registers a credit note at the GST portal, or tries again after a failure. Answers with its invoice. */
+  @Post('credit-notes/:id/einvoice')
+  @HttpCode(200)
+  @Perm('invoices.edit', 'payments.edit')
+  @ApiOkResponse({ type: InvoiceDto })
+  registerCreditNoteIrn(@Param('id', ParseUUIDPipe) id: string) {
+    return this.invoices.registerCreditNoteIrn(id);
   }
 
   @Post('invoices/:id/remind')

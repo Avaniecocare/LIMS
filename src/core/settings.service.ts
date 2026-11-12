@@ -50,6 +50,17 @@ export const SETTINGS = {
   'quotation.defaultValidityDays': { default: 30, validate: isNonNeg, label: 'Default validity (days)', group: 'Quotations' },
   'quotation.defaultPaymentTerms': { default: '100% within the agreed credit period', validate: isStr, label: 'Default payment terms', group: 'Quotations' },
   'credit.defaultDays': { default: 30, validate: isNonNeg, label: 'Default credit days', group: 'Accounts' },
+  'einvoice.autoOnIssue': { default: true, validate: isBool, label: 'Register B2B invoices at the IRP when they are issued', group: 'E-invoicing', hidden: true },
+  'einvoice.seller': {
+    default: { line1: '', line2: '', city: '', pincode: '' } as { line1: string; line2: string; city: string; pincode: string },
+    validate: (v: unknown) => {
+      const a = v as Record<string, unknown> | null;
+      return !!a && typeof a === 'object' && ['line1', 'line2', 'city', 'pincode'].every((k) => typeof a[k] === 'string') && (a.pincode === '' || /^[1-9][0-9]{5}$/.test(a.pincode as string));
+    },
+    label: 'Seller address for e-invoices',
+    group: 'E-invoicing',
+    hidden: true,
+  },
   'reminders.enabled': { default: false, validate: isBool, label: 'Automatic invoice reminders', group: 'Accounts' },
   'reminders.scheduleDays': { default: [1, 7, 15, 30], validate: isIntArr(0, 365), label: 'Reminder days after due date', group: 'Accounts' },
   'calendar.workingDays': { default: [1, 2, 3, 4, 5, 6], validate: isIntArr(0, 6), label: 'Working days (0 = Sunday)', group: 'Calendar' },
