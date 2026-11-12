@@ -1,0 +1,21 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/openapi.ts",
+    "src/seed/cli.ts",
+    "scripts/*.mjs",
+    "load-test/*.mjs",
+    "docker/dev-s3/*.mjs",
+    "test/**/*.ts"
+  ],
+  "project": [
+    "src/**/*.ts",
+    "scripts/**/*.mjs",
+    "load-test/**/*.mjs",
+    "test/**/*.ts"
+  ],
+  "ignoreDependencies": [
+    "@prisma/client"
+  ],
+  "ignoreExportsUsedInFile": true
+}
