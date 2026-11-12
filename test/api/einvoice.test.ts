@@ -94,7 +94,10 @@ describe('e-invoicing', () => {
       .expect(400);
     const formats = ((await admin.get('/admin/settings').expect(200)).body as { key: string; value: Record<string, string> }[]).find((x) => x.key === 'numbering.formats')!.value;
     await admin
-      .put('/admin/settings/numbering.formats', { value: { ...formats, INVOICE: '{PREFIX}/{FY}/{SEQ:5}', CREDIT_NOTE: '{PREFIX}/CN{FY}/{SEQ:4}' }, version: await settingVersion('numbering.formats') })
+      .put('/admin/settings/numbering.formats', {
+        value: { ...formats, INVOICE: '{PREFIX}/{FY}/{SEQ:5}', CREDIT_NOTE: '{PREFIX}/CN/{FY}/{SEQ:4}' },
+        version: await settingVersion('numbering.formats'),
+      })
       .expect(200);
     expect((await admin.get('/admin/lab/einvoice').expect(200)).body.problems).toEqual([]);
     await admin.post('/admin/lab/einvoice/check').expect(200);

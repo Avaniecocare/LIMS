@@ -86,7 +86,10 @@ export class EInvoiceService {
       ['INVOICE', 'Invoice'],
       ['CREDIT_NOTE', 'Credit note'],
     ] as const) {
-      const sample = renderNumber(formats[code] ?? `{PREFIX}/${code}/{FY}/{SEQ:5}`, { prefix: profile.documentPrefix, fy: financialYear(), seq: 99999 });
+      // The longest number the format gives within its own width (99999 for {SEQ:5}, 9999 for {SEQ:4}).
+      const format = formats[code] ?? `{PREFIX}/${code}/{FY}/{SEQ:5}`;
+      const width = Number(/\{SEQ(?::(\d+))?\}/.exec(format)?.[1] ?? 5);
+      const sample = renderNumber(format, { prefix: profile.documentPrefix, fy: financialYear(), seq: 10 ** Math.max(1, width) - 1 });
       if (!DOC_NO_RE.test(sample))
         problems.push({
           field: `numbering.${code}`,
