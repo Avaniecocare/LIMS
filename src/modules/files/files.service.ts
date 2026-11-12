@@ -9,7 +9,7 @@ import { StorageService, type StoreInput } from '../../core/storage.service.js';
  * Record-level access for attachments. A file carries the entity it belongs to, and access
  * follows the permissions on that entity, so technicians can't reach customer letters by id.
  */
-const READ: Record<string, string[]> = {
+export const READ: Record<string, string[]> = {
   Instrument: ['masters.view'],
   Customer: ['customers.view'],
   Order: ['orders.view'],
@@ -28,6 +28,8 @@ const WRITE: Record<string, string[]> = {
   Order: ['orders.edit'],
   Job: ['jobs.create', 'jobs.edit'],
   Sample: ['jobs.create', 'jobs.edit'],
+  // Photographs added while correcting a draft report.
+  Report: ['reports.review', 'reports.approve'],
   User: ['admin.users'],
 };
 
@@ -50,6 +52,12 @@ export class FilesService {
   }
 
   private async assertAccess(entity: string | null, entityId: string | null, write: boolean) {
+    // Photos sent from a phone during a booking: only the person collecting them, until they are moved to the sample.
+    if (entity === 'PhoneDraft' && entityId) {
+      const link = await this.prisma.phoneUploadLink.findUnique({ where: { id: entityId }, select: { createdById: true } });
+      if (link && link.createdById === currentUser()?.id) return;
+      throw forbidden();
+    }
     if (entity === 'SampleTest' && entityId) {
       if (await this.canReachTest(entityId, write)) return;
       throw forbidden();
@@ -57,6 +65,11 @@ export class FilesService {
     const allowed = entity ? (write ? WRITE : READ)[entity] : undefined;
     if (entity === 'Report' && !write && !can('reports.view')) throw forbidden();
     if (!allowed || !allowed.some((p) => can(p))) throw forbidden();
+  }
+
+  /** Whether the caller may attach files to this record (used before handing out a phone link). */
+  async assertCanAttach(entity: string, entityId: string) {
+    await this.assertAccess(entity, entityId, true);
   }
 
   async upload(input: StoreInput) {

@@ -62,6 +62,8 @@ export class SessionUserDto {
   mustChangePassword: boolean;
   /** Admin, Signatory and Accounts may enrol in TOTP */
   totpAvailable: boolean;
+  /** modules this laboratory has turned on */
+  modules: string[];
 }
 
 export class LoginResultDto {
@@ -78,3 +80,27 @@ export class TotpSetupDto {
 export class OkDto {
   ok: boolean;
 }
+
+export class ConfirmPasswordDto {
+  @IsString() @MaxLength(200)
+  password: string;
+}
+
+export class SessionInfoDto {
+  /** a short public id; the session cookie itself is never shown */
+  id: string;
+  createdAt: number;
+  lastSeenAt: number | null;
+  ip: string | null;
+  userAgent: string | null;
+  current: boolean;
+}
+
+export class SignInEventDto {
+  at: Date;
+  /** auth.login (signed in), auth.login.failed (wrong password) or auth.login.locked (attempt while locked) */
+  action: string;
+  ip: string | null;
+}
+
+export class RevokedDto { revoked: number; }

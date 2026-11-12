@@ -132,11 +132,13 @@ export class TestParameterInput extends Versioned {
   @IsOptional() @IsBoolean() accredited?: boolean;
   @IsOptional() @IsDateString() accreditedUntil?: string | null;
   @IsOptional() @IsInt() @Min(0) sortOrder?: number;
+  /** false for working values the report should not print, such as dimensions, loads or individual readings */
+  @IsOptional() @IsBoolean() showOnReport?: boolean;
 }
 export class TestParameterDto {
   id: string; testId: string; testCode: string; code: string; name: string; kind: ParameterKind; unitId: string | null; unitSymbol: string | null;
   decimals: number; resultSetId: string | null; formulaId: string | null; formulaBindings: Record<string, string> | null;
-  accredited: boolean; accreditedUntil: Date | null; sortOrder: number; isActive: boolean; version: number;
+  accredited: boolean; accreditedUntil: Date | null; sortOrder: number; showOnReport: boolean; isActive: boolean; version: number;
 }
 export class TestParameterPageDto { data: TestParameterDto[]; meta: PageMetaDto; }
 

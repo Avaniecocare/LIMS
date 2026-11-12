@@ -16,7 +16,8 @@ export type Machine = Record<string, Record<string, Edge>>;
 const system: Edge = {};
 
 export const QUOTATION: Machine = {
-  DRAFT: { SENT: { perm: ['quotations.send'] } },
+  // A customer can accept on the phone or at the counter, before anything is emailed.
+  DRAFT: { SENT: { perm: ['quotations.send'] }, ACCEPTED: { perm: ['quotations.decide'] } },
   SENT: { ACCEPTED: { perm: ['quotations.decide'] }, REJECTED: { perm: ['quotations.decide'], reason: true }, EXPIRED: system, DRAFT: { perm: ['quotations.edit'], reason: true } },
   REJECTED: { DRAFT: { perm: ['quotations.edit'], reason: true } },
   EXPIRED: { DRAFT: { perm: ['quotations.edit'], reason: true } },

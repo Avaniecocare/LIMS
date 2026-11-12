@@ -1,11 +1,12 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { can, currentUser, actorId } from '../../common/context.js';
 import { badRequest, conflict, forbidden, notFound, rule } from '../../common/errors.js';
-import { formatDate, istToday } from '../../common/india.js';
+import { formatDate, istToday, methodLabel } from '../../common/india.js';
 import { orderBy, skipTake, toPage } from '../../common/pagination.dto.js';
 import { assertSystemTransition, assertTransition, QUOTATION } from '../../common/workflow.js';
 import { AuditService } from '../../core/audit.service.js';
 import { CompanyService } from '../../core/company.service.js';
+import { EmailTemplateService } from '../../core/email-template.service.js';
 import { NumberingService } from '../../core/numbering.service.js';
 import { Prisma, PrismaService, type Tx } from '../../core/prisma.service.js';
 import { SettingsService } from '../../core/settings.service.js';
@@ -13,7 +14,7 @@ import { type CompanySnapshot } from '../../config/company.config.js';
 import { computeTax, lineAmount } from '../billing/tax.js';
 import { DocumentsService, requirePermission } from '../documents/documents.service.js';
 import { MastersService } from '../masters/masters.service.js';
-import { esc, type CustomerSnapshot } from '../pdf/templates/base.js';
+import { type CustomerSnapshot } from '../pdf/templates/base.js';
 import { quotationHtml } from '../pdf/templates/quotation.js';
 import { PdfService } from '../pdf/pdf.service.js';
 import { SchedulerService } from '../scheduler/scheduler.service.js';
@@ -66,6 +67,7 @@ export class QuotationsService implements OnModuleInit {
     private readonly numbering: NumberingService,
     private readonly settings: SettingsService,
     private readonly company: CompanyService,
+    private readonly templates: EmailTemplateService,
     private readonly masters: MastersService,
     private readonly documents: DocumentsService,
     private readonly pdf: PdfService,
@@ -165,7 +167,7 @@ export class QuotationsService implements OnModuleInit {
         testId: test.id,
         testCode: test.code,
         testName: test.name,
-        methodName: test.method ? [test.method.name, test.method.standardRef].filter(Boolean).join(', ') : null,
+        methodName: methodLabel(test.method),
         quantity: line.quantity,
         rate,
         rateSource,
@@ -312,6 +314,15 @@ export class QuotationsService implements OnModuleInit {
       }
       return { versionId: v.id, title: v.documentTitle, quotationNo: q.quotationNo };
     });
+    const mail = await this.templates.render('quotation', {
+      ...this.templates.commonValues(),
+      quotationNo,
+      documentTitle: title,
+      documentTitleLower: title.toLowerCase(),
+      contactName: 'Sir/Madam',
+      message: dto.message,
+      senderName: currentUser()?.name,
+    });
     const job = await this.prisma.documentJob.create({
       data: {
         kind: QUOTATION_PDF,
@@ -320,8 +331,8 @@ export class QuotationsService implements OnModuleInit {
           email: {
             to: dto.to,
             cc: dto.cc ?? null,
-            subject: `${title} ${quotationNo} from ${this.company.config.companyName}`,
-            bodyHtml: `<p>Dear Sir/Madam,</p><p>Please find attached our ${esc(title.toLowerCase())} <strong>${esc(quotationNo)}</strong>.</p>${dto.message ? `<p>${esc(dto.message)}</p>` : ''}<p>Regards,<br>${esc(currentUser()?.name)}<br>${esc(this.company.config.companyName)}</p>`,
+            subject: mail.subject,
+            bodyHtml: mail.bodyHtml,
             template: 'quotation',
             entity: 'Quotation',
             entityId: id,
@@ -342,6 +353,15 @@ export class QuotationsService implements OnModuleInit {
       if (q.validUntil < istToday()) throw rule('EXPIRED', `This quotation expired on ${formatDate(q.validUntil)}. Revise it to accept.`);
       const { count } = await tx.quotation.updateMany({ where: { id, version }, data: { status: 'ACCEPTED', acceptedAt: new Date(), version: { increment: 1 } } });
       if (count !== 1) throw conflict();
+      if (q.status === 'DRAFT') {
+        // Accepted without being sent: freeze what was agreed, exactly as sending would, so the PDF never changes.
+        const v = q.versions.find((x) => x.versionNo === q.currentVersionNo)!;
+        const terms = await tx.termsVersion.findFirst({ where: { kind: 'QUOTATION' }, orderBy: { versionNo: 'desc' } });
+        await tx.quotationVersion.update({
+          where: { id: v.id },
+          data: { customerSnapshot: (await customerSnapshot(tx, q.customerId)) as unknown as Prisma.InputJsonValue, companySnapshot: this.company.snapshot() as unknown as Prisma.InputJsonValue, termsSnapshot: terms?.body ?? null },
+        });
+      }
       if (q.orderId) await tx.order.updateMany({ where: { id: q.orderId }, data: { stage: 'WON' } });
       await this.audit.status(tx, { entity: 'Quotation', entityId: id, from: q.status, to: 'ACCEPTED' });
     });
@@ -364,6 +384,8 @@ export class QuotationsService implements OnModuleInit {
   async convert(id: string) {
     if (!this.converter) throw new Error('Job module not loaded');
     return this.prisma.$transaction(async (tx) => {
+      // A second click waits here, then finds the job the first one made. The unique index on Job.quotationId backs this up.
+      await tx.$queryRaw`SELECT id FROM "Quotation" WHERE id = ${id} FOR UPDATE`;
       const q = await this.load(id, tx);
       if (q.status !== 'ACCEPTED') throw rule('NOT_ACCEPTED', 'Only an accepted quotation can be converted');
       if (q.jobs.length) throw rule('ALREADY_CONVERTED', 'This quotation has already been converted');

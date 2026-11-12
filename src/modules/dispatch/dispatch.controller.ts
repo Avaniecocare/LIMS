@@ -1,11 +1,12 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { OkDto } from '../auth/auth.dto.js';
-import { Perm } from '../auth/decorators.js';
+import { Perm, RequireModule } from '../auth/decorators.js';
 import { CreateDispatchDto, DispatchablePageDto, DispatchDto, DispatchPageDto, DispatchQuery, ReturnablePageDto, ReturnableQuery, SampleDisposeDto, SampleReturnDto } from './dispatch.dto.js';
 import { DispatchService } from './dispatch.service.js';
 
 @ApiTags('dispatch')
+@RequireModule('dispatch')
 @Controller('dispatch')
 export class DispatchController {
   constructor(private readonly dispatch: DispatchService) {}

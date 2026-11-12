@@ -21,6 +21,8 @@ const USERS: [string, string, string, string][] = [
   ['dispatch', 'Dev Dispatch', 'Dispatch', 'Dispatch Officer'],
   ['accounts', 'Anita Accounts', 'Accounts', 'Accounts Officer'],
   ['management', 'Meera Management', 'Management', 'Director'],
+  ['docs', 'Dev Document Controller', 'Document Controller', 'Document Controller'],
+  ['quality', 'Kavya Quality', 'Quality Manager', 'Quality Manager'],
 ];
 
 type TestSeed = {
@@ -259,6 +261,8 @@ export async function seedDemo(prisma: PrismaClient): Promise<void> {
         if (!(await tx.termsVersion.findFirst({ where: { kind } }))) await tx.termsVersion.create({ data: { kind, versionNo: 1, body } });
       }
       await tx.setting.upsert({ where: { key: 'setup.completed' }, create: { key: 'setup.completed', value: true }, update: { value: true } });
+      // A demo install is shown as set up, so nobody is sent through the setup wizard.
+      await tx.setting.upsert({ where: { key: 'setup.labCompleted' }, create: { key: 'setup.labCompleted', value: true }, update: { value: true } });
     },
     { timeout: 120_000 },
   );

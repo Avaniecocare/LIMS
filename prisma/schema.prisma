@@ -48,6 +48,7 @@ model User {
   assignedTests     SampleTest[] @relation("assignee")
   @@index([isActive, name])
   @@index([departmentId])
+  accessRequests AccessRequest[] @relation("AccessRequester")
 }
 
 model Role {
@@ -193,10 +194,32 @@ model FileObject {
   printWidthMm Int?
   printHeightMm Int?
   caption      String?
+  /// library files only: the folder it is filed in, and a short note
+  folderId     String?
+  folder       FileFolder? @relation(fields: [folderId], references: [id])
+  description  String?
   createdById  String?
   createdAt    DateTime @default(now())
   deletedAt    DateTime?
   @@index([entity, entityId, category])
+  @@index([folderId])
+  @@index([category, createdAt])
+}
+
+/// File library folders (SOPs, certificates, customer documents...). Nested by parentId.
+model FileFolder {
+  id          String       @id @default(uuid(7))
+  name        String
+  parentId    String?
+  parent      FileFolder?  @relation("FolderTree", fields: [parentId], references: [id])
+  children    FileFolder[] @relation("FolderTree")
+  files       FileObject[]
+  createdById String?
+  version     Int          @default(1)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
+  @@index([parentId])
 }
 
 enum DocumentJobStatus {
@@ -359,6 +382,8 @@ model TestParameter {
   accredited  Boolean       @default(false)
   accreditedUntil DateTime? @db.Date
   sortOrder   Int           @default(0)
+  /// false for working values (dimensions, loads, individual readings) the report should not print
+  showOnReport Boolean      @default(true)
   isActive    Boolean       @default(true)
   isDemo      Boolean       @default(false)
   version     Int           @default(1)
@@ -496,6 +521,12 @@ model Instrument {
   lastCalibratedAt  DateTime? @db.Date
   calibrationDueAt  DateTime? @db.Date
   certificateFileId String?
+  /// months between calibrations; recording one sets the next due date from it
+  calibrationIntervalMonths Int?
+  lastMaintainedAt  DateTime? @db.Date
+  maintenanceDueAt  DateTime? @db.Date
+  maintenanceIntervalMonths Int?
+  events            EquipmentEvent[]
   isActive          Boolean   @default(true)
   isDemo            Boolean   @default(false)
   version           Int       @default(1)
@@ -504,6 +535,7 @@ model Instrument {
   deletedAt         DateTime?
   sampleTests       SampleTest[]
   @@index([calibrationDueAt])
+  @@index([maintenanceDueAt])
   @@index([departmentId])
 }
 
@@ -968,6 +1000,10 @@ model SampleTest {
   /// financial — never serialised for roles without pricing permission
   rate          Decimal?   @db.Decimal(14, 2)
   rateSource    String?
+  /// units billed for this test (hours, locations, pieces); carried from the accepted quotation line
+  billQuantity  Int        @default(1)
+  /// exact amount agreed on the quotation (after line discount); invoices use it so they match the quotation
+  billAmount    Decimal?   @db.Decimal(14, 2)
   isDemo        Boolean    @default(false)
   version       Int        @default(1)
   createdAt     DateTime   @default(now())
@@ -1013,6 +1049,9 @@ model ParameterResult {
   sortOrder    Int        @default(0)
   numericValue Decimal?   @db.Decimal(20, 8)
   textValue    String?
+  /// '<' or '>' when the result is below or above what the method can measure, e.g. "< 0.005"
+  qualifier    String?
+  showOnReport Boolean    @default(true)
   /// spec limits at the time of planning: [{spec, min, max, text}]
   limits       Json?
   passPrimary  Boolean?
@@ -1053,7 +1092,8 @@ enum ReportStatus {
 model Report {
   id           String   @id @default(uuid(7))
   reportNo     String   @unique
-  sampleId     String
+  /// one report per sample; revisions live inside it
+  sampleId     String   @unique
   sample       Sample   @relation(fields: [sampleId], references: [id])
   currentRevisionNo Int @default(0)
   /// status of the newest revision, kept here so report lists can filter and page on it
@@ -1063,7 +1103,6 @@ model Report {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   revisions    ReportRevision[]
-  @@index([sampleId])
   @@index([createdAt])
   @@index([latestStatus, createdAt])
 }
@@ -1092,6 +1131,8 @@ model ReportRevision {
   supersededAt DateTime?
   pdfFileId    String?
   pdfSha256    String?
+  /// random code printed as a QR on the approved report; opens the public verification page
+  verificationCode String?  @unique
   version      Int          @default(1)
   createdById  String?
   createdAt    DateTime     @default(now())
@@ -1353,4 +1394,255 @@ model EmailLog {
   createdAt  DateTime    @default(now())
   @@index([entity, entityId, createdAt])
   @@index([status, createdAt])
+}
+
+enum AccessRequestStatus {
+  PENDING
+  APPROVED
+  DENIED
+}
+
+/// A person asking for access to a page or task; an admin approves it by giving a role, or declines.
+model AccessRequest {
+  id           String              @id @default(uuid(7))
+  userId       String
+  user         User                @relation("AccessRequester", fields: [userId], references: [id])
+  /// the screen they were on, e.g. /invoices
+  page         String
+  reason       String
+  status       AccessRequestStatus @default(PENDING)
+  grantedRoleId String?
+  decidedById  String?
+  decidedByName String?
+  decisionNote String?
+  decidedAt    DateTime?
+  createdAt    DateTime            @default(now())
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+}
+
+/// A short-lived link shown as a QR code: a phone that scans it may add photos to one sample or report,
+/// without signing in, until it expires, is ended, or reaches its upload limit. Only a hash of the token is kept.
+model PhoneUploadLink {
+  id          String    @id @default(uuid(7))
+  tokenHash   String    @unique
+  /// Sample (photos at booking) or Report (photos added on the draft)
+  entity      String
+  entityId    String
+  category    String
+  /// what the phone page shows, e.g. "Sample LAB/S/26-27/000012"; never the customer
+  label       String
+  createdById String
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  maxUploads  Int       @default(20)
+  /// the files received through this link, in order
+  fileIds     String[]  @default([])
+  createdAt   DateTime  @default(now())
+  @@index([createdById, createdAt])
+}
+
+
+// ---------------------------------------------------------------- quality management (ISO/IEC 17025)
+
+enum EquipmentEventKind {
+  CALIBRATION
+  INTERMEDIATE_CHECK
+  MAINTENANCE
+  REPAIR
+  BREAKDOWN
+}
+
+enum EquipmentOutcome {
+  PASS
+  ADJUSTED
+  FAIL
+}
+
+/// What was done to an instrument: calibrations, checks, maintenance and repairs, with certificates.
+model EquipmentEvent {
+  id                String             @id @default(uuid(7))
+  instrumentId      String
+  instrument        Instrument         @relation(fields: [instrumentId], references: [id])
+  kind              EquipmentEventKind
+  performedOn       DateTime           @db.Date
+  /// the calibration agency or the person who did it
+  performedBy       String
+  outcome           EquipmentOutcome
+  certificateNo     String?
+  certificateFileId String?
+  nextDueOn         DateTime?          @db.Date
+  notes             String?
+  createdById       String?
+  createdAt         DateTime           @default(now())
+  @@index([instrumentId, performedOn])
+}
+
+/// A person authorised to perform a test, as ISO/IEC 17025 7.2 / NABL require: from when, until when, on what evidence.
+model StaffAuthorisation {
+  id               String    @id @default(uuid(7))
+  userId           String
+  testId           String
+  authorisedOn     DateTime  @db.Date
+  validUntil       DateTime? @db.Date
+  authorisedById   String?
+  authorisedByName String?
+  evidence         String?
+  evidenceFileId   String?
+  withdrawnAt      DateTime?
+  withdrawnReason  String?
+  createdAt        DateTime  @default(now())
+  @@index([userId, testId])
+  @@index([testId])
+}
+
+/// Training a person attended: internal, external, on-the-job.
+model TrainingRecord {
+  id             String   @id @default(uuid(7))
+  userId         String
+  title          String
+  trainedOn      DateTime @db.Date
+  trainer        String?
+  hours          Decimal? @db.Decimal(6, 1)
+  notes          String?
+  evidenceFileId String?
+  createdById    String?
+  createdAt      DateTime @default(now())
+  @@index([userId, trainedOn])
+}
+
+enum NcStatus {
+  OPEN
+  ACTION
+  VERIFICATION
+  CLOSED
+}
+
+enum NcSeverity {
+  MINOR
+  MAJOR
+  CRITICAL
+}
+
+/// Non-conformance and corrective action (ISO/IEC 17025 7.10 and 8.7).
+model NonConformance {
+  id               String     @id @default(uuid(7))
+  ncNo             String     @unique
+  /// complaint, internal audit, external audit, proficiency testing, customer feedback, routine work, other
+  source           String
+  title            String
+  description      String
+  severity         NcSeverity @default(MINOR)
+  status           NcStatus   @default(OPEN)
+  /// a job, sample, test or report it concerns, written as the record's number
+  reference        String?
+  correction       String?
+  rootCause        String?
+  correctiveAction String?
+  ownerId          String?
+  ownerName        String?
+  dueOn            DateTime?  @db.Date
+  verification     String?
+  verifiedByName   String?
+  closedAt         DateTime?
+  createdById      String?
+  createdByName    String?
+  version          Int        @default(1)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  @@index([status, dueOn])
+}
+
+// ---------------------------------------------------------------- privacy (DPDP Act 2023)
+
+enum DataRequestKind {
+  ACCESS
+  CORRECTION
+  ERASURE
+  GRIEVANCE
+  CONSENT_WITHDRAWAL
+}
+
+enum DataRequestStatus {
+  OPEN
+  DONE
+  REJECTED
+}
+
+/// A request from a person about their personal data, tracked to an answer within the lab's deadline.
+model DataRequest {
+  id             String            @id @default(uuid(7))
+  kind           DataRequestKind
+  status         DataRequestStatus @default(OPEN)
+  requesterName  String
+  requesterEmail String
+  details        String
+  receivedOn     DateTime          @db.Date
+  dueOn          DateTime          @db.Date
+  resolution     String?
+  resolvedAt     DateTime?
+  resolvedByName String?
+  createdById    String?
+  version        Int               @default(1)
+  createdAt      DateTime          @default(now())
+  @@index([status, dueOn])
+}
+
+/// A personal data breach: what happened, who was affected, and when the Board and the people were told.
+model BreachIncident {
+  id                 String    @id @default(uuid(7))
+  detectedAt         DateTime
+  description        String
+  dataAffected       String
+  peopleAffected     Int?
+  containment        String?
+  reportedToBoardAt  DateTime?
+  notifiedPeopleAt   DateTime?
+  closedAt           DateTime?
+  createdById        String?
+  createdByName      String?
+  version            Int       @default(1)
+  createdAt          DateTime  @default(now())
+  @@index([detectedAt])
+}
+
+// ---------------------------------------------------------------- WhatsApp
+
+enum WhatsappStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+/** A WhatsApp message to a customer, sent through the WhatsApp Business Cloud API with an approved template. */
+model WhatsappMessage {
+  id                String         @id @default(uuid(7))
+  toNumber          String
+  /** report, invoice, acknowledgement, reminder or test */
+  kind              String
+  template          String
+  language          String
+  /** the template's body values, in order */
+  params            Json
+  documentFileId    String?
+  documentName      String?
+  status            WhatsappStatus @default(QUEUED)
+  providerMessageId String?
+  attempts          Int            @default(0)
+  lastError         String?
+  entity            String?
+  entityId          String?
+  /** who confirmed that the customer agreed to receive WhatsApp messages */
+  consentConfirmedBy String?
+  createdById       String?
+  createdAt         DateTime       @default(now())
+  sentAt            DateTime?
+  /** from Meta's status webhook: reached the phone, and opened */
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  @@index([entity, entityId])
+  @@index([status, createdAt])
+  @@index([providerMessageId])
 }

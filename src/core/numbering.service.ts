@@ -1,10 +1,10 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { financialYear } from '../common/india.js';
-import { COMPANY_CONFIG, type CompanyConfig } from '../config/company.config.js';
+import { CompanyService } from './company.service.js';
 import type { Tx } from './prisma.service.js';
 import { SettingsService } from './settings.service.js';
 
-export type SeriesCode = 'CUSTOMER' | 'ORDER' | 'QUOTATION' | 'JOB' | 'SAMPLE' | 'PLAN' | 'REPORT' | 'DISPATCH' | 'INVOICE' | 'CREDIT_NOTE' | 'PAYMENT' | 'ULR';
+export type SeriesCode = 'CUSTOMER' | 'ORDER' | 'QUOTATION' | 'JOB' | 'SAMPLE' | 'PLAN' | 'REPORT' | 'DISPATCH' | 'INVOICE' | 'CREDIT_NOTE' | 'PAYMENT' | 'ULR' | 'NC';
 
 /** Replaces {PREFIX}, {FY} and {SEQ:n}. Exported so ULR and number formats share one implementation. */
 export function renderNumber(format: string, values: { prefix: string; fy: string; seq: number; extra?: Record<string, string> }): string {
@@ -20,7 +20,7 @@ export function renderNumber(format: string, values: { prefix: string; fy: strin
 export class NumberingService {
   constructor(
     private readonly settings: SettingsService,
-    @Inject(COMPANY_CONFIG) private readonly company: CompanyConfig,
+    private readonly company: CompanyService,
   ) {}
 
   /**
@@ -38,6 +38,6 @@ export class NumberingService {
       RETURNING "nextValue" - 1 AS value`;
     const formats = await this.settings.get('numbering.formats', tx);
     const format = formatOverride ?? formats[code] ?? `{PREFIX}/${code}/{FY}/{SEQ:5}`;
-    return renderNumber(format, { prefix: this.company.documentPrefix, fy: financialYear(at), seq: Number(rows[0].value) });
+    return renderNumber(format, { prefix: this.company.config.documentPrefix, fy: financialYear(at), seq: Number(rows[0].value) });
   }
 }

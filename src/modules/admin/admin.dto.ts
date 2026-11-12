@@ -334,8 +334,23 @@ export class BrandingDto {
   companyName: string;
   logoUrl: string;
   faviconUrl: string;
+  /** a picture beside the sign-in form, if the lab has set one */
+  loginImageUrl: string | null;
+  loginTagline: string | null;
+  /** show "Powered by" with the product's own name */
+  poweredBy: boolean;
+  /** the product's own name (BRAND_NAME), for that line */
+  poweredByName: string;
+  supportEmail: string | null;
+  supportPhone: string | null;
+  termsUrl: string | null;
+  privacyUrl: string | null;
+  /** where to send privacy requests and grievances */
+  privacyContactEmail: string | null;
   primaryColor: string;
   accentColor: string;
+  surfaceColor: string;
+  navColor: string;
 }
 
 export class SavedFilterDto {

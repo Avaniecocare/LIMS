@@ -18,7 +18,9 @@ describe('company configuration', () => {
     expect(loadCompanyConfig(greenfield).accreditation.nablMode).toBe(true);
   });
 
-  it.each(Object.keys(bluepeak).filter((k) => !['COMPANY_CIN', 'COMPANY_WEBSITE', 'COMPANY_BANK_SWIFT', 'COMPANY_CERTIFICATION_TEXT', 'COMPANY_NABL_CERTIFICATE_NO', 'COMPANY_ULR_FORMAT', 'COMPANY_BRANDING_DIR'].includes(k)))(
+  // Optional when importing: the product name falls back to BRAND_NAME, images to the built-in mark, NABL mode to off.
+  const OPTIONAL = ['COMPANY_CIN', 'COMPANY_WEBSITE', 'COMPANY_BANK_SWIFT', 'COMPANY_CERTIFICATION_TEXT', 'COMPANY_NABL_CERTIFICATE_NO', 'COMPANY_ULR_FORMAT', 'COMPANY_BRANDING_DIR', 'COMPANY_PRODUCT_NAME', 'COMPANY_LOGO_PATH', 'COMPANY_FAVICON_PATH', 'COMPANY_NABL_MODE'];
+  it.each(Object.keys(bluepeak).filter((k) => !OPTIONAL.includes(k)))(
     'refuses to load without %s, naming it',
     (name) => {
       const env = { ...bluepeak };

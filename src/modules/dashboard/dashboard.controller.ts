@@ -1,9 +1,11 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { DashboardDto, DashboardQuery } from './dashboard.dto.js';
+import { SignedIn } from '../auth/decorators.js';
 import { DashboardService } from './dashboard.service.js';
 
 @ApiTags('dashboard')
+@SignedIn('each widget appears only with its permission')
 @Controller('dashboard')
 export class DashboardController {
   constructor(private readonly dashboard: DashboardService) {}

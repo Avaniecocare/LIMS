@@ -2,9 +2,11 @@ import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Query
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { OkDto } from '../auth/auth.dto.js';
 import { NotificationPageDto, NotificationQuery, PreferenceDto, UpdatePreferencesDto } from './notifications.dto.js';
+import { SignedIn } from '../auth/decorators.js';
 import { NotificationsService } from './notifications.service.js';
 
 @ApiTags('notifications')
+@SignedIn('every query is scoped to the caller’s own notifications')
 @Controller('notifications')
 export class NotificationsController {
   constructor(private readonly notifications: NotificationsService) {}

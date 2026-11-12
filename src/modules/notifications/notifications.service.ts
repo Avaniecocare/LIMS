@@ -21,6 +21,12 @@ export const NOTIFICATION_TYPES: Record<string, string> = {
   TAT_CROSSED: 'TAT crossed',
   QUOTATION_EXPIRING: 'Quotations expiring',
   INVOICE_OVERDUE: 'Invoices overdue',
+  ACCESS_REQUEST: 'Access requests to decide',
+  ACCESS_DECISION: 'Answers to your access requests',
+  SECURITY_ALERT: 'Security alerts',
+  EQUIPMENT_DUE: 'Equipment due for calibration or maintenance',
+  NC_ASSIGNED: 'Non-conformances assigned to you',
+  PRIVACY_REQUEST: 'Privacy requests to answer',
 };
 
 interface Message {
@@ -78,6 +84,11 @@ export class NotificationsService implements OnModuleInit {
   private async holders(tx: Tx | PrismaService, permission: string): Promise<string[]> {
     const users = await tx.user.findMany({ where: { isActive: true, deletedAt: null, roles: { some: { role: { isActive: true, deletedAt: null, permissions: { some: { permissionCode: permission } } } } } }, select: { id: true } });
     return users.map((u) => u.id);
+  }
+
+  /** Tells everyone holding a permission (for example admin.users) about something they need to act on. */
+  async notifyHolders(tx: Tx | PrismaService, permission: string, m: Message): Promise<number> {
+    return this.send(tx, await this.holders(tx, permission), m);
   }
 
   /** Writes the in-app row and, if the person wants it, queues the email through the same log. */

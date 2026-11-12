@@ -4,13 +4,14 @@
  */
 import 'reflect-metadata';
 import { logger } from './common/logger.js';
-import { CompanyConfigError, loadCompanyConfig } from './config/company.config.js';
+import { CompanyConfigError, legacyCompanyFromEnv } from './config/company.config.js';
 import { InfraConfigError, loadInfraConfig } from './config/infra.config.js';
 
 function validateConfigOrExit() {
   try {
     loadInfraConfig();
-    loadCompanyConfig();
+    // Only an install still configured with COMPANY_* variables is checked here; the rest lives in the database.
+    legacyCompanyFromEnv();
   } catch (e) {
     if (e instanceof CompanyConfigError || e instanceof InfraConfigError) {
       process.stderr.write(`${e.message}\n`);

@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from 
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { Perm } from '../auth/decorators.js';
 import { HistoryEntryDto } from '../masters/masters.dto.js';
-import { CreateCustomerDto, CustomerDto, CustomerPageDto, CustomerQuery, UpdateCustomerDto } from './customers.dto.js';
+import { CreateCustomerDto, CustomerDto, CustomerPageDto, CustomerQuery, CustomerSummaryDto, CustomerTestPageDto, CustomerTestsQuery, UpdateCustomerDto } from './customers.dto.js';
 import { CustomersService } from './customers.service.js';
 
 @ApiTags('customers')
@@ -28,6 +28,16 @@ export class CustomersController {
   @Patch(':id') @Perm('customers.edit') @ApiOkResponse({ type: CustomerDto })
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateCustomerDto) {
     return this.customers.update(id, dto);
+  }
+
+  @Get(':id/summary') @Perm('customers.view') @ApiOkResponse({ type: CustomerSummaryDto })
+  summary(@Param('id', ParseUUIDPipe) id: string) {
+    return this.customers.summary(id);
+  }
+
+  @Get(':id/tests') @Perm('customers.view') @ApiOkResponse({ type: CustomerTestPageDto })
+  tests(@Param('id', ParseUUIDPipe) id: string, @Query() q: CustomerTestsQuery) {
+    return this.customers.tests(id, q);
   }
 
   @Get(':id/history') @Perm('customers.view') @ApiOkResponse({ type: [HistoryEntryDto] })

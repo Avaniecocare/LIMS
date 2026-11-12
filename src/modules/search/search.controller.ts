@@ -2,12 +2,14 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { can, currentUser } from '../../common/context.js';
 import { PrismaService } from '../../core/prisma.service.js';
+import { SignedIn } from '../auth/decorators.js';
 import { ScanResultDto, SearchResultDto } from '../jobs/jobs.dto.js';
 
 const LIMIT = 8;
 
 /** Numbers-first global search. Each section only runs for roles allowed to see that record. */
 @ApiTags('search')
+@SignedIn('results include only the record types the caller may see')
 @Controller('search')
 export class SearchController {
   constructor(private readonly prisma: PrismaService) {}

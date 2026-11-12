@@ -56,7 +56,7 @@ export class LimitDto { spec: string; role: string; min: string | null; max: str
 export class CalculationDto { inputs: Record<string, string>; working: string; result: string; formulaVersion: number | null; }
 export class ResultOptionViewDto { value: string; isPass: boolean | null; }
 export class ParameterResultDto {
-  parameterId: string; code: string; name: string; kind: string; unit: string | null; decimals: number; accredited: boolean; value: string | null; numericValue: string | null; textValue: string | null;
+  parameterId: string; code: string; name: string; kind: string; unit: string | null; decimals: number; accredited: boolean; value: string | null; numericValue: string | null; qualifier: string | null; textValue: string | null;
   limits: LimitDto[]; passPrimary: boolean | null; passDual: boolean | null; options: ResultOptionViewDto[]; error: string | null;
   @ApiProperty({ type: () => CalculationDto, nullable: true }) calculation: CalculationDto | null;
 }

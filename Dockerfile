@@ -7,7 +7,11 @@ COPY package*.json prisma.config.ts tsconfig.json nest-cli.json ./
 COPY prisma ./prisma
 RUN npm ci --ignore-scripts && npx prisma generate
 COPY src ./src
-RUN npx nest build && npm rebuild argon2 && npm prune --omit=dev --ignore-scripts
+# prune keeps the locked prisma CLI (it is an optional peer of @prisma/client, so npm marks it
+# devOptional). The runtime needs it for `prisma migrate deploy`; fail the build if that changes,
+# rather than installing an unlocked copy later.
+RUN npx nest build && npm rebuild argon2 && npm prune --omit=dev --ignore-scripts \
+  && test -f node_modules/prisma/package.json && test -e node_modules/.bin/prisma
 
 # Playwright's image carries Chromium and its system libraries for PDF rendering.
 FROM mcr.microsoft.com/playwright:v1.64.1-noble AS runtime
@@ -16,8 +20,9 @@ WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
-COPY --from=build /app/prisma.config.ts /app/package.json ./
-RUN npm install --no-save --ignore-scripts prisma@7.10 >/dev/null
+COPY --from=build /app/prisma.config.ts /app/package.json /app/package-lock.json ./
+# Chromium comes with this base image (PLAYWRIGHT_BROWSERS_PATH); the worker renders PDFs with it.
+# Nothing is installed here: every package comes, locked, from the build stage.
 USER pwuser
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s CMD node -e "fetch('http://localhost:'+(process.env.PORT||3000)+'/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

@@ -66,10 +66,6 @@ export class DispatchService implements OnModuleInit {
 
   /** Jobs with something left to send: an issued report or a returnable sample not yet returned. */
   async pending(q: DispatchQuery) {
-    const sentReports = new Set<string>();
-    const sentSamples = new Set<string>();
-    const dispatches = await this.prisma.dispatch.findMany({ where: { deletedAt: null, ...(q.jobId ? { jobId: q.jobId } : {}) }, select: { items: true } });
-    for (const d of dispatches) for (const it of d.items as { kind: string; id: string }[]) (it.kind === 'Report' ? sentReports : sentSamples).add(it.id);
     const where: Prisma.JobWhereInput = {
       deletedAt: null,
       status: { not: 'CANCELLED' },
@@ -87,6 +83,11 @@ export class DispatchService implements OnModuleInit {
       orderBy: { receivedAt: 'asc' },
       take: 500,
     });
+    // Only the dispatches of these jobs, not every dispatch ever made.
+    const sentReports = new Set<string>();
+    const sentSamples = new Set<string>();
+    const dispatches = await this.prisma.dispatch.findMany({ where: { deletedAt: null, jobId: { in: rows.map((r) => r.id) } }, select: { items: true } });
+    for (const d of dispatches) for (const it of d.items as { kind: string; id: string }[]) (it.kind === 'Report' ? sentReports : sentSamples).add(it.id);
     const identity = can('customers.view');
     const data = rows
       .map((j) => {

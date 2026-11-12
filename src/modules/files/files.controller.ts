@@ -4,6 +4,7 @@ import type { FastifyRequest } from 'fastify';
 import { badRequest } from '../../common/errors.js';
 import { OkDto } from '../auth/auth.dto.js';
 import { FileDto, SignedUrlDto } from './files.dto.js';
+import { SignedIn } from '../auth/decorators.js';
 import { FilesService } from './files.service.js';
 
 /** Reads a single-file multipart body into memory; the size limit is enforced by the plugin. */
@@ -15,6 +16,7 @@ export async function readUpload(req: FastifyRequest) {
 }
 
 @ApiTags('files')
+@SignedIn('access follows the record each file belongs to, checked in FilesService')
 @Controller('files')
 export class FilesController {
   constructor(private readonly files: FilesService) {}

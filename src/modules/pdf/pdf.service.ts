@@ -82,7 +82,7 @@ function footer(c: RenderOptions['company'], verification: boolean): string {
   const certification = c.accreditation.certificationText ? ` · ${esc(c.accreditation.certificationText)}` : '';
   return `<div style="width:100%;font-family:Arial,Helvetica,sans-serif;font-size:7.5px;color:#374151;padding:0 12mm;box-sizing:border-box">
     <div style="border-top:1px solid #9ca3af;padding-top:3px;display:flex;justify-content:space-between;gap:12px">
-      <div><strong>${esc(c.legalName)}</strong> · ${esc(c.labAddress)}<br>${esc(c.phone)} · ${esc(c.email)}${verification ? ` · Report verification: ${esc(c.reportVerificationEmail)}` : ''}${certification}</div>
+      <div><strong>${esc(c.legalName)}</strong>${verification ? ` · Report verification: ${esc(c.reportVerificationEmail)}` : ''}${certification}</div>
       <div style="white-space:nowrap">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>
     </div></div>`;
 }

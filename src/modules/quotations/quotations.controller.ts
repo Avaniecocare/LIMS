@@ -1,10 +1,11 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { Perm } from '../auth/decorators.js';
+import { Perm, RequireModule } from '../auth/decorators.js';
 import { ConvertedDto, ConvertibleQuotationDto, EmailLogDto, QuotationDto, QuotationPageDto, QuotationQuery, ReasonDto, SaveQuotationDto, SendQuotationDto, StatusEventDto, UpdateQuotationDto, VersionedActionDto } from './quotations.dto.js';
 import { QuotationsService } from './quotations.service.js';
 
 @ApiTags('quotations')
+@RequireModule('quotations')
 @Controller('quotations')
 export class QuotationsController {
   constructor(private readonly quotations: QuotationsService) {}

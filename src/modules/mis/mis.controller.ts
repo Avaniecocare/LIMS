@@ -1,10 +1,11 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { Perm } from '../auth/decorators.js';
+import { Perm, RequireModule } from '../auth/decorators.js';
 import { MisCatalogItemDto, MisQuery, MisResultDto } from './mis.dto.js';
 import { MisService } from './mis.service.js';
 
 @ApiTags('reports-module')
+@RequireModule('analytics')
 @Controller('mis')
 export class MisController {
   constructor(private readonly mis: MisService) {}

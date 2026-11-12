@@ -275,7 +275,9 @@ describe('customer identity and prices through documents', () => {
     for (const kind of ['job-srf', 'job-acknowledgement']) await planner.post('/documents', { kind, params: { jobId: job.id } }).expect(403);
     const report = await ctx.prisma.report.findFirstOrThrow({ include: { revisions: true } });
     await planner.get(`/reports/${report.id}/preview`).expect(403);
-    await planner.post('/documents', { kind: 'report-pdf', params: { revisionId: report.revisions[0].id } }).expect(403);
+    // The report PDF is server-only: no client can request it at all, whatever its permissions.
+    const res = await planner.post('/documents', { kind: 'report-pdf', params: { revisionId: report.revisions[0].id } }).expect(400);
+    expect(res.body.error.fields[0]).toMatchObject({ field: 'kind', message: 'Unknown document type' });
   });
 
   it('report exports decide customer columns on the server, whatever the client sends', async () => {

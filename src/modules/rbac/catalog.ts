@@ -8,6 +8,10 @@ export const PERMISSIONS: Record<string, { module: string; description: string }
   'admin.settings': { module: 'Admin', description: 'Change lab operating settings' },
   'admin.audit': { module: 'Admin', description: 'View the audit log' },
   'admin.company.view': { module: 'Admin', description: 'View company details' },
+  'quality.view': { module: 'Quality', description: 'View equipment status, authorisations, training and non-conformances' },
+  'quality.manage': { module: 'Quality', description: 'Record calibration and maintenance, authorise staff, and work non-conformances' },
+  'privacy.manage': { module: 'Admin', description: 'Handle privacy requests and the data breach log (DPDP Act)' },
+  'admin.company.edit': { module: 'Admin', description: 'Edit the lab profile, branding, templates and modules' },
 
   'masters.view': { module: 'Masters', description: 'View master data' },
   'masters.edit': { module: 'Masters', description: 'Create and edit master data' },
@@ -61,11 +65,22 @@ export const PERMISSIONS: Record<string, { module: string; description: string }
   'analytics.commercial': { module: 'Analytics', description: 'View commercial dashboards' },
   'mis.view': { module: 'Reports module', description: 'View operational reports' },
   'mis.commercial': { module: 'Reports module', description: 'View commercial reports' },
+
+  'files.view': { module: 'Files', description: 'Browse the file library and download files' },
+  'files.manage': { module: 'Files', description: 'Upload, rename, move and remove library files and folders' },
 };
 
 const all = Object.keys(PERMISSIONS);
 
 export const DEFAULT_ROLES: Record<string, { description: string; permissions: string[] }> = {
+  'Quality Manager': {
+    description: 'Equipment, staff competency, non-conformance and CAPA',
+    permissions: ['quality.view', 'quality.manage', 'masters.view', 'tests.viewAll', 'files.view', 'jobs.view'],
+  },
+  'Document Controller': {
+    description: 'File library: folders, uploads, controlled documents',
+    permissions: ['files.view', 'files.manage', 'customers.view'],
+  },
   Admin: {
     description: 'Users, roles, masters, settings, audit log, all records',
     permissions: all.filter((p) => p !== 'tests.work'),
@@ -117,3 +132,29 @@ export const DEFAULT_ROLES: Record<string, { description: string; permissions: s
     ],
   },
 };
+
+/**
+ * Changes to roles made after a deployment exists. Each runs once (recorded in Setting) and only adds:
+ * it creates a missing built-in role and grants new permissions to built-in roles found by name, so an
+ * Admin's own changes are never undone.
+ */
+export const ROLE_UPGRADES: { key: string; createRoles: string[]; grants: Record<string, string[]> }[] = [
+  {
+    key: 'rbac.upgrade.files-v1',
+    createRoles: ['Document Controller'],
+    // TODO(rbac-decision): which existing roles see the file library. Admin, Management and Planner chosen; others ask for access.
+    grants: { 'files.view': ['Admin', 'Management', 'Lab Manager / Planner'], 'files.manage': ['Admin'] },
+  },
+  {
+    // The lab profile and branding moved from the environment file into the admin panel.
+    key: 'rbac.upgrade.lab-profile-v1',
+    createRoles: [],
+    grants: { 'admin.company.edit': ['Admin'] },
+  },
+  {
+    // Quality management and the DPDP privacy registers.
+    key: 'rbac.upgrade.quality-v1',
+    createRoles: ['Quality Manager'],
+    grants: { 'quality.view': ['Admin', 'Management', 'Lab Manager / Planner', 'Head of Department'], 'quality.manage': ['Admin'], 'privacy.manage': ['Admin'] },
+  },
+];

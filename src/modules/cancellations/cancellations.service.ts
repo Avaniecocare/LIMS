@@ -6,6 +6,7 @@ import { AuditService } from '../../core/audit.service.js';
 import { PrismaService, type Tx } from '../../core/prisma.service.js';
 import { InvoicesService } from '../invoices/invoices.service.js';
 import { JobsService } from '../jobs/jobs.service.js';
+import { TestingService } from '../testing/testing.service.js';
 import type { CancelDto, CancelPreviewDto } from './cancellations.dto.js';
 
 /**
@@ -20,6 +21,7 @@ export class CancellationsService {
     private readonly audit: AuditService,
     private readonly jobs: JobsService,
     private readonly invoices: InvoicesService,
+    private readonly testing: TestingService,
   ) {}
 
   private assertPermission(type: CancelPreviewDto['type']) {
@@ -83,6 +85,12 @@ export class CancellationsService {
     if (!impact.canCancel) throw rule('CANNOT_CANCEL', impact.blockers.join(' '));
     await this.prisma.$transaction(async (tx) => {
       const { jobId, samples, tests } = await this.scope(tx, dto);
+      // Checked again under the job lock: a report approved since the preview must still block the cancellation.
+      await this.jobs.lockJob(tx, jobId);
+      const sampleIds = [...new Set([...samples.map((s) => s.id), ...tests.map((t) => t.sampleId)])];
+      const approved = await tx.report.findFirst({ where: { sampleId: { in: sampleIds }, revisions: { some: { status: { in: ['APPROVED', 'ISSUED'] } } } }, select: { reportNo: true } });
+      if (approved) throw rule('CANNOT_CANCEL', `${approved.reportNo} has been approved. Revise that report instead.`);
+      if (dto.type === 'test' && tests[0]?.status === 'APPROVED') throw rule('CANNOT_CANCEL', 'This test has been approved and is locked.');
       if (dto.type === 'job') {
         const job = await tx.job.findUniqueOrThrow({ where: { id: dto.id } });
         assertTransition(JOB, job.status, 'CANCELLED', dto.reason);
@@ -111,6 +119,15 @@ export class CancellationsService {
       await this.invoices.removeFromDrafts(tx, tests.map((t) => t.id));
       await this.audit.record({ action: 'Cancellation', entity: dto.type === 'job' ? 'Job' : dto.type === 'sample' ? 'Sample' : 'SampleTest', entityId: dto.id, after: { by: currentUser()?.name, tests: tests.length }, reason: dto.reason }, tx);
       if (dto.type !== 'job') await this.jobs.syncStatus(tx, jobId);
+      // Cancelling a sample's last open test, with the rest approved, makes it ready for its report.
+      if (dto.type === 'test') {
+        const sampleId = tests[0].sampleId;
+        const [open, approvedCount] = await Promise.all([
+          tx.sampleTest.count({ where: { sampleId, deletedAt: null, status: { notIn: ['APPROVED', 'CANCELLED'] } } }),
+          tx.sampleTest.count({ where: { sampleId, deletedAt: null, status: 'APPROVED' } }),
+        ]);
+        if (open === 0 && approvedCount > 0) await this.testing.onAllApproved?.(tx, sampleId);
+      }
     });
     return { ok: true };
   }

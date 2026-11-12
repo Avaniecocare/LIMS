@@ -146,6 +146,33 @@ describe('documents', () => {
     expect(emails[0]).toMatchObject({ toAddress: 'customer@c.example', template: 'acknowledgement' });
   }, 60000);
 
+  it('the acknowledgement can carry photos of the samples as received, optionally, and only this job\'s', async () => {
+    const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+    const j = await bookJob();
+    const photo = async (sampleId: string, name: string) => (await reception.post('/files').field('entity', 'Sample').field('entityId', sampleId).field('category', 'sample-image').attach('file', PNG, name).expect(201)).body.id as string;
+    const a = await photo(j.samples[0].id, 'front.png');
+    const b = await photo(j.samples[0].id, 'side.png');
+    const other = await bookJob();
+    const foreign = await photo(other.samples[0].id, 'other.png');
+
+    // Refused: another job's photo, too many, or not a list of ids.
+    await reception.post(`/jobs/${j.id}/acknowledgement`, { to: 'customer@c.example', photoIds: [a, foreign] }).expect(400);
+    await reception.post('/documents', { kind: 'job-acknowledgement', params: { jobId: j.id, photoIds: [foreign] } }).expect(400);
+    await reception.post('/documents', { kind: 'job-acknowledgement', params: { jobId: j.id, photoIds: Array(13).fill(a) } }).expect(400);
+
+    // The letter itself, with the photos in the order chosen.
+    const f = await render('job-acknowledgement', { jobId: j.id, photoIds: [b, a] });
+    expect(f.buffer.subarray(0, 5).toString()).toBe('%PDF-');
+
+    // The email carries the choice and says so.
+    await reception.post(`/jobs/${j.id}/acknowledgement`, { to: 'customer@c.example', photoIds: [b, a] }).expect(200);
+    const doc = await ctx.prisma.documentJob.findFirstOrThrow({ where: { kind: 'job-acknowledgement', status: 'QUEUED' }, orderBy: { createdAt: 'desc' } });
+    const params = doc.params as { photoIds: string[]; email: { bodyHtml: string } };
+    expect(params.photoIds).toEqual([b, a]);
+    expect(params.email.bodyHtml).toContain('2 photographs of the samples as we received them');
+    await ctx.app.get(DocumentsService).process(doc.id);
+  }, 60000);
+
   it('combines captured letter pages into one PDF', async () => {
     const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
     const j = await bookJob();

@@ -2,6 +2,7 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import request from 'supertest';
 import { createApp } from '../../src/bootstrap.js';
 import { PrismaService } from '../../src/core/prisma.service.js';
+import { CompanyService } from '../../src/core/company.service.js';
 import { RedisService } from '../../src/core/redis.service.js';
 import argon2 from 'argon2';
 
@@ -32,6 +33,10 @@ export async function resetDb(ctx: Ctx) {
   await ctx.prisma.rolePermission.deleteMany({ where: { role: { isSystem: false } } });
   await ctx.prisma.role.deleteMany({ where: { isSystem: false } });
   await ctx.app.get(RedisService).client.flushdb();
+  // The lab profile lives in the database too: start this test file's from its own environment, not one left behind.
+  const company = ctx.app.get(CompanyService) as unknown as { seed: () => Promise<void>; reload: () => Promise<void> };
+  await company.seed();
+  await company.reload();
 }
 
 export async function createUser(ctx: Ctx, email: string, roleNames: string[], name = email.split('@')[0]) {
@@ -59,14 +64,14 @@ export interface Client {
   userId: string;
 }
 
-/** Signs in and returns a client that carries the cookie and CSRF token. */
-export async function login(ctx: Ctx, email: string, password = PASSWORD): Promise<Client> {
+/** Signs in; by default also confirms the password, as a person does before sensitive admin actions. */
+export async function login(ctx: Ctx, email: string, password = PASSWORD, options: { reauth?: boolean } = {}): Promise<Client> {
   const res = await ctx.http().post('/api/v1/auth/login').send({ email, password }).expect(200);
   const raw = res.headers['set-cookie'] as unknown as string[];
   const cookie = raw[0].split(';')[0];
   const csrf: string = res.body.user.csrfToken;
   const wrap = (t: request.Test) => t.set('Cookie', cookie).set('X-CSRF-Token', csrf);
-  return {
+  const client: Client = {
     csrf,
     userId: res.body.user.id,
     get: (url) => wrap(ctx.http().get(`/api/v1${url}`)),
@@ -78,6 +83,9 @@ export async function login(ctx: Ctx, email: string, password = PASSWORD): Promi
     patch: (url, body) => wrap(ctx.http().patch(`/api/v1${url}`)).send(body ?? {}),
     del: (url) => wrap(ctx.http().delete(`/api/v1${url}`)),
   };
+  // Users who must change their password first can't confirm it; they only use the auth routes.
+  if (options.reauth !== false && !res.body.user.mustChangePassword) await client.post('/auth/confirm-password', { password }).expect(200);
+  return client;
 }
 
 export const ROLE_NAMES = {

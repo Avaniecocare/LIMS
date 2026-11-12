@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import request from 'supertest';
 import { createApp } from '../../src/bootstrap.js';
+import { CompanyService } from '../../src/core/company.service.js';
 import { MailService } from '../../src/core/mail.service.js';
 import { PrismaService } from '../../src/core/prisma.service.js';
 import { QuotationsService } from '../../src/modules/quotations/quotations.service.js';
@@ -30,6 +31,11 @@ describe.each(companies)('white label: $env.COMPANY_NAME', ({ env, own, other })
     const prisma = app.get(PrismaService);
     const ctx = { app, prisma, http: () => request(app.getHttpServer()) };
     await resetDb(ctx);
+    // Each deployment has its own database: start this one's lab profile afresh from its own environment.
+    await prisma.setting.deleteMany({ where: { key: { in: ['company.profile', 'company.branding'] } } });
+    const labProfile = app.get(CompanyService) as unknown as { seed: () => Promise<void>; reload: () => Promise<void> };
+    await labProfile.seed();
+    await labProfile.reload();
 
     const branding = (await ctx.http().get('/api/v1/public/branding').expect(200)).body;
     expect(branding.productName).toBe(env.COMPANY_PRODUCT_NAME);

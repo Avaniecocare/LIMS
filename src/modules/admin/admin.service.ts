@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import argon2 from 'argon2';
-import { currentUser } from '../../common/context.js';
-import { badRequest, notFound } from '../../common/errors.js';
+import { can, currentUser } from '../../common/context.js';
+import { badRequest, forbidden, notFound, requireRecentAuth } from '../../common/errors.js';
 import { orderBy, skipTake, toPage } from '../../common/pagination.dto.js';
 import { AuditService } from '../../core/audit.service.js';
 import { CompanyService } from '../../core/company.service.js';
@@ -38,6 +38,15 @@ const toUserDto = (u: UserRow) => ({
   roles: u.roles.map((r) => r.role),
 });
 
+/**
+ * Someone who manages both users and roles is a full administrator: they set up every role, including ones whose
+ * work they deliberately don't do (Admin has no tests.work, so it can't enter results). They may give any role and
+ * grant any permission; every such change is audited and alerts the other administrators. Anyone holding only one of
+ * the two is limited to what they hold, so a delegated user manager or role editor cannot widen their own access.
+ * TODO(rbac-decision): whether full administrators should also be barred from giving themselves working roles.
+ */
+const isFullAdministrator = () => can('admin.users') && can('admin.roles');
+
 @Injectable()
 export class AdminService {
   constructor(
@@ -70,11 +79,13 @@ export class AdminService {
   }
 
   async createUser(dto: CreateUserDto) {
+    requireRecentAuth();
     assertPasswordPolicy(dto.password, 'password');
     const passwordHash = await argon2.hash(dto.password);
     const email = dto.email.trim().toLowerCase();
     return this.prisma.$transaction(async (tx) => {
       await this.assertRolesExist(tx, dto.roleIds);
+      await this.assertCanGrant(tx, dto.roleIds);
       const u = await tx.user.create({
         data: {
           email,
@@ -90,6 +101,7 @@ export class AdminService {
         include: userInclude,
       });
       await this.audit.record({ action: 'user.create', entity: 'User', entityId: u.id, after: toUserDto(u) }, tx);
+      if (dto.roleIds.length) await this.onPrivilegeChange?.({ summary: `${currentUser()?.name ?? 'Someone'} created ${u.name} with ${u.roles.map((r) => r.role.name).join(', ')}`, userId: u.id });
       return toUserDto(u);
     });
   }
@@ -100,15 +112,23 @@ export class AdminService {
       const before = await tx.user.findFirst({ where: { id, deletedAt: null }, include: userInclude });
       if (!before) throw notFound('User');
       if (dto.isActive === false && id === currentUser()?.id) throw badRequest('You cannot deactivate your own account');
+      // Changing who has which roles, or switching an account off, needs the password confirmed.
+      const rolesChange = roleIds !== undefined && (roleIds.length !== before.roles.length || roleIds.some((r) => !before.roles.some((x) => x.roleId === r)));
+      if (rolesChange || (dto.isActive === false && before.isActive)) requireRecentAuth();
       await updateVersioned(tx.user as never, id, version, fields);
       if (roleIds) {
         await this.assertRolesExist(tx, roleIds);
+        // Only roles that are being added need checking: removing a role someone already has is always allowed.
+        const current = new Set(before.roles.map((r) => r.roleId));
+        await this.assertCanGrant(tx, roleIds.filter((r) => !current.has(r)));
         if (id === currentUser()?.id) await this.assertKeepsAdminAccess(tx, roleIds);
         await tx.userRole.deleteMany({ where: { userId: id } });
         await tx.userRole.createMany({ data: roleIds.map((roleId) => ({ userId: id, roleId })) });
       }
       const after = await tx.user.findUniqueOrThrow({ where: { id }, include: userInclude });
       await this.audit.record({ action: 'user.update', entity: 'User', entityId: id, before: toUserDto(before), after: toUserDto(after) }, tx);
+      const added = after.roles.filter((r) => !before.roles.some((b) => b.roleId === r.roleId)).map((r) => r.role.name);
+      if (added.length) await this.onPrivilegeChange?.({ summary: `${currentUser()?.name ?? 'Someone'} gave ${after.name} ${added.join(', ')}`, userId: id });
       return toUserDto(after);
     });
     if (dto.isActive === false) await this.sessions.destroyAllForUser(id);
@@ -116,6 +136,7 @@ export class AdminService {
   }
 
   async adminResetPassword(id: string, newPassword: string) {
+    requireRecentAuth();
     assertPasswordPolicy(newPassword);
     const user = await this.prisma.user.findFirst({ where: { id, deletedAt: null } });
     if (!user) throw notFound('User');
@@ -130,6 +151,38 @@ export class AdminService {
   private async assertRolesExist(tx: Tx, roleIds: string[]) {
     const count = await tx.role.count({ where: { id: { in: roleIds }, deletedAt: null } });
     if (count !== roleIds.length) throw badRequest('One or more roles do not exist', [{ field: 'roleIds', message: 'Unknown role' }]);
+  }
+
+  /**
+   * No privilege escalation: a person can only give roles whose permissions they hold themselves, so someone who
+   * manages users can't make anyone, themselves included, an Admin.
+   */
+  private async assertCanGrant(tx: Tx, roleIds: string[]) {
+    if (!roleIds.length || isFullAdministrator()) return;
+    const roles = await tx.role.findMany({ where: { id: { in: roleIds } }, include: { permissions: true } });
+    for (const role of roles) {
+      const missing = role.permissions.map((p) => p.permissionCode).filter((code) => !can(code));
+      if (missing.length) throw forbidden(`You can't give the role ${role.name}: it includes permissions you don't have (${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '…' : ''}).`);
+    }
+  }
+
+  /** Set by the security module: admins are told whenever someone's access widens. */
+  onPrivilegeChange: ((change: { summary: string; userId?: string }) => Promise<void>) | null = null;
+
+  /** Adds one role to a person (an approved access request). Same rules as editing their roles. */
+  async addRoleToUser(userId: string, roleId: string) {
+    requireRecentAuth();
+    await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findFirst({ where: { id: userId, deletedAt: null }, include: userInclude });
+      if (!user) throw notFound('User');
+      await this.assertRolesExist(tx, [roleId]);
+      if (user.roles.some((r) => r.roleId === roleId)) return;
+      await this.assertCanGrant(tx, [roleId]);
+      await tx.userRole.create({ data: { userId, roleId } });
+      const role = await tx.role.findUniqueOrThrow({ where: { id: roleId } });
+      await this.audit.record({ action: 'user.roleAdded', entity: 'User', entityId: userId, after: { role: role.name } }, tx);
+      await this.onPrivilegeChange?.({ summary: `${currentUser()?.name ?? 'Someone'} gave ${user.name} the role ${role.name}`, userId });
+    });
   }
 
   /** Stops an Admin locking themselves out of user management by editing their own roles. */
@@ -161,13 +214,22 @@ export class AdminService {
     }));
   }
 
+  /** A role can only be given permissions its editor holds, so editing roles can't be used to gain access. */
+  private assertHolds(codes: string[]) {
+    if (isFullAdministrator()) return;
+    const missing = codes.filter((c) => !can(c));
+    if (missing.length) throw forbidden(`You can only grant permissions you hold yourself. Missing: ${missing.join(', ')}`);
+  }
+
   private assertPermissions(codes: string[]) {
     const unknown = codes.filter((c) => !PERMISSIONS[c]);
     if (unknown.length) throw badRequest(`Unknown permissions: ${unknown.join(', ')}`, [{ field: 'permissions', message: 'Unknown permission' }]);
   }
 
   async createRole(dto: CreateRoleDto) {
+    requireRecentAuth();
     this.assertPermissions(dto.permissions);
+    this.assertHolds(dto.permissions);
     const role = await this.prisma.$transaction(async (tx) => {
       const r = await tx.role.create({
         data: { name: dto.name, description: dto.description, permissions: { create: dto.permissions.map((permissionCode) => ({ permissionCode })) } },
@@ -180,12 +242,21 @@ export class AdminService {
 
   async updateRole(id: string, dto: UpdateRoleDto) {
     const { version, permissions, ...fields } = dto;
-    if (permissions) this.assertPermissions(permissions);
+    if (permissions) {
+      requireRecentAuth();
+      this.assertPermissions(permissions);
+    }
     await this.prisma.$transaction(async (tx) => {
       const before = await tx.role.findFirst({ where: { id, deletedAt: null }, include: { permissions: true } });
       if (!before) throw notFound('Role');
+      if (permissions) {
+        const had = new Set(before.permissions.map((p) => p.permissionCode));
+        this.assertHolds(permissions.filter((p) => !had.has(p)));
+      }
       await updateVersioned(tx.role as never, id, version, fields);
       if (permissions) {
+        const gained = permissions.filter((p) => !before.permissions.some((b) => b.permissionCode === p));
+        if (gained.length) await this.onPrivilegeChange?.({ summary: `${currentUser()?.name ?? 'Someone'} added ${gained.join(', ')} to the role ${before.name}` });
         await tx.rolePermission.deleteMany({ where: { roleId: id } });
         await tx.rolePermission.createMany({ data: permissions.map((permissionCode) => ({ roleId: id, permissionCode })) });
       }
@@ -290,7 +361,7 @@ export class AdminService {
       nablCertificateNo: c.accreditation.nablCertificateNo,
       ulrFormat: c.accreditation.ulrFormat,
       documentPrefix: c.documentPrefix,
-      note: "These details come from the company's environment file. To change them, update that file and restart through the LIMS-Deploy scripts. Issued documents keep the details they were issued with.",
+      note: 'Edit these in Admin > Lab profile. Changes apply at once; issued documents keep the details they were issued with.',
     };
   }
 

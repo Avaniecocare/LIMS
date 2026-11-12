@@ -1,7 +1,8 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsEnum, IsInt, IsOptional, IsString, IsUUID, Length, Matches, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 import { PageQuery } from '../../common/pagination.dto.js';
-import { AddressKind } from '../../generated/prisma/client.js';
+import { AddressKind, TestStatus } from '../../generated/prisma/client.js';
 import { PageMetaDto } from '../admin/admin.dto.js';
 
 export class ContactInput {
@@ -58,3 +59,28 @@ export class CustomerDto {
   withholdReportUntilPaid: boolean; notes: string | null; isActive: boolean; version: number; contacts: ContactDto[]; addresses: AddressDto[];
 }
 export class CustomerPageDto { data: CustomerDto[]; meta: PageMetaDto; }
+
+export class CustomerTestsQuery extends PageQuery {
+  @IsOptional() @IsEnum(TestStatus) status?: TestStatus;
+}
+export class CustomerTestRowDto {
+  id: string; testCode: string; testName: string; methodName: string | null; sampleId: string; sampleNo: string; sampleDescription: string; jobId: string; jobNo: string;
+  status: string; bookedAt: Date; approvedAt: Date | null; reportId: string | null; reportNo: string | null; reportStatus: string | null;
+}
+export class CustomerTestPageDto { @ApiProperty({ type: () => [CustomerTestRowDto] }) data: CustomerTestRowDto[]; meta: PageMetaDto; }
+
+export class CountByStatusDto { status: string; count: number; }
+export class TopTestDto { testName: string; count: number; }
+export class CustomerSummaryDto {
+  quotations: { total: number; accepted: number; acceptedValue: string; open: number } | null;
+  jobs: { total: number; open: number; completed: number; cancelled: number };
+  samples: number;
+  tests: { booked: number; approved: number; inProgress: number };
+  reportsIssued: number;
+  /** present only with invoice access */
+  money: { invoiced: string; paid: string; outstanding: string; overdue: string; lastPaymentAt: Date | null } | null;
+  firstJobAt: Date | null;
+  lastActivityAt: Date | null;
+  @ApiProperty({ type: () => [TopTestDto] }) topTests: TopTestDto[];
+  @ApiProperty({ type: () => [CountByStatusDto] }) testsByStatus: CountByStatusDto[];
+}

@@ -93,10 +93,19 @@ describe('rate priority', () => {
 });
 
 describe('quotation workflow', () => {
+  it('a customer can accept a draft on the phone; what was agreed is frozen as if it had been sent', async () => {
+    const q = await create();
+    const accepted = (await sales.post(`/quotations/${q.id}/accept`, { version: q.version }).expect(200)).body;
+    expect(accepted.status).toBe('ACCEPTED');
+    const v = await ctx.prisma.quotationVersion.findFirstOrThrow({ where: { quotationId: q.id } });
+    expect(v.companySnapshot).toBeTruthy();
+    expect(v.customerSnapshot).toBeTruthy();
+  });
+
   it('Draft -> Sent -> Accepted, with enforced permissions and a frozen version', async () => {
     const q = await create();
     await tech.post(`/quotations/${q.id}/send`, { version: 1, to: 'x@y.example' }).expect(403);
-    await sales.post(`/quotations/${q.id}/accept`, { version: 1 }).expect(422); // not sent yet
+    await tech.post(`/quotations/${q.id}/accept`, { version: 1 }).expect(403);
     const sent = (await sales.post(`/quotations/${q.id}/send`, { version: 1, to: 'buyer@cust.example', message: 'Please review' }).expect(200)).body;
     expect(sent.status).toBe('SENT');
     await sales.patch(`/quotations/${q.id}`, { version: sent.version, customerId: q.customerId, lines: fiveLines(fx.testIds) }).expect(422);

@@ -5,6 +5,7 @@ import { INFRA_CONFIG, type InfraConfig } from '../config/infra.config.js';
 export const QUEUE_EMAIL = 'email';
 export const QUEUE_DOCUMENTS = 'documents';
 export const QUEUE_SCHEDULED = 'scheduled';
+export const QUEUE_WHATSAPP = 'whatsapp';
 
 export const redisConnection = (url: string) => {
   const u = new URL(url);
@@ -24,6 +25,7 @@ export class QueueService implements OnModuleDestroy {
   readonly email: Queue;
   readonly documents: Queue;
   readonly scheduled: Queue;
+  readonly whatsapp: Queue;
 
   constructor(@Inject(INFRA_CONFIG) cfg: InfraConfig) {
     const connection = redisConnection(cfg.redisUrl);
@@ -36,9 +38,10 @@ export class QueueService implements OnModuleDestroy {
     this.email = new Queue(QUEUE_EMAIL, { connection, defaultJobOptions });
     this.documents = new Queue(QUEUE_DOCUMENTS, { connection, defaultJobOptions: { ...defaultJobOptions, attempts: 2 } });
     this.scheduled = new Queue(QUEUE_SCHEDULED, { connection, defaultJobOptions: { ...defaultJobOptions, attempts: 2 } });
+    this.whatsapp = new Queue(QUEUE_WHATSAPP, { connection, defaultJobOptions });
   }
 
   async onModuleDestroy() {
-    await Promise.all([this.email.close(), this.documents.close(), this.scheduled.close()]);
+    await Promise.all([this.email.close(), this.documents.close(), this.scheduled.close(), this.whatsapp.close()]);
   }
 }

@@ -4,7 +4,9 @@ import argon2 from 'argon2';
 import { Secret, TOTP } from 'otpauth';
 import { currentUser, getContext } from '../../common/context.js';
 import { AppError, badRequest } from '../../common/errors.js';
-import { COMPANY_CONFIG, type CompanyConfig } from '../../config/company.config.js';
+import { CompanyService } from '../../core/company.service.js';
+import { EmailTemplateService } from '../../core/email-template.service.js';
+import { ModulesService } from '../../core/modules.service.js';
 import { INFRA_CONFIG, type InfraConfig } from '../../config/infra.config.js';
 import { AuditService } from '../../core/audit.service.js';
 import { MailService } from '../../core/mail.service.js';
@@ -17,6 +19,9 @@ export const MAX_FAILED_LOGINS = 5;
 export const LOCK_MINUTES = 15;
 const RATE_WINDOW_SECONDS = 60;
 const RATE_MAX_ATTEMPTS = 10;
+/** Failed sign-ins from one address across all accounts, so guessing one password against many emails is slowed too. */
+const IP_FAILURE_WINDOW_SECONDS = 600;
+const IP_MAX_FAILURES = 30;
 const TOTP_ROLES = new Set(['Admin', 'Authorised Signatory', 'Accounts']);
 // Verified against when the email is unknown, so timing does not reveal which accounts exist.
 const DUMMY_HASH = argon2.hash('dummy-password-for-constant-time');
@@ -39,7 +44,8 @@ export function assertPasswordPolicy(password: string, field = 'newPassword') {
   }
 }
 
-const invalidLogin = () => new AppError('INVALID_CREDENTIALS', 401, 'Incorrect email or password');
+// One answer for a wrong password, an unknown email and a locked account, so the response never reveals which emails exist.
+const invalidLogin = () => new AppError('INVALID_CREDENTIALS', 401, `Incorrect email or password. After ${MAX_FAILED_LOGINS} failed attempts an account is locked for ${LOCK_MINUTES} minutes; use Forgot password if you are unsure.`);
 
 @Injectable()
 export class AuthService {
@@ -49,16 +55,26 @@ export class AuthService {
     private readonly redis: RedisService,
     private readonly audit: AuditService,
     private readonly mail: MailService,
-    @Inject(COMPANY_CONFIG) private readonly company: CompanyConfig,
+    private readonly company: CompanyService,
+    private readonly templates: EmailTemplateService,
+    private readonly modules: ModulesService,
     @Inject(INFRA_CONFIG) private readonly infra: InfraConfig,
   ) {}
 
   private async rateLimit(email: string) {
     const ip = getContext()?.ip ?? 'unknown';
+    const ipFailures = Number((await this.redis.client.get(`login-ip-failures:${ip}`)) ?? 0);
+    if (ipFailures >= IP_MAX_FAILURES) throw new AppError('RATE_LIMITED', 429, 'Too many failed sign-ins from this network. Wait ten minutes and try again.');
     const key = `login-rate:${ip}:${email}`;
     const count = await this.redis.client.incr(key);
     if (count === 1) await this.redis.client.expire(key, RATE_WINDOW_SECONDS);
     if (count > RATE_MAX_ATTEMPTS) throw new AppError('RATE_LIMITED', 429, 'Too many attempts. Wait a minute and try again.');
+  }
+
+  private async countIpFailure() {
+    const key = `login-ip-failures:${getContext()?.ip ?? 'unknown'}`;
+    const n = await this.redis.client.incr(key);
+    if (n === 1) await this.redis.client.expire(key, IP_FAILURE_WINDOW_SECONDS);
   }
 
   /** Returns either a TOTP challenge or the id of the verified user. */
@@ -69,10 +85,13 @@ export class AuthService {
     if (!user) {
       await argon2.verify(await DUMMY_HASH, password).catch(() => false);
       await this.audit.record({ action: 'auth.login.failed', entity: 'User', after: { email: 'unknown' } });
+      await this.countIpFailure();
       throw invalidLogin();
     }
     if (user.lockedUntil && user.lockedUntil > new Date()) {
-      throw new AppError('ACCOUNT_LOCKED', 423, `Account locked after repeated failures. Try again after ${LOCK_MINUTES} minutes or reset your password.`);
+      await argon2.verify(await DUMMY_HASH, password).catch(() => false);
+      await this.audit.record({ action: 'auth.login.locked', entity: 'User', entityId: user.id });
+      throw invalidLogin();
     }
     const ok = await argon2.verify(user.passwordHash, password).catch(() => false);
     if (!ok || !user.isActive) {
@@ -83,6 +102,7 @@ export class AuthService {
         data: { failedLogins: lock ? 0 : failed, lockedUntil: lock ? new Date(Date.now() + LOCK_MINUTES * 60_000) : undefined },
       });
       await this.audit.record({ action: lock ? 'auth.account.locked' : 'auth.login.failed', entity: 'User', entityId: user.id });
+      await this.countIpFailure();
       throw invalidLogin();
     }
     // Only failures count: staff signing in repeatedly, or sharing an office IP, are not attackers.
@@ -116,9 +136,31 @@ export class AuthService {
     return user.id;
   }
 
+  /** Confirms the password for sensitive actions; wrong attempts count towards the lockout like a sign-in. */
+  async reauthenticate(password: string) {
+    const me = currentUser()!;
+    await this.rateLimit(`reauth:${me.id}`);
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: me.id } });
+    if (!(await argon2.verify(user.passwordHash, password).catch(() => false))) {
+      await this.audit.record({ action: 'auth.reauth.failed', entity: 'User', entityId: me.id });
+      throw new AppError('INVALID_PASSWORD', 403, 'Incorrect password', [{ field: 'password', message: 'Incorrect password' }]);
+    }
+    await this.sessions.markReauthenticated(me.sessionId);
+    await this.audit.record({ action: 'auth.reauth', entity: 'User', entityId: me.id });
+  }
+
+  async recordSessionsRevoked(count: number, what: string) {
+    if (count) await this.audit.record({ action: 'auth.sessions.revoked', entity: 'User', entityId: currentUser()!.id, after: { count, what } });
+  }
+
+  async signInHistory(userId: string) {
+    const rows = await this.prisma.auditLog.findMany({ where: { entity: 'User', entityId: userId, action: { in: ['auth.login', 'auth.login.failed', 'auth.login.locked', 'auth.account.locked'] } }, orderBy: { at: 'desc' }, take: 50, select: { at: true, action: true, ip: true } });
+    return rows;
+  }
+
   async startSession(userId: string) {
     const ip = getContext()?.ip ?? null;
-    const session = await this.sessions.create(userId, ip);
+    const session = await this.sessions.create(userId, ip, getContext()?.userAgent ?? null);
     const user = await this.prisma.user.update({ where: { id: userId }, data: { failedLogins: 0, lockedUntil: null, lastLoginAt: new Date() } });
     const ctx = getContext();
     await this.prisma.auditLog.create({
@@ -144,6 +186,7 @@ export class AuthService {
       totpEnabled: user.totpEnabled,
       mustChangePassword: user.mustChangePassword,
       totpAvailable: roles.some((r) => TOTP_ROLES.has(r.role.name)),
+      modules: await this.modules.enabled(),
     };
   }
 
@@ -173,14 +216,8 @@ export class AuthService {
       data: { userId: user.id, tokenHash: createHash('sha256').update(token).digest('hex'), expiresAt: new Date(Date.now() + 60 * 60_000) },
     });
     const link = `${this.infra.frontendOrigin}/reset-password?token=${encodeURIComponent(token)}`;
-    await this.mail.enqueue({
-      to: user.email,
-      subject: `Reset your ${this.company.productName} password`,
-      template: 'password-reset',
-      entity: 'User',
-      entityId: user.id,
-      bodyHtml: `<p>A password reset was requested for your account.</p><p><a href="${link}">Set a new password</a></p><p>This link works for one hour. If you did not ask for this, you can ignore this email.</p>`,
-    });
+    const mail = await this.templates.render('password-reset', { ...this.templates.commonValues(), appName: this.company.config.productName, userName: user.name, resetLink: link });
+    await this.mail.enqueue({ to: user.email, subject: mail.subject, template: 'password-reset', entity: 'User', entityId: user.id, bodyHtml: mail.bodyHtml });
     await this.audit.record({ action: 'auth.password.resetRequested', entity: 'User', entityId: user.id });
   }
 
@@ -194,6 +231,8 @@ export class AuthService {
     await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.passwordResetToken.updateMany({ where: { id: row.id, usedAt: null }, data: { usedAt: new Date() } });
       if (claimed.count !== 1) throw badRequest('This reset link has already been used');
+      // Any other reset link sent to this user stops working too.
+      await tx.passwordResetToken.updateMany({ where: { userId: row.userId, usedAt: null }, data: { usedAt: new Date() } });
       await tx.user.update({
         where: { id: row.userId },
         data: { passwordHash: await argon2.hash(newPassword), passwordChangedAt: new Date(), failedLogins: 0, lockedUntil: null, mustChangePassword: false },
@@ -204,7 +243,7 @@ export class AuthService {
   }
 
   private totp(email: string, secret: string) {
-    return new TOTP({ issuer: this.company.productName, label: email, algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(secret) });
+    return new TOTP({ issuer: this.company.config.productName, label: email, algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(secret) });
   }
 
   async totpSetup() {

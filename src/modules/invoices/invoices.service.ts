@@ -2,12 +2,14 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Decimal } from 'decimal.js';
 import { actorId, can } from '../../common/context.js';
 import { badRequest, conflict, forbidden, notFound, rule } from '../../common/errors.js';
-import { amountInWords, formatDate, istToday } from '../../common/india.js';
+import { amountInWords, formatDate, formatINR, istToday } from '../../common/india.js';
 import { orderBy, skipTake, toPage } from '../../common/pagination.dto.js';
 import { assertSystemTransition, assertTransition, INVOICE } from '../../common/workflow.js';
 import type { CompanySnapshot } from '../../config/company.config.js';
 import { AuditService } from '../../core/audit.service.js';
 import { CompanyService } from '../../core/company.service.js';
+import { EmailTemplateService } from '../../core/email-template.service.js';
+import { ModulesService } from '../../core/modules.service.js';
 import { MailService } from '../../core/mail.service.js';
 import { NumberingService } from '../../core/numbering.service.js';
 import { Prisma, PrismaService, ReadPrismaService, type Tx } from '../../core/prisma.service.js';
@@ -17,7 +19,7 @@ import { DocumentsService, requirePermission, XLSX_MIME } from '../documents/doc
 import { MastersService } from '../masters/masters.service.js';
 import { buildWorkbook } from '../masters/excel.js';
 import { PdfService } from '../pdf/pdf.service.js';
-import { esc, type CustomerSnapshot } from '../pdf/templates/base.js';
+import { type CustomerSnapshot } from '../pdf/templates/base.js';
 import { creditNoteHtml, invoiceHtml, statementHtml } from '../pdf/templates/commercial.js';
 import { customerSnapshot } from '../quotations/quotations.service.js';
 import { SchedulerService } from '../scheduler/scheduler.service.js';
@@ -52,6 +54,8 @@ export class InvoicesService implements OnModuleInit {
     private readonly numbering: NumberingService,
     private readonly settings: SettingsService,
     private readonly company: CompanyService,
+    private readonly templates: EmailTemplateService,
+    private readonly modules: ModulesService,
     private readonly documents: DocumentsService,
     private readonly pdf: PdfService,
     private readonly mail: MailService,
@@ -82,6 +86,8 @@ export class InvoicesService implements OnModuleInit {
     });
     this.documents.register('statement-of-account', { authorize: requirePermission('invoices.view'), run: (p) => this.renderStatement(String(p.customerId), p.from as string | undefined, p.to as string | undefined) });
     this.documents.register('due-invoices-export', {
+      // Every customer's contacts (or every unpaid amount) in one file: confirm the password first.
+      sensitive: true,
       authorize: requirePermission('invoices.view'),
       run: async (p) => {
         const today = istToday();
@@ -98,7 +104,8 @@ export class InvoicesService implements OnModuleInit {
         return { buffer, filename: 'due-invoices.xlsx', mimeType: XLSX_MIME };
       },
     });
-    this.scheduler.register({ name: 'invoice-reminders', pattern: '30 9 * * *', run: () => this.sendScheduledReminders() });
+    // Skipped while billing is turned off.
+    this.scheduler.register({ name: 'invoice-reminders', pattern: '30 9 * * *', run: async () => ((await this.modules.isOn('billing')) ? this.sendScheduledReminders() : 0) });
   }
 
   // ---------------------------------------------------------------- shapes
@@ -188,6 +195,9 @@ export class InvoicesService implements OnModuleInit {
     const id = await this.prisma.$transaction(async (tx) => {
       const customer = await tx.customer.findFirst({ where: { id: dto.customerId, deletedAt: null } });
       if (!customer) throw badRequest('Customer not found', [{ field: 'customerId', message: 'Not found' }]);
+      // Lock the jobs first: a second request for the same jobs waits here, then sees the first one's lines
+      // as already billed, so a test can never land on two invoices.
+      await tx.$queryRaw`SELECT id FROM "Job" WHERE id = ANY(${dto.jobIds}::text[]) ORDER BY id FOR UPDATE`;
       const jobs = await tx.job.findMany({
         where: { id: { in: dto.jobIds }, deletedAt: null },
         include: { samples: { where: { status: { not: 'CANCELLED' } }, include: { tests: { where: billable(), orderBy: { createdAt: 'asc' } } } } },
@@ -203,7 +213,10 @@ export class InvoicesService implements OnModuleInit {
             const fallback = t.rate === null ? await this.masters.lookupRate(t.testId, dto.customerId, istToday(), tx) : null;
             const rate = t.rate !== null ? str(t.rate) : fallback?.rate;
             if (rate === null || rate === undefined) throw rule('RATE_MISSING', `No rate is set for ${t.testName} on ${sample.sampleNo}. Add one in Masters first.`);
-            lines.push({ seq: seq++, jobId: job.id, sampleTestId: t.id, description: `${sample.sampleNo} · ${t.testName}${t.methodName ? ` (${t.methodName})` : ''}`, sacCode: this.company.config.sacCode, quantity: 1, rate, rateSource: t.rate !== null ? t.rateSource : fallback?.source, amount: rate });
+            // Units and the agreed amount come from the accepted quotation; otherwise one unit at the looked-up rate.
+            const quantity = t.billQuantity ?? 1;
+            const amount = t.billAmount !== null && t.billAmount !== undefined ? str(t.billAmount) : dec(rate).times(quantity).toFixed(2);
+            lines.push({ seq: seq++, jobId: job.id, sampleTestId: t.id, description: `${sample.sampleNo} · ${t.testName}${t.methodName ? ` (${t.methodName})` : ''}`, sacCode: this.company.config.sacCode, quantity, rate, rateSource: t.rate !== null ? t.rateSource : fallback?.source, amount });
           }
         }
       }
@@ -211,11 +224,20 @@ export class InvoicesService implements OnModuleInit {
       const inv = await tx.invoice.create({
         data: { customerId: dto.customerId, placeOfSupply: customer.stateName, placeOfSupplyCode: customer.stateCode, notes: dto.notes, createdById: actorId(), isDemo: customer.isDemo, lines: { createMany: { data: lines } } },
       });
-      await this.recompute(tx, inv.id, dto.discountPct ?? '0');
+      await this.recompute(tx, inv.id, dto.discountPct ?? (await this.quotedDiscount(tx, jobs)));
       await this.audit.status(tx, { entity: 'Invoice', entityId: inv.id, from: null, to: 'DRAFT' });
       return inv.id;
     });
     return this.get(id);
+  }
+
+  /** The overall discount agreed on the quotations behind these jobs, when they all agree; otherwise none. */
+  private async quotedDiscount(tx: Tx, jobs: { quotationId: string | null }[]): Promise<string> {
+    const ids = [...new Set(jobs.map((j) => j.quotationId))];
+    if (ids.some((x) => x === null)) return '0';
+    const versions = await Promise.all(ids.map((qid) => tx.quotationVersion.findFirst({ where: { quotationId: qid! }, orderBy: { versionNo: 'desc' }, select: { discountPct: true } })));
+    const pcts = [...new Set(versions.map((v) => str(v?.discountPct ?? '0')))];
+    return pcts.length === 1 ? pcts[0] : '0';
   }
 
   async updateDraft(id: string, dto: UpdateDraftInvoiceDto) {
@@ -267,15 +289,20 @@ export class InvoicesService implements OnModuleInit {
     const inv = await this.load(id);
     if (inv.status === 'DRAFT' || inv.status === 'CANCELLED') throw rule('NOT_ISSUED', 'Only an issued invoice can be emailed');
     const company = inv.companySnapshot as unknown as CompanySnapshot;
+    const mail = await this.templates.render('invoice', {
+      ...this.templates.commonValues(company),
+      invoiceNo: inv.invoiceNo,
+      amount: formatINR(inv.grandTotal),
+      dueDate: formatDate(inv.dueDate),
+      contactName: 'Sir/Madam',
+      customerName: (inv.customerSnapshot as unknown as CustomerSnapshot | null)?.name,
+    });
     const job = await this.prisma.documentJob.create({
       data: {
         kind: 'invoice-pdf',
         params: {
           invoiceId: id,
-          email: {
-            to, cc, subject: `Tax invoice ${inv.invoiceNo} — ${company.companyName}`, template: 'invoice', entity: 'Invoice', entityId: id,
-            bodyHtml: `<p>Dear Sir/Madam,</p><p>Please find attached tax invoice <strong>${esc(inv.invoiceNo)}</strong>, due on ${formatDate(inv.dueDate)}.</p>`,
-          },
+          email: { to, cc, subject: mail.subject, template: 'invoice', entity: 'Invoice', entityId: id, bodyHtml: mail.bodyHtml },
         },
         createdById: actorId(),
       },
@@ -411,6 +438,8 @@ export class InvoicesService implements OnModuleInit {
   /** Mistakes get reversed, not deleted: the record stays, and invoices return to their earlier balance. */
   async reversePayment(paymentId: string, reason: string) {
     await this.prisma.$transaction(async (tx) => {
+      // Lock first, so an advance being applied at the same moment either finishes before (and is reversed too) or after (and finds it reversed).
+      await tx.$queryRaw`SELECT id FROM "Payment" WHERE id = ${paymentId} FOR UPDATE`;
       const p = await tx.payment.findFirst({ where: { id: paymentId, deletedAt: null }, include: { allocations: true } });
       if (!p) throw notFound('Payment');
       const net = new Map<string, Decimal>();
@@ -530,14 +559,18 @@ export class InvoicesService implements OnModuleInit {
     if (!OPEN.includes(inv.status as 'ISSUED')) throw rule('NOT_DUE', 'Only unpaid invoices can be reminded');
     const company = inv.companySnapshot as unknown as CompanySnapshot;
     const balance = balanceOf(inv).toFixed(2);
-    const emailLogId = await this.mail.enqueue({
-      to,
-      subject: `Payment reminder: invoice ${inv.invoiceNo} — ${company.companyName}`,
-      template: 'reminder',
-      entity: 'Invoice',
-      entityId: invoiceId,
-      bodyHtml: `<p>Dear Sir/Madam,</p><p>Our records show a balance of <strong>₹${esc(balance)}</strong> on invoice <strong>${esc(inv.invoiceNo)}</strong>, due on ${formatDate(inv.dueDate)}.</p><p>Please arrange payment, or let us know if it has already been made.</p><p>Bank: ${esc(company.bank.bankName)}, A/c ${esc(company.bank.accountNumber)}, IFSC ${esc(company.bank.ifsc)}</p>`,
+    const mail = await this.templates.render('reminder', {
+      ...this.templates.commonValues(company),
+      invoiceNo: inv.invoiceNo,
+      balance: formatINR(balance),
+      dueDate: formatDate(inv.dueDate),
+      contactName: 'Sir/Madam',
+      customerName: (inv.customerSnapshot as unknown as CustomerSnapshot | null)?.name,
+      bankName: company.bank.bankName,
+      bankAccount: company.bank.accountNumber,
+      bankIfsc: company.bank.ifsc,
     });
+    const emailLogId = await this.mail.enqueue({ to, subject: mail.subject, template: 'reminder', entity: 'Invoice', entityId: invoiceId, bodyHtml: mail.bodyHtml });
     await this.prisma.reminderLog.create({ data: { invoiceId, kind, emailLogId, sentById } });
     await this.audit.record({ action: 'Invoice.reminder', entity: 'Invoice', entityId: invoiceId, after: { kind, to } });
   }

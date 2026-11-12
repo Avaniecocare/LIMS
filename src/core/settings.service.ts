@@ -29,6 +29,7 @@ export const SETTINGS = {
       CREDIT_NOTE: '{PREFIX}/CN/{FY}/{SEQ:5}',
       PAYMENT: '{PREFIX}/RCP/{FY}/{SEQ:5}',
       ULR: '{SEQ:8}',
+      NC: '{PREFIX}/NC/{FY}/{SEQ:4}',
     } as Record<string, string>,
     validate: (v: unknown) => typeof v === 'object' && v !== null && Object.values(v).every((f) => typeof f === 'string' && f.includes('{SEQ')),
     label: 'Document number formats',
@@ -58,8 +59,16 @@ export const SETTINGS = {
   'controls.allowSameReviewerSignatory': { default: false, validate: isBool, label: 'Allow same reviewer and signatory', group: 'Controls', sensitive: true },
   'controls.impartiality': { default: true, validate: isBool, label: 'Hide customer identity from technicians', group: 'Controls', sensitive: true },
   'controls.blockOverdueInstruments': { default: false, validate: isBool, label: 'Block instruments past calibration due date', group: 'Controls' },
+  // TODO(product-decision): warn (default) rather than refuse when a test goes to someone not authorised for it.
+  'controls.requireAuthorisation': { default: false, validate: isBool, label: 'Refuse to assign a test to someone not authorised for it', group: 'Controls', sensitive: true },
+  // TODO(product-decision): 15 days' notice before calibration or maintenance falls due.
+  'quality.dueWarningDays': { default: 15, validate: isNonNeg, label: 'Warn this many days before equipment is due', group: 'Quality' },
+  // TODO(product-decision): 30 days to answer a privacy request; the DPDP Rules leave the period to the lab's notice.
+  'privacy.responseDays': { default: 30, validate: isNonNeg, label: 'Days to answer a privacy request', group: 'Privacy' },
   'notifications.tatWarningDays': { default: 1, validate: isNonNeg, label: 'Warn this many days before TAT', group: 'Notifications' },
   'setup.completed': { default: false, validate: isBool, label: 'First-run setup completed', group: 'System', hidden: true },
+  'setup.labCompleted': { default: false, validate: isBool, label: 'Lab setup wizard finished', group: 'System', hidden: true },
+  'setup.emailTested': { default: false, validate: isBool, label: 'Test email sent from setup', group: 'System', hidden: true },
 } as const satisfies Record<string, { default: unknown; validate: Validator; label: string; group: string; sensitive?: boolean; hidden?: boolean }>;
 
 export type SettingKey = keyof typeof SETTINGS;

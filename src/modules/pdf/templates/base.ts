@@ -11,37 +11,54 @@ export const esc = (v: unknown): string =>
 /** Multi-line user text, escaped, keeping its line breaks. */
 export const multiline = (v: unknown): string => esc(v).replace(/\n/g, '<br>');
 
-export function page(title: string, company: CompanySnapshot, body: string): string {
+/** Full-page documents carry the logo as a faint watermark. Labels opt out so their QR code stays easy to scan. */
+export function page(title: string, company: CompanySnapshot, body: string, options: { watermark?: boolean } = {}): string {
   const primary = company.branding.primaryColor;
+  const accent = company.branding.accentColor;
+  const logo = company.branding.logoDataUri;
+  // A fixed element repeats on every printed page in Chromium; behind the content, it shows through unshaded cells.
+  const watermark = options.watermark !== false && logo ? `<div class="watermark" aria-hidden="true"><img src="${logo}" alt=""></div>` : '';
   return `<!doctype html><html lang="en-IN"><head><meta charset="utf-8"><title>${esc(title)}</title><style>
 *{box-sizing:border-box}
 html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-body{margin:0;font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.4;color:#111827}
-h1{font-size:15px;margin:0;text-align:center;color:${primary};letter-spacing:.3px}
+/* Chromium clips whatever sits exactly on the right page margin, which removed the right border of tables and boxes. */
+body{margin:0;padding:0 1px;font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.4;color:#111827}
+h1{font-size:14px;font-weight:700;margin:8px 0 6px;padding:6px 8px;text-align:center;text-transform:uppercase;letter-spacing:1.5px;color:#fff;background:${primary};border-bottom:2px solid ${accent}}
 h2{font-size:11.5px;margin:12px 0 4px;color:${primary}}
 table{width:100%;border-collapse:collapse}
 th,td{border:1px solid #9ca3af;padding:3.5px 5px;vertical-align:top;text-align:left}
 th{background:#f3f4f6;font-weight:600}
+th.right{white-space:nowrap}
 thead{display:table-header-group}
 tr{page-break-inside:avoid}
 .right{text-align:right}.center{text-align:center}.muted{color:#4b5563}.small{font-size:9px}.bold{font-weight:700}
 .plain,.plain td,.plain th{border:0;padding:1.5px 4px 1.5px 0}
-.letterhead{display:flex;align-items:center;gap:12px;border-bottom:2px solid ${primary};padding-bottom:7px;margin-bottom:8px}
-.letterhead img{height:46px;width:auto;object-fit:contain}
-.letterhead .name{font-size:15px;font-weight:700;color:${primary}}
+.letterhead{display:flex;align-items:stretch;gap:12px;padding-bottom:8px;border-bottom:3px solid ${primary}}
+/* A plain strip, not a box-shadow: Chromium's PDF output draws a hairline along the edge of a shadowed box. */
+.letterhead-rule{height:2px;background:${accent};margin-bottom:6px}
+.letterhead img{height:58px;width:auto;object-fit:contain;align-self:center}
+.letterhead .brand{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
+.letterhead .name{font-size:17px;font-weight:700;letter-spacing:.4px;color:${primary}}
+.letterhead .address{margin-top:3px;font-size:9px;color:#4b5563;max-width:95%}
+.letterhead .contact{flex:0 0 auto;padding-left:10px;border-left:2px solid ${accent};display:flex;flex-direction:column;justify-content:center;font-size:9px;line-height:1.55;text-align:left}
+.letterhead .contact b{display:inline-block;min-width:36px;color:${primary}}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .box{border:1px solid #9ca3af;padding:6px}
 .totals{width:46%;margin-left:auto;margin-top:6px}
 .page-break{page-break-before:always}
 .keep{page-break-inside:avoid}
 .terms{white-space:pre-wrap;font-size:9.5px}
-</style></head><body>${body}</body></html>`;
+.watermark{position:fixed;inset:0;z-index:-1;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.watermark img{width:60%;max-height:60%;object-fit:contain;opacity:.07}
+</style></head><body>${watermark}${body}</body></html>`;
 }
 
 export function letterhead(c: CompanySnapshot): string {
   const logo = c.branding.logoDataUri ? `<img src="${c.branding.logoDataUri}" alt="">` : '';
-  return `<div class="letterhead">${logo}<div><div class="name">${esc(c.legalName)}</div>
-  <div class="small">${esc(c.labAddress)}<br>${esc(c.phone)} · ${esc(c.email)}${c.website ? ` · ${esc(c.website)}` : ''}<br>GSTIN: ${esc(c.gstin)} · PAN: ${esc(c.pan)}${c.cin ? ` · CIN: ${esc(c.cin)}` : ''}</div></div></div>`;
+  const line = (label: string, value: string | null | undefined) => (value ? `<div><b>${label}</b> ${esc(value)}</div>` : '');
+  const website = c.website?.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  return `<div class="letterhead">${logo}<div class="brand"><div class="name">${esc(c.legalName)}</div><div class="address">${esc(c.labAddress)}</div></div>
+  <div class="contact">${line('Phone', c.phone)}${line('Email', c.email)}${line('Web', website)}${line('GSTIN', c.gstin)}${line('PAN', c.pan)}${line('CIN', c.cin)}</div></div><div class="letterhead-rule"></div>`;
 }
 
 export function bankBlock(c: CompanySnapshot): string {

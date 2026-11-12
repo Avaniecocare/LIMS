@@ -2,11 +2,12 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import QRCode from 'qrcode';
 import { actorId, can, currentUser } from '../../common/context.js';
 import { badRequest, conflict, forbidden, notFound, reasonRequired, rule } from '../../common/errors.js';
-import { istToday } from '../../common/india.js';
+import { istToday, methodLabel } from '../../common/india.js';
 import { orderBy, skipTake, toPage } from '../../common/pagination.dto.js';
 import { assertSystemTransition, assertTransition, JOB } from '../../common/workflow.js';
 import { AuditService } from '../../core/audit.service.js';
 import { CompanyService } from '../../core/company.service.js';
+import { EmailTemplateService } from '../../core/email-template.service.js';
 import { NumberingService } from '../../core/numbering.service.js';
 import { Prisma, PrismaService, updateVersioned, type Tx } from '../../core/prisma.service.js';
 import { SettingsService } from '../../core/settings.service.js';
@@ -14,7 +15,6 @@ import { StorageService } from '../../core/storage.service.js';
 import { DocumentsService, requirePermission } from '../documents/documents.service.js';
 import { MastersService } from '../masters/masters.service.js';
 import { PdfService } from '../pdf/pdf.service.js';
-import { esc } from '../pdf/templates/base.js';
 import { acknowledgementHtml, labelsHtml, srfHtml, type JobDocument } from '../pdf/templates/job-documents.js';
 import { QuotationsService } from '../quotations/quotations.service.js';
 import type { AddDeviationDto, CreateJobDto, JobQuery, SampleInput, SampleQuery, SendAckDto, UpdateJobDto, UpdateSampleDto } from './jobs.dto.js';
@@ -62,7 +62,9 @@ const jobFull = (j: JobRow) => {
   };
 };
 
-const ACTIVE_TEST = { deletedAt: null, status: { not: 'CANCELLED' } } as const;
+
+/** Per sample: test id -> what the accepted quotation agreed for it. */
+export type QuotedRates = Map<string, { rate: string; quantity: number; amount: string; source: string }>;
 
 @Injectable()
 export class JobsService implements OnModuleInit {
@@ -77,21 +79,30 @@ export class JobsService implements OnModuleInit {
     private readonly pdf: PdfService,
     private readonly storage: StorageService,
     private readonly quotations: QuotationsService,
+    private readonly templates: EmailTemplateService,
   ) {}
 
   onModuleInit() {
     this.quotations.converter = (tx, quotationId) => this.fromQuotation(tx, quotationId);
-    const jobDoc = (kind: string, title: string, html: (j: JobDocument) => string) =>
+    const jobDoc = (kind: string, title: string, html: (j: JobDocument, p: Record<string, unknown>) => string | Promise<string>, check?: (p: Record<string, unknown>) => Promise<void>) =>
       this.documents.register(kind, {
         // These print the customer's name and contacts, so viewing jobs alone is not enough.
-        authorize: requirePermission('customers.view'),
+        authorize: async (p) => {
+          requirePermission('customers.view')();
+          await check?.(p);
+        },
         run: async (p) => {
           const j = await this.jobDocument(String(p.jobId));
-          return { buffer: await this.pdf.render(html(j), { company: this.company.snapshot() }), filename: `${title} ${j.jobNo}.pdf`.replace(/[/\\]/g, '-'), mimeType: 'application/pdf', entity: 'Job', entityId: String(p.jobId) };
+          return { buffer: await this.pdf.render(await html(j, p), { company: this.company.snapshot() }), filename: `${title} ${j.jobNo}.pdf`.replace(/[/\\]/g, '-'), mimeType: 'application/pdf', entity: 'Job', entityId: String(p.jobId) };
         },
       });
     jobDoc('job-srf', 'SRF', (j) => srfHtml(j, this.company.snapshot()));
-    jobDoc('job-acknowledgement', 'Acknowledgement', (j) => acknowledgementHtml(j, this.company.snapshot()));
+    jobDoc(
+      'job-acknowledgement',
+      'Acknowledgement',
+      async (j, p) => acknowledgementHtml(j, this.company.snapshot(), await this.ackPhotos(String(p.jobId), p.photoIds)),
+      async (p) => void (await this.checkAckPhotos(String(p.jobId), p.photoIds)),
+    );
     this.documents.register('sample-labels', {
       authorize: requirePermission('jobs.view'),
       run: async (p) => {
@@ -110,6 +121,8 @@ export class JobsService implements OnModuleInit {
       },
     });
     this.documents.register('letter-combine', {
+      // Reads stored files by id, so only combineLetter() may queue it, after checking the pages belong to the job.
+      internal: true,
       authorize: requirePermission('jobs.create', 'jobs.edit'),
       run: async (p) => {
         const images = await Promise.all((p.fileIds as string[]).map(async (id) => {
@@ -221,7 +234,7 @@ export class JobsService implements OnModuleInit {
     return new Date(istToday().getTime() + days * 86_400_000);
   }
 
-  private async createJobRow(tx: Tx, dto: Omit<CreateJobDto, 'noQuotationReason'> & { noQuotationReason?: string | null; quotationId?: string | null }, rates?: Map<string, { rate: string; source: string }>) {
+  private async createJobRow(tx: Tx, dto: Omit<CreateJobDto, 'noQuotationReason'> & { noQuotationReason?: string | null; quotationId?: string | null }, quotedBySample?: QuotedRates[]) {
     const customer = await tx.customer.findFirst({ where: { id: dto.customerId, deletedAt: null } });
     if (!customer) throw badRequest('Customer not found', [{ field: 'customerId', message: 'Not found' }]);
     await this.assertLookups(tx, dto);
@@ -235,14 +248,14 @@ export class JobsService implements OnModuleInit {
     await this.audit.status(tx, { entity: 'Job', entityId: job.id, from: null, to: 'RECEIVED', jobId: job.id, reason: dto.noQuotationReason });
     const retentionUntil = await this.retentionDate(tx);
     const sampleIds: string[] = [];
-    for (const s of dto.samples) {
+    for (const [index, s] of dto.samples.entries()) {
       const sampleNo = await this.numbering.next(tx, 'SAMPLE');
       const sample = await tx.sample.create({
         data: { sampleNo, jobId: job.id, description: s.description, condition: s.condition, quantity: s.quantity, size: s.size, returnable: s.returnable ?? false, retentionUntil, attributes: s.attributes?.length ? { createMany: { data: s.attributes } } : undefined },
       });
       sampleIds.push(sample.id);
       await this.audit.status(tx, { entity: 'Sample', entityId: sample.id, from: null, to: 'RECEIVED', jobId: job.id });
-      await this.addRequestedTests(tx, sample.id, s.testIds ?? [], dto.customerId, dto.urgent ?? false, rates);
+      await this.addRequestedTests(tx, sample.id, s.testIds ?? [], dto.customerId, dto.urgent ?? false, quotedBySample?.[index]);
     }
     for (const d of dto.deviations ?? []) {
       const type = await tx.lookupValue.findFirst({ where: { id: d.typeId, kind: 'DEVIATION_TYPE' } });
@@ -254,7 +267,7 @@ export class JobsService implements OnModuleInit {
   }
 
   /** Requested tests stay unplanned until the planner picks them up. Rate priority: quotation, customer, standard. */
-  async addRequestedTests(tx: Tx, sampleId: string, testIds: string[], customerId: string, urgent: boolean, rates?: Map<string, { rate: string; source: string }>) {
+  async addRequestedTests(tx: Tx, sampleId: string, testIds: string[], customerId: string, urgent: boolean, rates?: QuotedRates) {
     for (const testId of testIds) {
       const test = await tx.testMaster.findFirst({ where: { id: testId, deletedAt: null }, include: { method: true } });
       if (!test) throw badRequest('A requested test no longer exists', [{ field: 'samples', message: 'Unknown test' }]);
@@ -262,8 +275,9 @@ export class JobsService implements OnModuleInit {
       const looked = fromQuote ? null : await this.masters.lookupRate(testId, customerId, istToday(), tx);
       await tx.sampleTest.create({
         data: {
-          sampleId, testId, testCode: test.code, testName: test.name, methodName: test.method ? [test.method.name, test.method.standardRef].filter(Boolean).join(', ') : null, departmentId: test.departmentId, urgent,
+          sampleId, testId, testCode: test.code, testName: test.name, methodName: methodLabel(test.method), departmentId: test.departmentId, urgent,
           rate: fromQuote?.rate ?? looked?.rate ?? null, rateSource: fromQuote ? 'QUOTATION' : (looked?.source ?? null),
+          billQuantity: fromQuote?.quantity ?? 1, billAmount: fromQuote?.amount ?? null,
         },
       });
     }
@@ -276,21 +290,35 @@ export class JobsService implements OnModuleInit {
     return this.get(id);
   }
 
-  /** Accepted quotation to sample request: carries customer, samples, tests and rates across. */
+  /**
+   * Accepted quotation to sample request: carries customer, samples, tests, quantities and the agreed amounts
+   * across, so the invoice later equals what the customer accepted (line discounts included).
+   */
   private async fromQuotation(tx: Tx, quotationId: string) {
     const q = await tx.quotation.findUniqueOrThrow({ where: { id: quotationId }, include: { versions: { orderBy: { versionNo: 'desc' }, take: 1, include: { lines: { orderBy: { seq: 'asc' } } } } } });
     const lines = q.versions[0].lines;
     const bySample = new Map<string, typeof lines>();
     for (const l of lines) bySample.set(l.sampleDescription, [...(bySample.get(l.sampleDescription) ?? []), l]);
-    const rates = new Map(lines.map((l) => [l.testId, { rate: String(l.rate), source: 'QUOTATION' }]));
+    const entries = [...bySample.entries()];
+    const quoted = entries.map(([, ls]) => {
+      const rates: QuotedRates = new Map();
+      for (const l of ls) {
+        const prev = rates.get(l.testId);
+        const quantity = (prev?.quantity ?? 0) + l.quantity;
+        const amount = new Prisma.Decimal(prev?.amount ?? 0).plus(l.amount);
+        // Net unit rate for display; the amount is what is billed, exactly as quoted.
+        rates.set(l.testId, { rate: amount.div(quantity).toDecimalPlaces(2).toFixed(2), quantity, amount: amount.toFixed(2), source: 'QUOTATION' });
+      }
+      return rates;
+    });
     const job = await this.createJobRow(
       tx,
       {
         customerId: q.customerId,
         quotationId,
-        samples: [...bySample.entries()].map(([description, ls]) => ({ description, quantity: ls[0].requiredQuantity, testIds: [...new Set(ls.map((l) => l.testId))] })),
+        samples: entries.map(([description, ls]) => ({ description, quantity: ls[0].requiredQuantity, testIds: [...new Set(ls.map((l) => l.testId))] })),
       },
-      rates,
+      quoted,
     );
     return { jobId: job.id, jobNo: job.jobNo };
   }
@@ -366,13 +394,24 @@ export class JobsService implements OnModuleInit {
    * Sample and job status follow from their tests. Runs after any test change.
    * A job on hold or cancelled keeps its status until a person releases it.
    */
+  /**
+   * Serialises work on one job inside a transaction. Two approvals of a sample's last tests, or a status sync
+   * racing another, then run one after the other, each seeing the other's committed changes.
+   */
+  async lockJob(tx: Tx, jobId: string): Promise<void> {
+    await tx.$queryRaw`SELECT id FROM "Job" WHERE id = ${jobId} FOR UPDATE`;
+  }
+
   async syncStatus(tx: Tx, jobId: string): Promise<void> {
-    const job = await tx.job.findUniqueOrThrow({ where: { id: jobId }, include: { samples: { include: { tests: { where: ACTIVE_TEST, select: { status: true, plannedAt: true } }, reports: { include: { revisions: { select: { status: true } } } } } } } });
+    await this.lockJob(tx, jobId);
+    const job = await tx.job.findUniqueOrThrow({ where: { id: jobId }, include: { samples: { include: { tests: { where: { deletedAt: null }, select: { status: true, plannedAt: true } }, reports: { include: { revisions: { select: { status: true } } } } } } } });
     const rank = ['RECEIVED', 'PLANNED', 'IN_TESTING', 'REPORTING', 'COMPLETED'] as const;
     let lowest: number | null = null;
     for (const s of job.samples) {
       if (s.status === 'CANCELLED') continue;
-      const tests = s.tests;
+      const tests = s.tests.filter((t) => t.status !== 'CANCELLED');
+      // Every test on it cancelled: the sample needs no more work, so it must not pull the job back to Received.
+      if (!tests.length && s.tests.length) continue;
       let next: (typeof rank)[number] = 'RECEIVED';
       const planned = tests.length > 0 && tests.every((t) => t.plannedAt);
       if (planned) next = 'PLANNED';
@@ -397,19 +436,60 @@ export class JobsService implements OnModuleInit {
   }
 
   // ---------------------------------------------------------------- acknowledgement & letters
+  /**
+   * Photos chosen for the acknowledgement: optional, at most 12, and only photos taken of this job's own samples.
+   * Returns the files in the order given.
+   */
+  private async checkAckPhotos(jobId: string, raw: unknown) {
+    if (raw === undefined || raw === null) return [];
+    if (!Array.isArray(raw) || raw.length > 12 || raw.some((x) => typeof x !== 'string')) throw badRequest('Choose up to 12 photos', [{ field: 'photoIds', message: 'Up to 12 photos' }]);
+    const ids = [...new Set(raw as string[])];
+    if (!ids.length) return [];
+    const files = await this.prisma.fileObject.findMany({
+      where: { id: { in: ids }, deletedAt: null, entity: 'Sample', category: 'sample-image', mimeType: { startsWith: 'image/' }, entityId: { in: (await this.prisma.sample.findMany({ where: { jobId }, select: { id: true } })).map((s) => s.id) } },
+    });
+    if (files.length !== ids.length) throw badRequest('Only photos of this job\'s samples can go on its acknowledgement', [{ field: 'photoIds', message: 'Not a photo of this job' }]);
+    return ids.map((id) => files.find((f) => f.id === id)!);
+  }
+
+  private async ackPhotos(jobId: string, raw: unknown) {
+    const files = await this.checkAckPhotos(jobId, raw);
+    const sampleNos = new Map((await this.prisma.sample.findMany({ where: { jobId }, select: { id: true, sampleNo: true } })).map((s) => [s.id, s.sampleNo]));
+    const photos = [];
+    for (const f of files) {
+      try {
+        const data = await this.storage.read(f.id);
+        photos.push({ dataUri: `data:${data.mimeType};base64,${data.buffer.toString('base64')}`, caption: [sampleNos.get(f.entityId!), f.caption].filter(Boolean).join(': ') });
+      } catch {
+        // A photo missing from storage is left out rather than failing the letter.
+      }
+    }
+    return photos;
+  }
+
   async sendAcknowledgement(jobId: string, dto: SendAckDto) {
     const job = await this.loadJob(jobId);
-    const company = this.company.config;
+    const photos = await this.checkAckPhotos(jobId, dto.photoIds);
+    const mail = await this.templates.render('acknowledgement', {
+      ...this.templates.commonValues(),
+      jobNo: job.jobNo,
+      contactName: job.kindAttention ?? 'Sir/Madam',
+      customerName: job.customer.name,
+      sampleCount: job.samples.length,
+      photoText: photos.length ? (photos.length === 1 ? 'a photograph' : `${photos.length} photographs`) : null,
+      senderName: currentUser()?.name,
+    });
     const row = await this.prisma.documentJob.create({
       data: {
         kind: 'job-acknowledgement',
         params: {
           jobId,
+          ...(photos.length ? { photoIds: photos.map((f) => f.id) } : {}),
           email: {
             to: dto.to,
             cc: dto.cc ?? null,
-            subject: `Samples received: ${job.jobNo} — ${company.companyName}`,
-            bodyHtml: `<p>Dear ${esc(job.kindAttention ?? 'Sir/Madam')},</p><p>We have received your samples under job <strong>${esc(job.jobNo)}</strong>. The acknowledgement is attached.</p><p>Regards,<br>${esc(currentUser()?.name)}<br>${esc(company.companyName)}</p>`,
+            subject: mail.subject,
+            bodyHtml: mail.bodyHtml,
             template: 'acknowledgement',
             entity: 'Job',
             entityId: jobId,
@@ -419,7 +499,7 @@ export class JobsService implements OnModuleInit {
       },
     });
     await this.documents.queueExisting(row.id);
-    await this.audit.record({ action: 'Job.acknowledgementQueued', entity: 'Job', entityId: jobId, after: { to: dto.to } });
+    await this.audit.record({ action: 'Job.acknowledgementQueued', entity: 'Job', entityId: jobId, after: { to: dto.to, photos: photos.length } });
     return { ok: true };
   }
 

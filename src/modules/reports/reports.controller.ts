@@ -76,6 +76,12 @@ export class ReportsController {
     return this.reports.approve(id, dto.version, dto.password);
   }
 
+  /** For an approved report whose final PDF failed to render. */
+  @Post(':id/regenerate-pdf') @HttpCode(200) @Perm('reports.approve', 'reports.issue') @ApiOkResponse({ type: ReportDetailDto })
+  regeneratePdf(@Param('id', ParseUUIDPipe) id: string) {
+    return this.reports.regeneratePdf(id);
+  }
+
   @Post(':id/issue') @HttpCode(200) @Perm('reports.issue') @ApiOkResponse({ type: ReportDetailDto })
   issue(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ReportIssueDto) {
     return this.reports.issue(id, dto);

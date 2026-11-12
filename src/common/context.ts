@@ -9,11 +9,14 @@ export interface CurrentUser {
   permissions: Set<string>;
   sessionId: string;
   csrfToken: string;
+  /** when the password was last confirmed in this session (ms), for sensitive actions */
+  reauthAt?: number;
 }
 
 export interface RequestContext {
   requestId: string;
   ip: string | null;
+  userAgent?: string | null;
   user?: CurrentUser;
 }
 
@@ -26,3 +29,7 @@ export const currentUser = (): CurrentUser | undefined => storage.getStore()?.us
 /** Current user id, or null in background jobs and first-run setup. */
 export const actorId = (): string | null => storage.getStore()?.user?.id ?? null;
 export const can = (permission: string): boolean => storage.getStore()?.user?.permissions.has(permission) ?? false;
+
+/** How long a password confirmation covers sensitive actions in the same session. */
+// TODO(rbac-decision): how long a confirmed password covers sensitive actions (ten minutes chosen).
+export const REAUTH_WINDOW_MS = 10 * 60_000;

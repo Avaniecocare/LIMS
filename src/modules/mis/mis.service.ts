@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { can } from '../../common/context.js';
-import { forbidden, notFound } from '../../common/errors.js';
+import { forbidden, notFound, rule } from '../../common/errors.js';
 import { formatDate, formatDateTime, formatINR, istToday } from '../../common/india.js';
 import { skipTake, toPage } from '../../common/pagination.dto.js';
 import { CompanyService } from '../../core/company.service.js';
@@ -13,6 +13,8 @@ import { REPORTS, type MisColumn, type MisFilters, type MisReport } from './defi
 import type { MisQuery } from './mis.dto.js';
 
 const EXPORT_LIMIT = 200_000;
+/** A PDF is for reading and printing; beyond this a browser renderer runs out of memory, so larger sets go to Excel. */
+const PDF_EXPORT_LIMIT = 5_000;
 
 function display(col: MisColumn, v: unknown): string {
   if (v === null || v === undefined || v === '') return '';
@@ -87,9 +89,13 @@ export class MisService implements OnModuleInit {
 
   private async exportFile(report: MisReport, p: MisFilters & { format?: string; customerVisible?: boolean }) {
     const columns = this.columnsFor(report, p.customerVisible === true);
-    const { rows } = await report.run({ db: this.read, f: p, today: istToday(), skip: 0, take: EXPORT_LIMIT });
+    const asPdf = p.format === 'pdf';
+    const { rows, total } = await report.run({ db: this.read, f: p, today: istToday(), skip: 0, take: asPdf ? PDF_EXPORT_LIMIT + 1 : EXPORT_LIMIT });
     const name = `${report.title}`.replace(/[^\w\- ]/g, '');
-    if (p.format === 'pdf') {
+    if (asPdf && (rows.length > PDF_EXPORT_LIMIT || (total ?? 0) > PDF_EXPORT_LIMIT)) {
+      throw rule('TOO_MANY_ROWS', `This report has more than ${PDF_EXPORT_LIMIT.toLocaleString('en-IN')} rows, which is too many for a PDF. Narrow the filters or export to Excel.`);
+    }
+    if (asPdf) {
       const company = this.company.snapshot();
       const filters = [p.from || p.to ? `Period: ${p.from ? formatDate(p.from) : 'start'} to ${p.to ? formatDate(p.to) : 'today'}` : null].filter(Boolean).join(' · ');
       const html = page(report.title, company, `${letterhead(company)}<h1>${esc(report.title)}</h1><p class="small center">${esc(filters)} · Generated ${esc(formatDateTime(new Date()))} · ${rows.length} rows</p>

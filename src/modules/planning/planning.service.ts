@@ -2,7 +2,7 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import { actorId } from '../../common/context.js';
 import { addWorkingDays } from '../../common/calendar.js';
 import { badRequest, conflict, notFound, rule } from '../../common/errors.js';
-import { istToday } from '../../common/india.js';
+import { istToday, methodLabel } from '../../common/india.js';
 import { orderBy, skipTake, toPage } from '../../common/pagination.dto.js';
 import { assertTransition, TEST } from '../../common/workflow.js';
 import { AuditService } from '../../core/audit.service.js';
@@ -97,7 +97,7 @@ export class PlanningService implements OnModuleInit {
     }
     const tests = await this.prisma.testMaster.findMany({ where: { id: { in: [...testIds] }, deletedAt: null, isActive: true }, include: { method: true, parameters: { where: { deletedAt: null, isActive: true }, orderBy: { sortOrder: 'asc' } } }, orderBy: { name: 'asc' } });
     return tests.map((t) => ({
-      testId: t.id, testCode: t.code, testName: t.name, methodName: t.method ? [t.method.name, t.method.standardRef].filter(Boolean).join(', ') : null, category: t.category, defaultTatDays: t.defaultTatDays,
+      testId: t.id, testCode: t.code, testName: t.name, methodName: methodLabel(t.method), category: t.category, defaultTatDays: t.defaultTatDays,
       parameters: t.parameters.map((p) => ({ id: p.id, code: p.code, name: p.name })),
     }));
   }
@@ -124,8 +124,8 @@ export class PlanningService implements OnModuleInit {
         .filter(Boolean);
       await tx.parameterResult.upsert({
         where: { sampleTestId_parameterId: { sampleTestId, parameterId: p.id } },
-        create: { sampleTestId, parameterId: p.id, code: p.code, name: p.name, kind: p.kind, unit: p.unit?.symbol ?? null, decimals: p.decimals, sortOrder: p.sortOrder, accredited: methodAccredited && isAccredited(p.accredited, p.accreditedUntil, today), limits: limits as Prisma.InputJsonValue },
-        update: { limits: limits as Prisma.InputJsonValue },
+        create: { sampleTestId, parameterId: p.id, code: p.code, name: p.name, kind: p.kind, unit: p.unit?.symbol ?? null, decimals: p.decimals, sortOrder: p.sortOrder, showOnReport: p.showOnReport, accredited: methodAccredited && isAccredited(p.accredited, p.accreditedUntil, today), limits: limits as Prisma.InputJsonValue },
+        update: { limits: limits as Prisma.InputJsonValue, showOnReport: p.showOnReport },
       });
     }
     if (!params.length) throw rule('NO_PARAMETERS', 'This test has no parameters. Add them in Masters before planning.');
@@ -192,6 +192,11 @@ export class PlanningService implements OnModuleInit {
     if (!t) throw notFound('Test');
     if (t.sample.job.status === 'ON_HOLD' || t.sample.job.status === 'CANCELLED') throw rule('JOB_NOT_ACTIVE', 'This job is not active');
     if (!t.plannedAt) throw rule('NOT_PLANNED', `${t.testName} must be planned before it is assigned`);
+    // Labs that require it refuse a test to anyone not currently authorised for it (Quality, Competency).
+    if (t.assignedToId !== assignedToId && (await this.settings.get('controls.requireAuthorisation', tx))) {
+      const ok = await tx.staffAuthorisation.findFirst({ where: { userId: assignedToId, testId: t.testId, withdrawnAt: null, OR: [{ validUntil: null }, { validUntil: { gte: istToday() } }] } });
+      if (!ok) throw rule('NOT_AUTHORISED', `The analyst is not authorised for ${t.testName}. Authorise them in Quality, Competency, or choose someone who is.`);
+    }
     if (t.status === 'PLANNED') {
       assertTransition(TEST, 'PLANNED', 'ASSIGNED');
       await tx.sampleTest.update({ where: { id: t.id }, data: { status: 'ASSIGNED', assignedToId, assignedAt: new Date(), instrumentId: instrumentId ?? t.instrumentId, version: { increment: 1 } } });

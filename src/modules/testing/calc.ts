@@ -21,9 +21,13 @@ export interface ParamRow {
   options?: { value: string; isPass: boolean | null }[];
 }
 
+export type Qualifier = '<' | '>';
+
 export interface ComputedRow {
   parameterId: string;
   numericValue: string | null;
+  /** set when the result is "below" or "above" what the method can measure, e.g. "< 0.005" */
+  qualifier: Qualifier | null;
   textValue: string | null;
   passPrimary: boolean | null;
   passDual: boolean | null;
@@ -31,14 +35,35 @@ export interface ComputedRow {
   error: string | null;
 }
 
-export function passAgainst(value: string | null, limit: LimitSnapshot | undefined): boolean | null {
+export function passAgainst(value: string | null, limit: LimitSnapshot | undefined, qualifier: Qualifier | null = null): boolean | null {
   if (!limit || value === null) return null;
   if (limit.min === null && limit.max === null) return null;
   const v = new Decimal(value);
+  if (qualifier === '<') {
+    // The true value is somewhere below v: only certain outcomes count, otherwise it is left undecided.
+    if (limit.min !== null && v.lessThanOrEqualTo(limit.min)) return false;
+    if (limit.min !== null) return null;
+    return v.lessThanOrEqualTo(limit.max!) ? true : null;
+  }
+  if (qualifier === '>') {
+    if (limit.max !== null && v.greaterThanOrEqualTo(limit.max)) return false;
+    if (limit.max !== null) return null;
+    return v.greaterThanOrEqualTo(limit.min!) ? true : null;
+  }
   if (limit.min !== null && v.lessThan(limit.min)) return false;
   if (limit.max !== null && v.greaterThan(limit.max)) return false;
   return true;
 }
+
+/** "<0.005", "< 0.005" or ">250" for a numeric result; anything else is a plain value. */
+export function splitQualifier(raw: string): { qualifier: Qualifier | null; number: string } {
+  const m = /^([<>])\s*(.+)$/.exec(raw.trim());
+  return m ? { qualifier: m[1] as Qualifier, number: m[2].trim() } : { qualifier: null, number: raw.trim() };
+}
+
+/** The stored form of an entered numeric result, as the analyst would type it. */
+export const enteredValue = (r: { numericValue: unknown; textValue: string | null; qualifier?: string | null }): string | null =>
+  r.numericValue !== null && r.numericValue !== undefined ? `${r.qualifier ?? ''}${String(r.numericValue)}` : r.textValue;
 
 /** The results column holds 12 digits before the point. */
 const MAX_MAGNITUDE = new Decimal('1e12');
@@ -62,18 +87,23 @@ export function computeResults(params: ParamRow[], entered: Record<string, strin
   const byCode = new Map(params.map((p) => [p.code, p]));
   const out = new Map<string, ComputedRow>();
   const values = new Map<string, string>();
+  // "< x" results are real results but not exact numbers, so formulas must not use them.
+  const inexact = new Set<string>();
 
   for (const p of params) {
     if (p.kind === 'CALCULATED') continue;
     const raw = entered[p.parameterId]?.trim() ?? '';
-    const row: ComputedRow = { parameterId: p.parameterId, numericValue: null, textValue: null, passPrimary: null, passDual: null, calculation: null, error: null };
+    const row: ComputedRow = { parameterId: p.parameterId, numericValue: null, qualifier: null, textValue: null, passPrimary: null, passDual: null, calculation: null, error: null };
     if (raw !== '') {
       if (p.kind === 'NUMERIC') {
-        if (!isNumber(raw)) row.error = 'Not a number';
-        else if (!inRange(raw)) row.error = 'Too large';
+        const { qualifier, number } = splitQualifier(raw);
+        if (!isNumber(number)) row.error = 'Not a number';
+        else if (!inRange(number)) row.error = 'Too large';
         else {
-          row.numericValue = new Decimal(raw).toDecimalPlaces(p.decimals, Decimal.ROUND_HALF_UP).toFixed(p.decimals);
-          values.set(p.code, row.numericValue);
+          row.numericValue = new Decimal(number).toDecimalPlaces(p.decimals, Decimal.ROUND_HALF_UP).toFixed(p.decimals);
+          row.qualifier = qualifier;
+          if (qualifier) inexact.add(p.code);
+          else values.set(p.code, row.numericValue);
         }
       } else if (p.kind === 'RESULT_SET') {
         const option = p.options?.find((o) => o.value === raw);
@@ -95,9 +125,16 @@ export function computeResults(params: ParamRow[], entered: Record<string, strin
   for (let pass = 0; pass <= params.length && pending.size; pass++) {
     for (const p of [...pending]) {
       const f = p.formula;
-      const row: ComputedRow = { parameterId: p.parameterId, numericValue: null, textValue: null, passPrimary: null, passDual: null, calculation: null, error: null };
+      const row: ComputedRow = { parameterId: p.parameterId, numericValue: null, qualifier: null, textValue: null, passPrimary: null, passDual: null, calculation: null, error: null };
       if (!f) {
         row.error = 'No formula set';
+        out.set(p.parameterId, row);
+        pending.delete(p);
+        continue;
+      }
+      const blocked = Object.values(f.bindings).filter((code) => inexact.has(code));
+      if (blocked.length) {
+        row.error = `Can't calculate from a result entered with < or > (${blocked.join(', ')})`;
         out.set(p.parameterId, row);
         pending.delete(p);
         continue;
@@ -125,14 +162,14 @@ export function computeResults(params: ParamRow[], entered: Record<string, strin
   }
   for (const p of pending) {
     const missing = Object.values(p.formula?.bindings ?? {}).filter((c) => !values.has(c) && byCode.has(c));
-    out.set(p.parameterId, { parameterId: p.parameterId, numericValue: null, textValue: null, passPrimary: null, passDual: null, calculation: null, error: missing.length ? `Waiting for ${missing.join(', ')}` : 'Waiting for inputs' });
+    out.set(p.parameterId, { parameterId: p.parameterId, numericValue: null, qualifier: null, textValue: null, passPrimary: null, passDual: null, calculation: null, error: missing.length ? `Waiting for ${missing.join(', ')}` : 'Waiting for inputs' });
   }
 
   for (const p of params) {
     const row = out.get(p.parameterId)!;
     if (row.numericValue !== null) {
-      row.passPrimary = passAgainst(row.numericValue, p.limits.find((l) => l.role === 'primary'));
-      row.passDual = passAgainst(row.numericValue, p.limits.find((l) => l.role === 'dual'));
+      row.passPrimary = passAgainst(row.numericValue, p.limits.find((l) => l.role === 'primary'), row.qualifier);
+      row.passDual = passAgainst(row.numericValue, p.limits.find((l) => l.role === 'dual'), row.qualifier);
     }
   }
   return params.map((p) => out.get(p.parameterId)!);

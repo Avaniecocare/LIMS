@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- rows are shaped per report and described by their column list */
 import { Prisma, type ReadPrismaService } from '../../core/prisma.service.js';
 import { ageingBucket, daysOverdue } from '../invoices/ageing.js';
+import { enteredValue } from '../testing/calc.js';
 import { balanceOf } from '../invoices/invoices.service.js';
 
 export interface MisFilters {
@@ -186,7 +187,7 @@ export const REPORTS: MisReport[] = [
     run: (c) => {
       const where: Prisma.ParameterResultWhereInput = { sampleTest: { deletedAt: null, status: { in: ['RESULTS_SUBMITTED', 'APPROVED'] }, submittedAt: between(c.f) ?? { not: null }, ...testFilter(c.f) } };
       return page(
-        (a) => c.db.parameterResult.findMany({ where, include: { sampleTest: { include: testInclude } }, orderBy: [{ sampleTest: { submittedAt: 'desc' } }, { sortOrder: 'asc' }], ...a }).then((rows) => rows.map((r) => ({ sampleNo: r.sampleTest.sample.sampleNo, customer: r.sampleTest.sample.job.customer.name, testName: r.sampleTest.testName, parameter: r.name, value: r.numericValue !== null ? String(r.numericValue) : r.textValue, unit: r.unit, pass: r.passPrimary === null ? '' : r.passPrimary ? 'Pass' : 'Fail', conductedBy: r.sampleTest.conductedByName, submittedAt: r.sampleTest.submittedAt }))),
+        (a) => c.db.parameterResult.findMany({ where, include: { sampleTest: { include: testInclude } }, orderBy: [{ sampleTest: { submittedAt: 'desc' } }, { sortOrder: 'asc' }], ...a }).then((rows) => rows.map((r) => ({ sampleNo: r.sampleTest.sample.sampleNo, customer: r.sampleTest.sample.job.customer.name, testName: r.sampleTest.testName, parameter: r.name, value: enteredValue(r), unit: r.unit, pass: r.passPrimary === null ? '' : r.passPrimary ? 'Pass' : 'Fail', conductedBy: r.sampleTest.conductedByName, submittedAt: r.sampleTest.submittedAt }))),
         () => c.db.parameterResult.count({ where }),
         c,
       );

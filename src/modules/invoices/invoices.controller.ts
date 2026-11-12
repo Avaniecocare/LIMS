@@ -1,13 +1,14 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { OkDto } from '../auth/auth.dto.js';
-import { Perm } from '../auth/decorators.js';
+import { Perm, RequireModule } from '../auth/decorators.js';
 import { AuditHistoryDto } from '../jobs/jobs.dto.js';
 import { EmailLogDto } from '../quotations/quotations.dto.js';
 import { ApplyAdvanceDto, CancelInvoiceDto, CreateCreditNoteDto, CreateInvoiceDto, CreatePaymentDto, DueQuery, DueSummaryDto, EmailInvoiceDto, InvoiceDto, InvoicePageDto, InvoiceQuery, IssueInvoiceDto, PaymentDto, PaymentPageDto, PaymentQuery, ReadyPageDto, RemindDto, ReversePaymentDto, UpdateDraftInvoiceDto } from './invoices.dto.js';
 import { InvoicesService } from './invoices.service.js';
 
 @ApiTags('invoices')
+@RequireModule('billing')
 @Controller()
 export class InvoicesController {
   constructor(private readonly invoices: InvoicesService) {}

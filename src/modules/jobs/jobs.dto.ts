@@ -104,6 +104,8 @@ export class CombineLetterDto {
 export class SendAckDto {
   @IsEmail() to: string;
   @IsOptional() @IsEmail() cc?: string | null;
+  /** optional photos of the samples as received, printed on the acknowledgement in this order */
+  @IsOptional() @IsArray() @ArrayMaxSize(12) @IsUUID('all', { each: true }) photoIds?: string[];
 }
 
 export class DeviationDto {

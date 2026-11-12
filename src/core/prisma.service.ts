@@ -10,7 +10,8 @@ export { Prisma };
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleDestroy {
   constructor(@Inject(INFRA_CONFIG) cfg: InfraConfig) {
-    super({ adapter: new PrismaPg({ connectionString: cfg.databaseUrl, max: cfg.databasePoolSize }) });
+    // Big bookings and plans run many statements in one transaction; Prisma's 5-second default turns them into errors.
+    super({ adapter: new PrismaPg({ connectionString: cfg.databaseUrl, max: cfg.databasePoolSize }), transactionOptions: { timeout: 30_000, maxWait: 10_000 } });
   }
   async onModuleDestroy() {
     await this.$disconnect();
@@ -25,7 +26,8 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy {
 export class ReadPrismaService extends PrismaClient implements OnModuleDestroy {
   constructor(@Inject(INFRA_CONFIG) cfg: InfraConfig) {
     super({
-      adapter: new PrismaPg({ connectionString: cfg.databaseReadUrl ?? cfg.databaseUrl, max: cfg.databasePoolSize }),
+      // Without a replica this is a second pool on the same database, so keep it small.
+      adapter: new PrismaPg({ connectionString: cfg.databaseReadUrl ?? cfg.databaseUrl, max: cfg.databaseReadUrl ? cfg.databasePoolSize : Math.max(2, Math.ceil(cfg.databasePoolSize / 4)) }),
     });
   }
   async onModuleDestroy() {

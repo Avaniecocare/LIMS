@@ -4,8 +4,10 @@ import { Reflector } from '@nestjs/core';
 import type { FastifyRequest } from 'fastify';
 import { getContext, type CurrentUser } from '../../common/context.js';
 import { AppError, forbidden } from '../../common/errors.js';
+import { logger } from '../../common/logger.js';
+import { ModulesService, type ModuleKey } from '../../core/modules.service.js';
 import { PrismaService } from '../../core/prisma.service.js';
-import { PERMS_KEY, PUBLIC_KEY } from './decorators.js';
+import { PERMS_KEY, MODULE_KEY, PUBLIC_KEY, SIGNED_IN_KEY } from './decorators.js';
 import { SessionService } from './session.service.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -24,10 +26,14 @@ export class AuthGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly sessions: SessionService,
     private readonly prisma: PrismaService,
+    private readonly modules: ModulesService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const targets = [context.getHandler(), context.getClass()];
+    // A module the lab has turned off is closed to everyone, its public routes (phone links) included.
+    const module = this.reflector.getAllAndOverride<ModuleKey>(MODULE_KEY, targets);
+    if (module) await this.modules.require(module);
     if (this.reflector.getAllAndOverride<boolean>(PUBLIC_KEY, targets)) return true;
 
     const req = context.switchToHttp().getRequest<FastifyRequest>();
@@ -67,12 +73,18 @@ export class AuthGuard implements CanActivate {
       roles: activeRoles.map((r) => r.role.name),
       permissions: new Set(activeRoles.flatMap((r) => r.role.permissions.map((p) => p.permissionCode))),
       sessionId: sid,
+      reauthAt: session.reauthAt,
       csrfToken: session.csrfToken,
     };
     const ctx = getContext();
     if (ctx) ctx.user = current;
 
     const required = this.reflector.getAllAndOverride<string[]>(PERMS_KEY, targets);
+    // Deny by default: a route must say who may call it. A forgotten check fails closed, never open.
+    if (!required?.length && !this.reflector.getAllAndOverride<string>(SIGNED_IN_KEY, targets)) {
+      logger.error({ route: req.url }, 'route has no access rule (@Perm, @SignedIn or @Public); refused');
+      throw forbidden();
+    }
     if (required?.length && !required.some((p) => current.permissions.has(p))) throw forbidden();
     return true;
   }

@@ -11,14 +11,16 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
 import { runWithContext } from './common/context.js';
 import { AllExceptionsFilter, AppError, flattenValidation } from './common/errors.js';
+import { installErrorWebhook } from './common/error-webhook.js';
 import { logger } from './common/logger.js';
 import { INFRA_CONFIG, type InfraConfig } from './config/infra.config.js';
 
 /** Builds the API. Tests use this too, so they exercise the same middleware as production. */
 export async function createApp(options: { trustProxy?: boolean } = {}): Promise<NestFastifyApplication> {
   const adapter = new FastifyAdapter({ trustProxy: options.trustProxy ?? process.env.TRUST_PROXY === 'true', bodyLimit: 2 * 1024 * 1024 });
-  const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, { logger: ['warn', 'error'] });
+  const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, { logger: ['warn', 'error'], rawBody: true }); // raw bodies: webhook signatures
   const infra = app.get<InfraConfig>(INFRA_CONFIG);
+  installErrorWebhook(infra.errorTrackingDsn, 'lims');
   const fastify = app.getHttpAdapter().getInstance();
 
   // Request id plus AsyncLocalStorage context, for logs and the audit trail.
@@ -27,7 +29,7 @@ export async function createApp(options: { trustProxy?: boolean } = {}): Promise
     const requestId = typeof header === 'string' && /^[\w-]{8,64}$/.test(header) ? header : randomUUID();
     void reply.header('X-Request-Id', requestId);
     (req as unknown as { startedAt: number }).startedAt = Date.now();
-    runWithContext({ requestId, ip: req.ip ?? null }, done);
+    runWithContext({ requestId, ip: req.ip ?? null, userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null }, done);
   });
   fastify.addHook('onResponse', (req, reply, done) => {
     logger.info(

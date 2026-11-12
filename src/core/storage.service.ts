@@ -21,6 +21,29 @@ export function sniffMime(buffer: Buffer): string | null {
   return SIGNATURES.find((s) => s.test(buffer))?.mime ?? null;
 }
 
+export const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+/**
+ * The file library also takes Word, Excel and CSV documents (SOPs, certificates, price lists). Checked by
+ * content: an Office file is a ZIP holding its own part names; a CSV must be plain UTF-8 text with commas.
+ */
+export function sniffLibraryMime(buffer: Buffer, filename: string): string | null {
+  const basic = sniffMime(buffer);
+  if (basic) return basic;
+  const isZip = buffer.length > 4 && buffer[0] === 0x50 && buffer[1] === 0x4b && buffer[2] === 0x03 && buffer[3] === 0x04;
+  if (isZip && buffer.includes('[Content_Types].xml')) {
+    if (buffer.includes('word/document.xml') || buffer.includes('word/')) return DOCX_MIME;
+    if (buffer.includes('xl/workbook.xml') || buffer.includes('xl/')) return XLSX_TYPE;
+    return null;
+  }
+  if (/\.csv$/i.test(filename) && !buffer.includes(0)) {
+    const text = buffer.subarray(0, 4096).toString('utf8');
+    if (!text.includes('\uFFFD') && text.includes(',')) return 'text/csv';
+  }
+  return null;
+}
+
 export interface StoreInput {
   buffer: Buffer;
   originalName: string;
@@ -74,6 +97,15 @@ export class StorageService {
     return this.store({ ...input, mimeType: sniffed }, tx);
   }
 
+  /** File library uploads: also Word, Excel and CSV, still checked by content and size. */
+  async storeLibraryUpload(input: StoreInput, tx?: Tx) {
+    if (input.buffer.length === 0) throw badRequest('The file is empty', [{ field: 'file', message: 'The file is empty' }]);
+    if (input.buffer.length > this.cfg.maxUploadBytes) throw badRequest('The file is too large', [{ field: 'file', message: 'The file is too large' }]);
+    const sniffed = sniffLibraryMime(input.buffer, input.originalName);
+    if (!sniffed) throw badRequest('Only PDF, images (PNG, JPEG, WebP), Word, Excel and CSV files are accepted', [{ field: 'file', message: 'Unsupported file type' }]);
+    return this.store({ ...input, mimeType: sniffed }, tx);
+  }
+
   /** System-generated files (PDF, Excel). */
   async store(input: StoreInput, tx?: Tx) {
     await this.ensureBucket();
@@ -116,7 +148,8 @@ export class StorageService {
       new GetObjectCommand({
         Bucket: this.cfg.s3.bucket,
         Key: file.storageKey,
-        ResponseContentDisposition: `inline; filename="${file.originalName}"`,
+        // PDFs and images open in the browser; anything else (Word, Excel, CSV) downloads.
+        ResponseContentDisposition: `${/^(application\/pdf|image\/)/.test(file.mimeType) ? 'inline' : 'attachment'}; filename="${file.originalName}"`,
       }),
       { expiresIn: SIGNED_URL_SECONDS },
     );

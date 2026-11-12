@@ -1,10 +1,11 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { Perm } from '../auth/decorators.js';
+import { Perm, RequireModule } from '../auth/decorators.js';
 import { CreateOrderDto, OrderDto, OrderPageDto, OrderQuery, OwnerDto, PipelineStageDto, UpdateOrderDto } from './orders.dto.js';
 import { OrdersService } from './orders.service.js';
 
 @ApiTags('orders')
+@RequireModule('quotations')
 @Controller('orders')
 export class OrdersController {
   constructor(private readonly orders: OrdersService) {}

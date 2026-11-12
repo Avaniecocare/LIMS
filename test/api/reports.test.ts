@@ -1,11 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createApp } from '../../src/bootstrap.js';
 import { MailService } from '../../src/core/mail.service.js';
 import { StorageService } from '../../src/core/storage.service.js';
 import { DocumentsService } from '../../src/modules/documents/documents.service.js';
 import { ReportsService } from '../../src/modules/reports/reports.service.js';
 import { billingFixture } from '../support/fixtures.js';
-import { greenfield, bluepeak } from '../support/company-env.js';
 import { bootApp, createUser, login, PASSWORD, resetDb, ROLE_NAMES, type Client, type Ctx } from '../support/harness.js';
 import { plannedTests, workTest, type Team } from '../support/workflow.js';
 
@@ -162,6 +160,40 @@ describe('report workflow', () => {
     await reviewer.patch(`/reports/${row.id}/draft`, { version: rev(r).version, reportRemarks: 'Sneaky' }).expect(422); // not a draft now
   });
 
+  it('sample photographs: chosen on the draft, printed in order, kept through refreshes, and only this sample\'s', async () => {
+    const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+    const { job, row } = await approvedReport();
+    const other = await approvedReport();
+    const sampleId = (await reviewer.get(`/reports/${row.id}`).expect(200)).body.sampleId;
+    // One taken at booking, one added by the reviewer on the report, one belonging to a different sample.
+    const atBooking = (await reception.post('/files').field('entity', 'Sample').field('entityId', sampleId).field('category', 'sample-image').attach('file', PNG, 'as received.png').expect(201)).body.id;
+    const onReport = (await reviewer.post('/files').field('entity', 'Report').field('entityId', row.id).field('category', 'report-photo').attach('file', PNG, 'after test.png').expect(201)).body.id;
+    const otherSampleId = (await reviewer.get(`/reports/${other.row.id}`).expect(200)).body.sampleId;
+    const otherSample = (await reception.post('/files').field('entity', 'Sample').field('entityId', otherSampleId).field('category', 'sample-image').attach('file', PNG, 'x.png').expect(201)).body.id;
+    await tech.post('/files').field('entity', 'Report').field('entityId', row.id).field('category', 'report-photo').attach('file', PNG, 'no.png').expect(403);
+
+    let r = (await reviewer.get(`/reports/${row.id}`).expect(200)).body;
+    expect(r.samplePhotos).toEqual([]);
+    const bad = await reviewer.patch(`/reports/${row.id}/draft`, { version: rev(r).version, samplePhotos: [{ fileId: otherSample, widthMm: 80, heightMm: 60 }] }).expect(400);
+    expect(bad.body.error.message).toContain('this sample');
+    await reviewer.patch(`/reports/${row.id}/draft`, { version: rev(r).version, samplePhotos: [{ fileId: atBooking, widthMm: 10, heightMm: 60 }] }).expect(400);
+    r = (await reviewer.patch(`/reports/${row.id}/draft`, { version: rev(r).version, samplePhotos: [{ fileId: onReport, caption: 'Fracture face', widthMm: 120, heightMm: 90 }, { fileId: atBooking, caption: ' As received ', widthMm: 80, heightMm: 60 }] }).expect(200)).body;
+    expect(r.samplePhotos).toEqual([
+      { fileId: onReport, caption: 'Fracture face', widthMm: 120, heightMm: 90 },
+      { fileId: atBooking, caption: 'As received', widthMm: 80, heightMm: 60 },
+    ]);
+    const { html } = (await reviewer.get(`/reports/${row.id}/preview`).expect(200)).body;
+    expect(html).toContain('Sample photographs');
+    expect(html.indexOf('Photo 1: Fracture face')).toBeLessThan(html.indexOf('Photo 2: As received'));
+    expect(html).toContain('data:image/png;base64,');
+    // A later correction that does not mention photographs leaves them alone; an empty list removes them.
+    r = (await reviewer.patch(`/reports/${row.id}/draft`, { version: rev(r).version, reportRemarks: 'Photos attached' }).expect(200)).body;
+    expect(r.samplePhotos).toHaveLength(2);
+    r = (await reviewer.patch(`/reports/${row.id}/draft`, { version: rev(r).version, samplePhotos: [] }).expect(200)).body;
+    expect(r.samplePhotos).toEqual([]);
+    expect(job.id).toBeTruthy();
+  });
+
   it('signatory rejection for re-test reopens named tests, blocks resubmission, refreshes the draft', async () => {
     const { job, row, sampleTestIds: [testId] } = await approvedReport();
     let r = (await reviewer.get(`/reports/${row.id}`).expect(200)).body;
@@ -284,32 +316,72 @@ describe('wording and accreditation', () => {
   }, 60000);
 });
 
-describe('snapshots across an env change', () => {
-  it('an issued report keeps its company details and PDF; new drafts use the new values; NABL produces a ULR', async () => {
+describe('public verification', () => {
+  const keysOf = (v: unknown): string[] => (Array.isArray(v) ? v.flatMap(keysOf) : v && typeof v === 'object' ? Object.entries(v).flatMap(([k, x]) => [k, ...keysOf(x)]) : []);
+
+  it('drafts carry no code; approval prints a QR that anyone can verify without signing in', async () => {
+    const { row } = await approvedReport();
+    const draft = (await reviewer.get(`/reports/${row.id}/preview`).expect(200)).body.html;
+    expect(draft).toContain('A QR code for online verification is added when the report is approved');
+    await toIssued(row.id);
+    const saved = await ctx.prisma.reportRevision.findFirstOrThrow({ where: { reportId: row.id, revisionNo: 0 } });
+    expect(saved.verificationCode).toMatch(/^[A-Za-z0-9_-]{24}$/);
+    const { html } = (await signatory.get(`/reports/${row.id}/preview`).expect(200)).body;
+    expect(html).toContain(`/verify/${saved.verificationCode}`);
+    expect(html).toContain('Verify this report');
+    expect(html).toMatch(/<img src="data:image\/png;base64,[^"]+" alt="" style="width:23mm/);
+
+    const res = await ctx.http().get(`/api/v1/public/reports/verify/${saved.verificationCode}`).expect(200);
+    expect(res.body).toMatchObject({ status: 'VALID', reportNo: row.reportNo, revisionNo: 0, approvedByName: 'signatory person', customerName: expect.any(String), sampleNo: expect.any(String) });
+    expect(res.body.pdfSha256).toBe(saved.pdfSha256);
+    expect(res.body.contentSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(res.body.tests[0].parameters[0]).toEqual({ name: 'Density', value: '0.850', unit: null });
+    // Allow-list: nothing that identifies how to reach the customer, and no tax or bank details.
+    const keys = keysOf(res.body).map((k) => k.toLowerCase());
+    for (const banned of ['address', 'email', 'phone', 'gstin', 'pan', 'bank', 'crn', 'kindattention', 'rate', 'amount']) expect(keys).not.toContain(banned);
+  }, 60000);
+
+  it('rejects unknown and malformed codes the same way', async () => {
+    for (const code of ['AAAAAAAAAAAAAAAAAAAAAAAA', 'short', 'bad*code*with*symbols*xx']) {
+      const res = await ctx.http().get(`/api/v1/public/reports/verify/${code}`).expect(404);
+      expect(res.body.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('a revised report gets its own code and the old one reads as replaced', async () => {
+    const { row } = await approvedReport();
+    await toIssued(row.id);
+    await signatory.post(`/reports/${row.id}/revise`, { reason: 'Sample description corrected' }).expect(200);
+    await toIssued(row.id);
+    const [newer, older] = await ctx.prisma.reportRevision.findMany({ where: { reportId: row.id }, orderBy: { revisionNo: 'desc' } });
+    expect(newer.verificationCode).toBeTruthy();
+    expect(newer.verificationCode).not.toBe(older.verificationCode);
+    const old = (await ctx.http().get(`/api/v1/public/reports/verify/${older.verificationCode}`).expect(200)).body;
+    expect(old).toMatchObject({ status: 'SUPERSEDED', revisionNo: 0, replacedByRevisionNo: 1 });
+    expect(old.supersededAt).toBeTruthy();
+    expect((await ctx.http().get(`/api/v1/public/reports/verify/${newer.verificationCode}`).expect(200)).body).toMatchObject({ status: 'VALID', revisionNo: 1 });
+  }, 90000);
+});
+
+describe('snapshots across a lab profile change', () => {
+  it('an issued report keeps its company details and PDF when the admin changes the lab profile; branding shows the new name', async () => {
     const { row } = await approvedReport();
     await toIssued(row.id);
     const before = (await signatory.get(`/reports/${row.id}`).expect(200)).body;
-    const pdfUrlBefore = before.revisions[0].pdfSha256;
-
-    // The same database, restarted with a different company env file.
-    Object.assign(process.env, greenfield);
-    const app2 = await createApp();
-    await app2.init();
+    const lab = (await admin.get('/admin/lab').expect(200)).body;
+    await admin.put('/admin/lab/profile', { version: lab.profileVersion, profile: { ...lab.profile, companyName: 'Greenfield Analytical', legalName: 'Greenfield Analytical Private Limited' } }).expect(200);
     try {
-      const service = app2.get(ReportsService);
-      const { html } = await service.preview(row.id);
+      const { html } = await ctx.app.get(ReportsService).preview(row.id);
       expect(html).toContain('BluePeak Testing Labs Private Limited');
       expect(html).not.toContain('Greenfield');
       const live = await ctx.prisma.reportRevision.findFirstOrThrow({ where: { reportId: row.id } });
-      expect(live.pdfSha256).toBe(pdfUrlBefore);
-      const stored = await app2.get(StorageService).read(live.pdfFileId!);
+      expect(live.pdfSha256).toBe(before.revisions[0].pdfSha256);
+      const stored = await ctx.app.get(StorageService).read(live.pdfFileId!);
       expect(stored.buffer.subarray(0, 5).toString()).toBe('%PDF-');
-      // Branding now answers as the new company.
-      const res = await app2.getHttpAdapter().getInstance().inject({ method: 'GET', url: '/api/v1/public/branding' });
-      expect(JSON.parse(res.body).companyName).toBe('Greenfield Analytical');
+      expect((await ctx.http().get('/api/v1/public/branding').expect(200)).body.companyName).toBe('Greenfield Analytical');
     } finally {
-      await app2.close();
-      Object.assign(process.env, bluepeak);
+      const now = (await admin.get('/admin/lab').expect(200)).body;
+      await admin.put('/admin/lab/profile', { version: now.profileVersion, profile: lab.profile }).expect(200);
     }
   }, 60000);
 });

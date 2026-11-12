@@ -41,6 +41,16 @@ export interface ReportContent {
   tests: ReportTest[];
   /** corrections made on the draft */
   reportRemarks: string | null;
+  /** photographs of the sample chosen on the draft, printed in their own section; absent on older reports */
+  samplePhotos?: ReportPhoto[];
+}
+
+export interface ReportPhoto {
+  fileId: string;
+  widthMm: number;
+  heightMm: number;
+  caption: string | null;
+  dataUri?: string | null;
 }
 
 export interface ReportFormat {
@@ -66,6 +76,8 @@ export interface ReportRenderInput {
   reviewedByName: string | null;
   draft: boolean;
   signature: { name: string; designation: string | null; signedAt: Date | string; contentSha256: string; imageDataUri: string | null } | null;
+  /** set once approved: the public verification link and its QR code */
+  verification?: { url: string; qrDataUri: string } | null;
 }
 
 const limitText = (l: { min: string | null; max: string | null; text: string | null }) => {
@@ -89,6 +101,14 @@ function resultTable(rows: { test: ReportTest; p: ReportParameterRow }[], dual: 
     })
     .join('');
   return `<table><thead><tr><th class="center" style="width:7%">S.No</th><th>Test Parameter</th><th>Observed Result</th><th>Test Method</th>${grades.length ? `<th>Limits${grades[0] ? ` (${esc(grades[0])})` : ''}</th>` : ''}${dual ? `<th>Limits (${esc(grades[1])})</th>` : ''}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+/** QR and link to the public verification page; drafts say where it will appear. */
+function verifyBlock(r: ReportRenderInput): string {
+  if (!r.verification) return r.draft ? '<p class="small muted">A QR code for online verification is added when the report is approved.</p>' : '';
+  return `<table class="plain keep" style="margin-top:8px;width:auto"><tr>
+  <td style="width:25mm;padding-right:8px"><img src="${r.verification.qrDataUri}" alt="" style="width:23mm;height:23mm;display:block"></td>
+  <td style="vertical-align:middle"><div class="bold">Verify this report</div><div class="small">Scan the QR code with any phone camera, or open this link to check that the report is genuine and current:</div><div class="small" style="word-break:break-all">${esc(r.verification.url)}</div></td></tr></table>`;
 }
 
 export function reportHtml(r: ReportRenderInput): string {
@@ -128,9 +148,11 @@ export function reportHtml(r: ReportRenderInput): string {
   ])}
   </tbody></table>
   ${c.sampleDrawnByLab ? '' : `<p class="bold">${esc(r.format.samplingStatement)}</p>`}
-  ${c.deviations.length ? `<p class="small"><span class="bold">Deviations noted at receipt:</span> ${c.deviations.map((d) => `${esc(d.typeLabel)}${d.remark ? ` (${esc(d.remark)})` : ''}`).join('; ')}</p>` : ''}`;
+  ${c.deviations.length ? `<p class="small"><span class="bold">Deviations noted at receipt:</span> ${c.deviations.map((d) => `${esc(d.typeLabel)}${d.remark ? ` (${esc(d.remark)})` : ''}`).join('; ')}</p>` : ''}
+  ${verifyBlock(r)}`;
 
   const remarks = c.tests.filter((t) => t.remarks || t.observations);
+  const photos = (c.samplePhotos ?? []).filter((i) => i.dataUri);
   const images = c.tests.flatMap((t) => t.images.map((i) => ({ ...i, testName: t.testName }))).filter((i) => i.dataUri);
   const signed = r.signature
     ? `<div>${r.signature.imageDataUri ? `<img src="${r.signature.imageDataUri}" alt="" style="height:36px;display:block">` : ''}<div class="bold">${esc(r.signature.name)}</div>${r.signature.designation && r.signature.designation !== 'Authorised Signatory' ? `<div>${esc(r.signature.designation)}</div>` : ''}<div class="small">Authorised Signatory</div></div>`
@@ -144,6 +166,7 @@ export function reportHtml(r: ReportRenderInput): string {
   ${outOfScope.length ? `<h2>Tests outside the scope of accreditation</h2>${resultTable(outOfScope, dual, c.specificationNames)}` : ''}
   ${remarks.length ? `<h2>Remarks</h2>${remarks.map((t) => `<p><span class="bold">${esc(t.testName)}:</span> ${multiline(t.observations)} ${multiline(t.remarks)}</p>`).join('')}` : ''}
   ${c.reportRemarks ? `<h2>Report remarks</h2><p>${multiline(c.reportRemarks)}</p>` : ''}
+  ${photos.length ? `<h2>Sample photographs</h2><div style="display:flex;flex-wrap:wrap;gap:6mm;align-items:flex-start">${photos.map((i, n) => `<figure class="keep" style="margin:0;width:${i.widthMm}mm"><img src="${i.dataUri}" alt="" style="width:${i.widthMm}mm;height:${i.heightMm}mm;object-fit:contain;display:block;border:0.2mm solid #ccc"><figcaption class="small muted">Photo ${n + 1}${i.caption ? `: ${esc(i.caption)}` : ''}</figcaption></figure>`).join('')}</div>` : ''}
   ${images.map((i) => `<figure class="keep" style="margin:8px 0"><img src="${i.dataUri}" alt="" style="width:${i.widthMm}mm;height:${i.heightMm}mm;object-fit:contain;display:block"><figcaption class="small muted">${esc(i.testName)}${i.caption ? `: ${esc(i.caption)}` : ''}</figcaption></figure>`).join('')}
   <table class="plain keep" style="margin-top:26px"><tr><td style="width:50%"><div class="bold">Reviewed by</div>${r.reviewedByName ? esc(r.reviewedByName) : '<span class="muted">Not yet reviewed</span>'}</td><td>${signed}</td></tr></table>
   ${approval}`;

@@ -74,12 +74,17 @@ export class MailService {
   wrap(bodyHtml: string): string {
     const c = this.company.config;
     return `<!doctype html><html><body style="margin:0;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;color:#1f2937">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:6px;overflow:hidden">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:16px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border-radius:6px;overflow:hidden">
 <tr><td style="background:${c.branding.primaryColor};color:#fff;padding:16px 24px;font-size:18px;font-weight:bold">${esc(c.companyName)}</td></tr>
 <tr><td style="padding:24px;font-size:14px;line-height:1.6">${bodyHtml}</td></tr>
-<tr><td style="padding:16px 24px;background:#f9fafb;font-size:12px;color:#6b7280">${esc(c.legalName)}<br>${esc(c.labAddress)}<br>${esc(c.phone)} · ${esc(c.email)}</td></tr>
+<tr><td style="padding:16px 24px;background:#f9fafb;font-size:12px;color:#6b7280">${esc(c.legalName)}${c.labAddress ? `<br>${esc(c.labAddress)}` : ''}${[c.phone, c.email].filter(Boolean).length ? `<br>${[c.phone, c.email].filter(Boolean).map(esc).join(' · ')}` : ''}${c.supportEmail || c.supportPhone ? `<br>Support: ${[c.supportEmail, c.supportPhone].filter((x): x is string => !!x).map(esc).join(' · ')}` : ''}${c.privacyContactEmail ? `<br>Privacy and grievances: ${esc(c.privacyContactName ? `${c.privacyContactName}, ` : '')}${esc(c.privacyContactEmail)}` : ''}${c.termsUrl || c.privacyUrl ? `<br>${[c.termsUrl ? `<a href="${esc(c.termsUrl)}" style="color:#6b7280">Terms</a>` : '', c.privacyUrl ? `<a href="${esc(c.privacyUrl)}" style="color:#6b7280">Privacy</a>` : ''].filter(Boolean).join(' · ')}` : ''}</td></tr>
 </table></td></tr></table></body></html>`;
+  }
+
+  /** Sends at once, without the queue, so the caller learns straight away whether it worked (the setup wizard's test). */
+  async sendNow(to: string, subject: string, bodyHtml: string): Promise<void> {
+    await this.adapter.send({ from: `"${this.company.config.companyName.replace(/"/g, '')}" <${this.cfg.smtp.from}>`, to, subject, html: this.wrap(bodyHtml), attachments: [] });
   }
 
   /** Writes the delivery log row, then queues the send. Sent by the worker with retries. */
@@ -128,7 +133,9 @@ export class MailService {
         html: log.html,
         attachments,
       });
-      await this.prisma.emailLog.update({ where: { id: log.id }, data: { status: 'SENT', sentAt: new Date(), lastError: null } });
+      // One-time links (password resets) are blanked from the stored copy once sent, so the log and backups can't be used to take over an account.
+      const html = log.template === 'password-reset' ? log.html.replace(/token=[^"'&<\s]+/g, 'token=[removed after sending]') : log.html;
+      await this.prisma.emailLog.update({ where: { id: log.id }, data: { status: 'SENT', sentAt: new Date(), lastError: null, html } });
     } catch (e) {
       await this.prisma.emailLog.update({
         where: { id: log.id },

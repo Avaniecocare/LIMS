@@ -16,6 +16,7 @@ const perms = (r: Role) => new Set(DEFAULT_ROLES[R[r]].permissions);
  */
 const POLICY: [Machine, string, string, Role[]][] = [
   [QUOTATION, 'DRAFT', 'SENT', ['admin', 'sales']],
+  [QUOTATION, 'DRAFT', 'ACCEPTED', ['admin', 'sales']],
   [QUOTATION, 'SENT', 'ACCEPTED', ['admin', 'sales']],
   [QUOTATION, 'SENT', 'REJECTED', ['admin', 'sales']],
   [QUOTATION, 'SENT', 'EXPIRED', []],

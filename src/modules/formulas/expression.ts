@@ -155,7 +155,19 @@ export function variablesOf(node: Node, out = new Set<string>()): Set<string> {
   return out;
 }
 
+/** Any value beyond this is not a laboratory number. Checked at every step, so nothing grows big enough to exhaust memory. */
+const MAX_INTERMEDIATE = new Decimal('1e20');
+
+function bounded(value: Decimal): Decimal {
+  if (!value.isFinite() || value.abs().greaterThan(MAX_INTERMEDIATE)) throw new FormulaError('The result is too large');
+  return value;
+}
+
 function evaluate(node: Node, inputs: Record<string, Decimal>): Decimal {
+  return bounded(evaluateUnbounded(node, inputs));
+}
+
+function evaluateUnbounded(node: Node, inputs: Record<string, Decimal>): Decimal {
   switch (node.t) {
     case 'num':
       return new Decimal(node.v);
@@ -224,6 +236,7 @@ export function runFormula(expression: string, rawInputs: Record<string, string 
       throw new FormulaError(`Input "${name}" is not a number`);
     }
     if (!d.isFinite()) throw new FormulaError(`Input "${name}" is not a number`);
+    if (d.abs().greaterThan(MAX_INTERMEDIATE)) throw new FormulaError(`Input "${name}" is too large`);
     inputs[name] = d;
   }
   const result = evaluate(node, inputs);

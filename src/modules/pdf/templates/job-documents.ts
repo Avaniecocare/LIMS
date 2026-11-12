@@ -68,10 +68,23 @@ export function srfHtml(j: JobDocument, company: CompanySnapshot): string {
   <table class="plain" style="margin-top:28px"><tr><td>Received by: ${esc(j.receivedBy)}</td><td class="right">Customer representative: ______________________</td></tr></table>`);
 }
 
-export function acknowledgementHtml(j: JobDocument, company: CompanySnapshot): string {
+export interface AckPhoto {
+  dataUri: string;
+  caption: string;
+}
+
+/** Photos of the samples as received, two to a row; optional, shown only when some were chosen. */
+function ackPhotos(photos: AckPhoto[]): string {
+  if (!photos.length) return '';
+  return `<h2>Photographs of samples as received</h2><div style="display:flex;flex-wrap:wrap;gap:6mm">${photos
+    .map((p, i) => `<figure class="keep" style="margin:0;width:85mm"><img src="${p.dataUri}" alt="" style="width:85mm;height:64mm;object-fit:contain;display:block;border:0.2mm solid #ccc"><figcaption class="small muted">Photo ${i + 1}${p.caption ? `: ${esc(p.caption)}` : ''}</figcaption></figure>`)
+    .join('')}</div>`;
+}
+
+export function acknowledgementHtml(j: JobDocument, company: CompanySnapshot, photos: AckPhoto[] = []): string {
   return page(`Acknowledgement ${j.jobNo}`, company, `${letterhead(company)}<h1>Sample Acknowledgement</h1>
   <p>Dear ${esc(j.kindAttention ?? 'Sir/Madam')},</p><p>We have received the samples listed below under job <strong>${esc(j.jobNo)}</strong> on ${formatDateTime(j.receivedAt)}. Please quote this number in all correspondence.</p>
-  ${sampleTable(j)}${deviations(j)}<p style="margin-top:20px">For <strong>${esc(company.legalName)}</strong></p>`);
+  ${sampleTable(j)}${deviations(j)}${ackPhotos(photos)}<p style="margin-top:20px">For <strong>${esc(company.legalName)}</strong></p>`);
 }
 
 export interface LabelDoc {
@@ -93,7 +106,7 @@ export function labelsHtml(labels: LabelDoc[], company: CompanySnapshot): string
       <div class="bold">${l.urgent ? 'URGENT ' : ''}${l.returnable ? 'RETURNABLE' : ''}</div></div></div>`,
     )
     .join('');
-  return page('Sample labels', company, body);
+  return page('Sample labels', company, body, { watermark: false });
 }
 
 export interface JobCardTest {

@@ -1,25 +1,30 @@
-import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Req, Res } from '@nestjs/common';
+import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { currentUser } from '../../common/context.js';
 import {
   ChangePasswordDto,
+  ConfirmPasswordDto,
   ForgotPasswordDto,
   LoginDto,
   LoginResultDto,
   LoginTotpDto,
   OkDto,
   ResetPasswordDto,
+  RevokedDto,
+  SessionInfoDto,
   SessionUserDto,
+  SignInEventDto,
   TotpDisableDto,
   TotpEnableDto,
   TotpSetupDto,
 } from './auth.dto.js';
 import { AuthService } from './auth.service.js';
-import { Public } from './decorators.js';
+import { Public, SignedIn } from './decorators.js';
 import { SessionService } from './session.service.js';
 
 @ApiTags('auth')
+@SignedIn('the caller’s own account and session; sign-in routes are @Public')
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -86,6 +91,43 @@ export class AuthController {
   async totpEnable(@Body() dto: TotpEnableDto): Promise<OkDto> {
     await this.auth.totpEnable(dto.code);
     return { ok: true };
+  }
+
+  /** Confirms the password for sensitive actions in the next ten minutes of this session. */
+  @Post('confirm-password') @HttpCode(200) @ApiOkResponse({ type: OkDto })
+  async confirmPassword(@Body() dto: ConfirmPasswordDto): Promise<OkDto> {
+    await this.auth.reauthenticate(dto.password);
+    return { ok: true };
+  }
+
+  /** Where this person is signed in. */
+  @Get('sessions') @ApiOkResponse({ type: [SessionInfoDto] })
+  sessionList(): Promise<SessionInfoDto[]> {
+    const me = currentUser()!;
+    return this.sessions.list(me.id, me.sessionId);
+  }
+
+  /** Signs out everywhere except this browser. */
+  @Delete('sessions') @ApiOkResponse({ type: RevokedDto })
+  async revokeOthers(): Promise<RevokedDto> {
+    const me = currentUser()!;
+    const revoked = await this.sessions.revoke(me.id, me.sessionId, null);
+    await this.auth.recordSessionsRevoked(revoked, 'all other sessions');
+    return { revoked };
+  }
+
+  @Delete('sessions/:id') @ApiOkResponse({ type: RevokedDto })
+  async revokeOne(@Param('id') id: string): Promise<RevokedDto> {
+    const me = currentUser()!;
+    const revoked = await this.sessions.revoke(me.id, me.sessionId, id.slice(0, 32));
+    await this.auth.recordSessionsRevoked(revoked, 'one session');
+    return { revoked };
+  }
+
+  /** The person's own recent sign-ins and failed attempts. */
+  @Get('sign-ins') @ApiOkResponse({ type: [SignInEventDto] })
+  signIns(): Promise<SignInEventDto[]> {
+    return this.auth.signInHistory(currentUser()!.id);
   }
 
   @Post('totp/disable') @HttpCode(200)

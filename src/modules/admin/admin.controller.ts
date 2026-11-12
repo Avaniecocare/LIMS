@@ -3,7 +3,7 @@ import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { badRequest } from '../../common/errors.js';
 import { SettingsService } from '../../core/settings.service.js';
 import { OkDto } from '../auth/auth.dto.js';
-import { Perm } from '../auth/decorators.js';
+import { Perm, SignedIn } from '../auth/decorators.js';
 import {
   AdminResetPasswordDto,
   AuditEntryDto,
@@ -145,6 +145,7 @@ export class AdminController {
 
 /** Saved filters belong to the signed-in user; no special permission needed. */
 @ApiTags('me')
+@SignedIn('every query is scoped to the caller’s own saved filters')
 @Controller('me/saved-filters')
 export class SavedFiltersController {
   constructor(private readonly admin: AdminService) {}

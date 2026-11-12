@@ -14,7 +14,7 @@ afterAll(async () => {
 describe('public branding', () => {
   it('returns exactly the allowed fields', async () => {
     const res = await ctx.http().get('/api/v1/public/branding').expect(200);
-    expect(Object.keys(res.body).sort()).toEqual(['accentColor', 'companyName', 'faviconUrl', 'logoUrl', 'primaryColor', 'productName']);
+    expect(Object.keys(res.body).sort()).toEqual(['accentColor', 'companyName', 'faviconUrl', 'loginImageUrl', 'loginTagline', 'logoUrl', 'navColor', 'poweredBy', 'poweredByName', 'primaryColor', 'privacyContactEmail', 'privacyUrl', 'productName', 'supportEmail', 'supportPhone', 'surfaceColor', 'termsUrl']);
     const text = JSON.stringify(res.body);
     for (const secret of ['000000000000', 'AAAAA0000A', 'EXMP0000001', '27AAAAA0000A1Z2']) expect(text).not.toContain(secret);
   });
@@ -60,7 +60,12 @@ describe('auth', () => {
   it('locks an account after repeated failures', async () => {
     await createUser(ctx, 'lock@x.example', [ROLE_NAMES.sales]);
     for (let i = 0; i < 5; i++) await ctx.http().post('/api/v1/auth/login').send({ email: 'lock@x.example', password: 'wrong' }).expect(401);
-    await ctx.http().post('/api/v1/auth/login').send({ email: 'lock@x.example', password: PASSWORD }).expect(423);
+    // Even the right password is refused while locked, with the same answer as a wrong one,
+    // so a locked account can't be told apart from an unknown email.
+    const locked = await ctx.http().post('/api/v1/auth/login').send({ email: 'lock@x.example', password: PASSWORD }).expect(401);
+    const unknown = await ctx.http().post('/api/v1/auth/login').send({ email: 'nobody@x.example', password: PASSWORD }).expect(401);
+    expect(locked.body.error).toMatchObject({ code: 'INVALID_CREDENTIALS', message: unknown.body.error.message });
+    expect(await ctx.prisma.user.findFirst({ where: { email: 'lock@x.example' }, select: { lockedUntil: true } })).toMatchObject({ lockedUntil: expect.any(Date) });
   });
 
   it('rate limits login attempts', async () => {
@@ -156,7 +161,7 @@ describe('settings', () => {
     const a = await login(ctx, 'company@x.example');
     const res = await a.get('/admin/company').expect(200);
     expect(res.body.gstin).toBe('27AAAAA0000A1Z2');
-    expect(res.body.note).toContain('LIMS-Deploy');
+    expect(res.body.note).toContain('Admin > Lab profile');
   });
 });
 

@@ -1,4 +1,3 @@
-import { createReadStream } from 'node:fs';
 import { timingSafeEqual } from 'node:crypto';
 import { Body, Controller, Get, Inject, Post, Res } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
@@ -7,7 +6,8 @@ import type { FastifyReply } from 'fastify';
 import { AppError, badRequest } from '../../common/errors.js';
 import { INFRA_CONFIG, type InfraConfig } from '../../config/infra.config.js';
 import { AuditService } from '../../core/audit.service.js';
-import { CompanyService, mimeForPath } from '../../core/company.service.js';
+import { brandName } from '../../config/company.config.js';
+import { CompanyService, type BrandImageKind } from '../../core/company.service.js';
 import { PrismaService } from '../../core/prisma.service.js';
 import { SettingsService } from '../../core/settings.service.js';
 import { BrandingDto, SetupDto, SetupStatusDto } from '../admin/admin.dto.js';
@@ -29,36 +29,61 @@ export class PublicController {
     @Inject(INFRA_CONFIG) private readonly infra: InfraConfig,
   ) {}
 
-  /** Allow-list by construction: only these six fields may ever leave without a login. */
+  /** Allow-list by construction: only these fields may ever leave without a login. Nothing private (no bank, PAN or GSTIN). */
   @Get('branding') @ApiOkResponse({ type: BrandingDto })
   branding(): BrandingDto {
     const c = this.company.config;
+    const url = (kind: BrandImageKind) => {
+      const img = this.company.image(kind);
+      return img ? `${this.infra.publicApiUrl}/api/v1/public/branding/${kind}?v=${img.version}` : null;
+    };
     return {
       productName: c.productName,
       companyName: c.companyName,
-      logoUrl: `${this.infra.publicApiUrl}/api/v1/public/branding/logo`,
-      faviconUrl: `${this.infra.publicApiUrl}/api/v1/public/branding/favicon`,
+      logoUrl: url('logo')!,
+      faviconUrl: url('favicon')!,
+      loginImageUrl: url('login'),
+      loginTagline: c.branding.loginTagline,
+      poweredBy: c.branding.poweredBy,
+      poweredByName: brandName(),
       primaryColor: c.branding.primaryColor,
       accentColor: c.branding.accentColor,
+      surfaceColor: c.branding.surfaceColor,
+      navColor: c.branding.navColor,
+      supportEmail: c.supportEmail,
+      supportPhone: c.supportPhone,
+      termsUrl: c.termsUrl,
+      privacyUrl: c.privacyUrl,
+      privacyContactEmail: c.privacyContactEmail,
     };
   }
 
   @Get('branding/logo')
   logo(@Res() reply: FastifyReply) {
-    return this.sendFile(reply, this.company.config.branding.logoPath);
+    return this.sendImage(reply, 'logo');
   }
 
   @Get('branding/favicon')
   favicon(@Res() reply: FastifyReply) {
-    return this.sendFile(reply, this.company.config.branding.faviconPath);
+    return this.sendImage(reply, 'favicon');
   }
 
-  private sendFile(reply: FastifyReply, path: string) {
+  @Get('branding/login')
+  loginImage(@Res() reply: FastifyReply) {
+    return this.sendImage(reply, 'login');
+  }
+
+  /** Served from memory; the version in the URL changes with the image, so a long cache is safe. */
+  private sendImage(reply: FastifyReply, kind: BrandImageKind) {
+    const img = this.company.image(kind);
+    if (!img) return reply.code(404).send();
     return reply
-      .header('Content-Type', mimeForPath(path))
+      .header('Content-Type', img.mimeType)
       .header('Cache-Control', 'public, max-age=3600')
       .header('Cross-Origin-Resource-Policy', 'cross-origin')
-      .send(createReadStream(path));
+      .header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'")
+      .header('X-Content-Type-Options', 'nosniff')
+      .send(img.buffer);
   }
 
   @Get('setup-status') @ApiOkResponse({ type: SetupStatusDto })

@@ -163,7 +163,7 @@ export const MASTERS: MasterDef[] = [
     filter: (q) => (q.testId ? { testId: q.testId } : {}),
     dto: (r) => ({
       id: r.id, testId: r.testId, testCode: r.test.code, code: r.code, name: r.name, kind: r.kind, unitId: r.unitId, unitSymbol: r.unit?.symbol ?? null, decimals: r.decimals, resultSetId: r.resultSetId, formulaId: r.formulaId, formulaBindings: r.formulaBindings,
-      accredited: r.accredited, accreditedUntil: r.accreditedUntil, sortOrder: r.sortOrder, isActive: r.isActive, version: r.version,
+      accredited: r.accredited, accreditedUntil: r.accreditedUntil, sortOrder: r.sortOrder, showOnReport: r.showOnReport, isActive: r.isActive, version: r.version,
     }),
     data: async (i, tx) => {
       if (i.kind === 'RESULT_SET' && !i.resultSetId) throw badRequest('Choose a result set', [{ field: 'resultSetId', message: 'Required for this kind' }]);
@@ -175,11 +175,11 @@ export const MASTERS: MasterDef[] = [
         const unbound = vars.filter((v) => !i.formulaBindings?.[v]);
         if (unbound.length) throw badRequest(`Bind these formula inputs to parameters: ${unbound.join(', ')}`, [{ field: 'formulaBindings', message: `Missing: ${unbound.join(', ')}` }]);
       }
-      return { testId: i.testId, code: i.code, name: i.name, kind: i.kind, unitId: i.unitId, decimals: i.decimals, resultSetId: i.resultSetId, formulaId: i.formulaId, formulaBindings: i.formulaBindings ?? undefined, accredited: i.accredited, accreditedUntil: date(i.accreditedUntil), sortOrder: i.sortOrder };
+      return { testId: i.testId, code: i.code, name: i.name, kind: i.kind, unitId: i.unitId, decimals: i.decimals, resultSetId: i.resultSetId, formulaId: i.formulaId, formulaBindings: i.formulaBindings ?? undefined, accredited: i.accredited, accreditedUntil: date(i.accreditedUntil), sortOrder: i.sortOrder, showOnReport: i.showOnReport };
     },
     inUse: async (tx, id) => ((await tx.parameterResult.count({ where: { parameterId: id } })) ? inUseMessage('test results') : null),
-    columns: [{ header: 'Test code', key: 'testCode' }, { header: 'Code', key: 'code' }, { header: 'Name', key: 'name', width: 30 }, { header: 'Kind', key: 'kind' }, { header: 'Unit', key: 'unitSymbol' }, { header: 'Decimals', key: 'decimals' }, { header: 'Accredited', key: 'accredited' }, { header: 'Sort order', key: 'sortOrder' }, { header: 'Active', key: 'isActive' }],
-    fromRow: async (v, tx) => ({ testId: await idByCode(tx.testMaster, v['Test code'], 'Test'), code: v.Code, name: v.Name, kind: v.Kind || undefined, unitId: await idByCode(tx.unit, v['Unit code'], 'Unit'), decimals: num(v.Decimals), accredited: bool(v.Accredited), sortOrder: num(v['Sort order']), isActive: bool(v.Active) }),
+    columns: [{ header: 'Test code', key: 'testCode' }, { header: 'Code', key: 'code' }, { header: 'Name', key: 'name', width: 30 }, { header: 'Kind', key: 'kind' }, { header: 'Unit', key: 'unitSymbol' }, { header: 'Decimals', key: 'decimals' }, { header: 'Accredited', key: 'accredited' }, { header: 'Sort order', key: 'sortOrder' }, { header: 'Show on report', key: 'showOnReport' }, { header: 'Active', key: 'isActive' }],
+    fromRow: async (v, tx) => ({ testId: await idByCode(tx.testMaster, v['Test code'], 'Test'), code: v.Code, name: v.Name, kind: v.Kind || undefined, unitId: await idByCode(tx.unit, v['Unit code'], 'Unit'), decimals: num(v.Decimals), accredited: bool(v.Accredited), sortOrder: num(v['Sort order']), showOnReport: bool(v['Show on report']), isActive: bool(v.Active) }),
     importKey: (i) => ({ testId: i.testId, code: i.code }),
   },
   {

@@ -13,6 +13,9 @@ Object.assign(process.env, {
   S3_SECRET_KEY: 'S3RVER',
   SMTP_FROM: 'lab@bluepeak.example',
   SMTP_TRANSPORT: 'json',
+  WHATSAPP_TRANSPORT: 'json',
+  WHATSAPP_APP_SECRET: 'test-app-secret',
+  WHATSAPP_VERIFY_TOKEN: 'test-verify-token',
   LOG_LEVEL: 'silent',
   ...bluepeak,
 });
