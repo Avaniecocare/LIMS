@@ -2,9 +2,24 @@ import type { Tx } from '../../core/prisma.service.js';
 import { BUILTIN_CONVERSIONS, BUILTIN_FORMULAS, parseExpression, variablesOf } from '../formulas/expression.js';
 
 const UNITS = [
-  ['PCT', 'Percent', '%'], ['PCT_MASS', 'Percent by mass', '% by mass'], ['MM', 'Millimetre', 'mm'], ['MM2', 'Square millimetre', 'mm²'], ['N', 'Newton', 'N'], ['KN', 'Kilonewton', 'kN'],
-  ['CEL', 'Degree Celsius', '°C'], ['CST', 'Centistokes', 'cSt'], ['GCM3', 'Gram per cubic centimetre', 'g/cm³'], ['PSI', 'Pounds per square inch', 'psi'], ['KSI', 'Kilopounds per square inch', 'ksi'],
-  ['MPA', 'Megapascal', 'MPa'], ['NM2', 'Newton per square metre', 'N/m²'], ['J', 'Joule', 'J'], ['KGFM', 'Kilogram-force metre', 'kgf·m'], ['FTLBF', 'Foot-pound force', 'ft·lbf'], ['MPY', 'Mils per year', 'mpy'], ['MPM', 'Mils per month', 'mils/month'],
+  ['PCT', 'Percent', '%'],
+  ['PCT_MASS', 'Percent by mass', '% by mass'],
+  ['MM', 'Millimetre', 'mm'],
+  ['MM2', 'Square millimetre', 'mm²'],
+  ['N', 'Newton', 'N'],
+  ['KN', 'Kilonewton', 'kN'],
+  ['CEL', 'Degree Celsius', '°C'],
+  ['CST', 'Centistokes', 'cSt'],
+  ['GCM3', 'Gram per cubic centimetre', 'g/cm³'],
+  ['PSI', 'Pounds per square inch', 'psi'],
+  ['KSI', 'Kilopounds per square inch', 'ksi'],
+  ['MPA', 'Megapascal', 'MPa'],
+  ['NM2', 'Newton per square metre', 'N/m²'],
+  ['J', 'Joule', 'J'],
+  ['KGFM', 'Kilogram-force metre', 'kgf·m'],
+  ['FTLBF', 'Foot-pound force', 'ft·lbf'],
+  ['MPY', 'Mils per year', 'mpy'],
+  ['MPM', 'Mils per month', 'mils/month'],
 ] as const;
 
 const LOOKUPS = [
@@ -24,9 +39,31 @@ const LOOKUPS = [
 ] as const;
 
 const RESULT_SETS = [
-  ['COMPLIES', 'Complies / Does not comply', [['Complies', true], ['Does not comply', false]]],
-  ['DETECTED', 'Detected / Not detected', [['Not detected', true], ['Detected', false]]],
-  ['APPEARANCE', 'Appearance', [['Clear', null], ['Hazy', null], ['Turbid', null]]],
+  [
+    'COMPLIES',
+    'Complies / Does not comply',
+    [
+      ['Complies', true],
+      ['Does not comply', false],
+    ],
+  ],
+  [
+    'DETECTED',
+    'Detected / Not detected',
+    [
+      ['Not detected', true],
+      ['Detected', false],
+    ],
+  ],
+  [
+    'APPEARANCE',
+    'Appearance',
+    [
+      ['Clear', null],
+      ['Hazy', null],
+      ['Turbid', null],
+    ],
+  ],
 ] as const;
 
 /** Product defaults every deployment gets once. Never demo data, and an Admin may change them afterwards. */

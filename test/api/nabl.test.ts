@@ -13,7 +13,16 @@ beforeAll(async () => {
   Object.assign(process.env, greenfield); // NABL mode on
   ctx = await bootApp();
   await resetDb(ctx);
-  for (const [e, r] of Object.entries({ admin: ROLE_NAMES.admin, reception: ROLE_NAMES.reception, planner: ROLE_NAMES.planner, tech: ROLE_NAMES.tech, hod: ROLE_NAMES.hod, reviewer: ROLE_NAMES.reviewer, signatory: ROLE_NAMES.signatory })) await createUser(ctx, `${e}@n.example`, [r], `${e} person`);
+  for (const [e, r] of Object.entries({
+    admin: ROLE_NAMES.admin,
+    reception: ROLE_NAMES.reception,
+    planner: ROLE_NAMES.planner,
+    tech: ROLE_NAMES.tech,
+    hod: ROLE_NAMES.hod,
+    reviewer: ROLE_NAMES.reviewer,
+    signatory: ROLE_NAMES.signatory,
+  }))
+    await createUser(ctx, `${e}@n.example`, [r], `${e} person`);
   const c = (n: string) => login(ctx, `${n}@n.example`);
   admin = await c('admin');
   reviewer = await c('reviewer');

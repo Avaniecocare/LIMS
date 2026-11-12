@@ -22,20 +22,47 @@ export class DenyAccessDto {
 }
 
 export class AccessRequestDto {
-  id: string; userId: string; userName: string; userEmail: string; currentRoles: string[]; page: string; reason: string; status: string;
-  grantedRoleName: string | null; decidedByName: string | null; decisionNote: string | null; decidedAt: Date | null; createdAt: Date;
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  currentRoles: string[];
+  page: string;
+  reason: string;
+  status: string;
+  grantedRoleName: string | null;
+  decidedByName: string | null;
+  decisionNote: string | null;
+  decidedAt: Date | null;
+  createdAt: Date;
 }
-export class AccessRequestPageDto { data: AccessRequestDto[]; meta: PageMetaDto; }
+export class AccessRequestPageDto {
+  data: AccessRequestDto[];
+  meta: PageMetaDto;
+}
 
 export class AccessReviewUserDto {
-  id: string; name: string; email: string; isActive: boolean; roles: string[]; permissionCount: number; lastLoginAt: Date | null;
+  id: string;
+  name: string;
+  email: string;
+  isActive: boolean;
+  roles: string[];
+  permissionCount: number;
+  lastLoginAt: Date | null;
   /** holds user or role management */
   adminCapable: boolean;
   /** never signed in, or not for 90 days */
   dormant: boolean;
-  locked: boolean; mustChangePassword: boolean; createdAt: Date;
+  locked: boolean;
+  mustChangePassword: boolean;
+  createdAt: Date;
 }
-export class PermissionHoldersDto { code: string; module: string; description: string; holders: number; }
+export class PermissionHoldersDto {
+  code: string;
+  module: string;
+  description: string;
+  holders: number;
+}
 export class AccessReviewDto {
   users: AccessReviewUserDto[];
   permissions: PermissionHoldersDto[];

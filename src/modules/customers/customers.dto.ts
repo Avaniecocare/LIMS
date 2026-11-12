@@ -49,28 +49,77 @@ export class CustomerQuery extends PageQuery {
 }
 
 export class ContactDto {
-  id: string; name: string; email: string | null; phone: string | null; designation: string | null; isPrimary: boolean;
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  designation: string | null;
+  isPrimary: boolean;
 }
 export class AddressDto {
-  id: string; kind: AddressKind; line1: string; line2: string | null; city: string; stateName: string; stateCode: string; pincode: string | null;
+  id: string;
+  kind: AddressKind;
+  line1: string;
+  line2: string | null;
+  city: string;
+  stateName: string;
+  stateCode: string;
+  pincode: string | null;
 }
 export class CustomerDto {
-  id: string; crn: string; name: string; gstin: string | null; pan: string | null; stateName: string; stateCode: string; creditDays: number;
-  withholdReportUntilPaid: boolean; notes: string | null; isActive: boolean; version: number; contacts: ContactDto[]; addresses: AddressDto[];
+  id: string;
+  crn: string;
+  name: string;
+  gstin: string | null;
+  pan: string | null;
+  stateName: string;
+  stateCode: string;
+  creditDays: number;
+  withholdReportUntilPaid: boolean;
+  notes: string | null;
+  isActive: boolean;
+  version: number;
+  contacts: ContactDto[];
+  addresses: AddressDto[];
 }
-export class CustomerPageDto { data: CustomerDto[]; meta: PageMetaDto; }
+export class CustomerPageDto {
+  data: CustomerDto[];
+  meta: PageMetaDto;
+}
 
 export class CustomerTestsQuery extends PageQuery {
   @IsOptional() @IsEnum(TestStatus) status?: TestStatus;
 }
 export class CustomerTestRowDto {
-  id: string; testCode: string; testName: string; methodName: string | null; sampleId: string; sampleNo: string; sampleDescription: string; jobId: string; jobNo: string;
-  status: string; bookedAt: Date; approvedAt: Date | null; reportId: string | null; reportNo: string | null; reportStatus: string | null;
+  id: string;
+  testCode: string;
+  testName: string;
+  methodName: string | null;
+  sampleId: string;
+  sampleNo: string;
+  sampleDescription: string;
+  jobId: string;
+  jobNo: string;
+  status: string;
+  bookedAt: Date;
+  approvedAt: Date | null;
+  reportId: string | null;
+  reportNo: string | null;
+  reportStatus: string | null;
 }
-export class CustomerTestPageDto { @ApiProperty({ type: () => [CustomerTestRowDto] }) data: CustomerTestRowDto[]; meta: PageMetaDto; }
+export class CustomerTestPageDto {
+  @ApiProperty({ type: () => [CustomerTestRowDto] }) data: CustomerTestRowDto[];
+  meta: PageMetaDto;
+}
 
-export class CountByStatusDto { status: string; count: number; }
-export class TopTestDto { testName: string; count: number; }
+export class CountByStatusDto {
+  status: string;
+  count: number;
+}
+export class TopTestDto {
+  testName: string;
+  count: number;
+}
 export class CustomerSummaryDto {
   quotations: { total: number; accepted: number; acceptedValue: string; open: number } | null;
   jobs: { total: number; open: number; completed: number; cancelled: number };

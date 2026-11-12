@@ -162,14 +162,31 @@ export function computeResults(params: ParamRow[], entered: Record<string, strin
   }
   for (const p of pending) {
     const missing = Object.values(p.formula?.bindings ?? {}).filter((c) => !values.has(c) && byCode.has(c));
-    out.set(p.parameterId, { parameterId: p.parameterId, numericValue: null, qualifier: null, textValue: null, passPrimary: null, passDual: null, calculation: null, error: missing.length ? `Waiting for ${missing.join(', ')}` : 'Waiting for inputs' });
+    out.set(p.parameterId, {
+      parameterId: p.parameterId,
+      numericValue: null,
+      qualifier: null,
+      textValue: null,
+      passPrimary: null,
+      passDual: null,
+      calculation: null,
+      error: missing.length ? `Waiting for ${missing.join(', ')}` : 'Waiting for inputs',
+    });
   }
 
   for (const p of params) {
     const row = out.get(p.parameterId)!;
     if (row.numericValue !== null) {
-      row.passPrimary = passAgainst(row.numericValue, p.limits.find((l) => l.role === 'primary'), row.qualifier);
-      row.passDual = passAgainst(row.numericValue, p.limits.find((l) => l.role === 'dual'), row.qualifier);
+      row.passPrimary = passAgainst(
+        row.numericValue,
+        p.limits.find((l) => l.role === 'primary'),
+        row.qualifier,
+      );
+      row.passDual = passAgainst(
+        row.numericValue,
+        p.limits.find((l) => l.role === 'dual'),
+        row.qualifier,
+      );
     }
   }
   return params.map((p) => out.get(p.parameterId)!);

@@ -119,10 +119,7 @@ export class SettingsService {
       } else {
         await t.setting.create({ data: { key, value: value as Prisma.InputJsonValue } });
       }
-      await this.audit.record(
-        { action: 'setting.update', entity: 'Setting', entityId: key, before: { value: existing?.value ?? def.default }, after: { value }, reason },
-        t,
-      );
+      await this.audit.record({ action: 'setting.update', entity: 'Setting', entityId: key, before: { value: existing?.value ?? def.default }, after: { value }, reason }, t);
     };
     if (tx) await run(tx);
     else await this.prisma.$transaction(run);

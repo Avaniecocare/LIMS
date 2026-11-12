@@ -14,12 +14,17 @@ import { SaveWhatsappTemplatesDto, WhatsappPanelDto, WhatsappSendDto, WhatsappSe
 export class WhatsappController {
   constructor(private readonly sender: WhatsappSendService) {}
 
-  @Post('send') @HttpCode(200) @Perm('reports.issue', 'invoices.edit', 'reminders.send', 'jobs.create', 'jobs.edit') @ApiOkResponse({ type: OkDto })
+  @Post('send')
+  @HttpCode(200)
+  @Perm('reports.issue', 'invoices.edit', 'reminders.send', 'jobs.create', 'jobs.edit')
+  @ApiOkResponse({ type: OkDto })
   send(@Body() dto: WhatsappSendDto) {
     return this.sender.send(dto);
   }
 
-  @Get(':entity/:id') @Perm('reports.view', 'invoices.view', 'jobs.view') @ApiOkResponse({ type: WhatsappPanelDto })
+  @Get(':entity/:id')
+  @Perm('reports.view', 'invoices.view', 'jobs.view')
+  @ApiOkResponse({ type: WhatsappPanelDto })
   panel(@Param('entity') entity: string, @Param('id', ParseUUIDPipe) id: string): Promise<WhatsappPanelDto> {
     return this.sender.panel(entity, id) as Promise<WhatsappPanelDto>;
   }
@@ -35,7 +40,9 @@ export class WhatsappAdminController {
     @Inject(INFRA_CONFIG) private readonly infra: InfraConfig,
   ) {}
 
-  @Get() @Perm('admin.company.view') @ApiOkResponse({ type: WhatsappSettingsDto })
+  @Get()
+  @Perm('admin.company.view')
+  @ApiOkResponse({ type: WhatsappSettingsDto })
   async settings(): Promise<WhatsappSettingsDto> {
     const { version, templates } = await this.whatsapp.templates();
     const w = this.infra.whatsapp;
@@ -46,9 +53,13 @@ export class WhatsappAdminController {
       phoneNumberIdHint: w?.phoneNumberId ? w.phoneNumberId.slice(-4) : null,
       version,
       templates: WHATSAPP_KIND_KEYS.map((key) => ({
-        key, label: WHATSAPP_KINDS[key].label, document: WHATSAPP_KINDS[key].document,
+        key,
+        label: WHATSAPP_KINDS[key].label,
+        document: WHATSAPP_KINDS[key].document,
         available: Object.entries(WHATSAPP_KINDS[key].values).map(([k, label]) => ({ key: k, label })),
-        name: templates[key].name, language: templates[key].language, values: templates[key].values,
+        name: templates[key].name,
+        language: templates[key].language,
+        values: templates[key].values,
       })),
       receipts: !!w?.appSecret && !!w?.verifyToken,
       webhookUrl: `${this.infra.publicApiUrl.replace(/\/+$/, '')}/api/v1/webhooks/whatsapp`,
@@ -56,14 +67,19 @@ export class WhatsappAdminController {
     };
   }
 
-  @Put('templates') @Perm('admin.company.edit') @ApiOkResponse({ type: WhatsappSettingsDto })
+  @Put('templates')
+  @Perm('admin.company.edit')
+  @ApiOkResponse({ type: WhatsappSettingsDto })
   async saveTemplates(@Body() dto: SaveWhatsappTemplatesDto): Promise<WhatsappSettingsDto> {
     await this.whatsapp.saveTemplates(dto.templates, dto.version);
     return this.settings();
   }
 
   /** Sends Meta's hello_world template, which every WhatsApp Business account has, to check the connection. */
-  @Post('test') @HttpCode(200) @Perm('admin.company.edit') @ApiOkResponse({ type: OkDto })
+  @Post('test')
+  @HttpCode(200)
+  @Perm('admin.company.edit')
+  @ApiOkResponse({ type: OkDto })
   async test(@Body() dto: WhatsappTestDto) {
     await this.whatsapp.testSend(dto.to);
     return { ok: true };

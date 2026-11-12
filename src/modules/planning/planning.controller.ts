@@ -10,37 +10,52 @@ import { PlanningService } from './planning.service.js';
 export class PlanningController {
   constructor(private readonly planning: PlanningService) {}
 
-  @Get('tests') @Perm('planning.view') @ApiOkResponse({ type: PlanningPageDto })
+  @Get('tests')
+  @Perm('planning.view')
+  @ApiOkResponse({ type: PlanningPageDto })
   list(@Query() q: PlanningQuery) {
     return this.planning.list(q);
   }
 
-  @Get('suggest') @Perm('planning.view') @ApiOkResponse({ type: [SuggestedTestDto] })
+  @Get('suggest')
+  @Perm('planning.view')
+  @ApiOkResponse({ type: [SuggestedTestDto] })
   suggest(@Query() q: SuggestQuery) {
     return this.planning.suggest(q);
   }
 
-  @Post('plans') @Perm('planning.edit') @ApiOkResponse({ type: PlanResultDto })
+  @Post('plans')
+  @Perm('planning.edit')
+  @ApiOkResponse({ type: PlanResultDto })
   plan(@Body() dto: PlanSamplesDto) {
     return this.planning.plan(dto);
   }
 
-  @Post('assign') @HttpCode(200) @Perm('planning.edit') @ApiOkResponse({ type: OkDto })
+  @Post('assign')
+  @HttpCode(200)
+  @Perm('planning.edit')
+  @ApiOkResponse({ type: OkDto })
   assign(@Body() dto: AssignDto) {
     return this.planning.assign(dto);
   }
 
-  @Get('workload') @Perm('planning.view') @ApiOkResponse({ type: WorkloadDto })
+  @Get('workload')
+  @Perm('planning.view')
+  @ApiOkResponse({ type: WorkloadDto })
   workload() {
     return this.planning.workload();
   }
 
-  @Get('technicians') @Perm('planning.view', 'mis.view') @ApiOkResponse({ type: [TechnicianDto] })
+  @Get('technicians')
+  @Perm('planning.view', 'mis.view')
+  @ApiOkResponse({ type: [TechnicianDto] })
   technicians() {
     return this.planning.technicians();
   }
 
-  @Get('instruments') @Perm('planning.view') @ApiOkResponse({ type: [InstrumentOptionDto] })
+  @Get('instruments')
+  @Perm('planning.view')
+  @ApiOkResponse({ type: [InstrumentOptionDto] })
   instruments() {
     return this.planning.instruments();
   }

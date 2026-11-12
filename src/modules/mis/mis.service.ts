@@ -55,7 +55,11 @@ export class MisService implements OnModuleInit {
   catalog() {
     const identity = can('customers.view');
     return REPORTS.filter((r) => can(r.permission)).map((r) => ({
-      key: r.key, no: r.no, title: r.title, group: r.group, filters: r.filters,
+      key: r.key,
+      no: r.no,
+      title: r.title,
+      group: r.group,
+      filters: r.filters,
       columns: this.columnsFor(r, identity).map((c) => ({ key: c.key, label: c.label, type: c.type ?? 'text' })),
     }));
   }
@@ -98,8 +102,12 @@ export class MisService implements OnModuleInit {
     if (asPdf) {
       const company = this.company.snapshot();
       const filters = [p.from || p.to ? `Period: ${p.from ? formatDate(p.from) : 'start'} to ${p.to ? formatDate(p.to) : 'today'}` : null].filter(Boolean).join(' · ');
-      const html = page(report.title, company, `${letterhead(company)}<h1>${esc(report.title)}</h1><p class="small center">${esc(filters)} · Generated ${esc(formatDateTime(new Date()))} · ${rows.length} rows</p>
-      <table class="small"><thead><tr>${columns.map((c) => `<th>${esc(c.label)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${columns.map((c) => `<td${c.type === 'money' || c.type === 'number' ? ' class="right"' : ''}>${esc(display(c, r[c.key]))}</td>`).join('')}</tr>`).join('') || `<tr><td colspan="${columns.length}" class="center">No records.</td></tr>`}</tbody></table>`);
+      const html = page(
+        report.title,
+        company,
+        `${letterhead(company)}<h1>${esc(report.title)}</h1><p class="small center">${esc(filters)} · Generated ${esc(formatDateTime(new Date()))} · ${rows.length} rows</p>
+      <table class="small"><thead><tr>${columns.map((c) => `<th>${esc(c.label)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${columns.map((c) => `<td${c.type === 'money' || c.type === 'number' ? ' class="right"' : ''}>${esc(display(c, r[c.key]))}</td>`).join('')}</tr>`).join('') || `<tr><td colspan="${columns.length}" class="center">No records.</td></tr>`}</tbody></table>`,
+      );
       return { buffer: await this.pdf.render(html, { company, width: '297mm', height: '210mm' }), filename: `${name}.pdf`, mimeType: 'application/pdf' };
     }
     const buffer = await buildWorkbook([

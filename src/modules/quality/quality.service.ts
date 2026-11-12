@@ -65,9 +65,16 @@ export class QualityService implements OnModuleInit {
     const order: Record<Due, number> = { OVERDUE: 0, DUE_SOON: 1, OK: 2, NOT_SCHEDULED: 3 };
     return rows
       .map((r) => ({
-        id: r.id, code: r.code, name: r.name, departmentName: r.department?.name ?? null,
-        lastCalibratedAt: r.lastCalibratedAt, calibrationDueAt: r.calibrationDueAt, calibrationIntervalMonths: r.calibrationIntervalMonths,
-        lastMaintainedAt: r.lastMaintainedAt, maintenanceDueAt: r.maintenanceDueAt, maintenanceIntervalMonths: r.maintenanceIntervalMonths,
+        id: r.id,
+        code: r.code,
+        name: r.name,
+        departmentName: r.department?.name ?? null,
+        lastCalibratedAt: r.lastCalibratedAt,
+        calibrationDueAt: r.calibrationDueAt,
+        calibrationIntervalMonths: r.calibrationIntervalMonths,
+        lastMaintainedAt: r.lastMaintainedAt,
+        maintenanceDueAt: r.maintenanceDueAt,
+        maintenanceIntervalMonths: r.maintenanceIntervalMonths,
         status: dueStatus([r.calibrationDueAt, r.maintenanceDueAt], today, warn),
         version: r.version,
       }))
@@ -94,7 +101,18 @@ export class QualityService implements OnModuleInit {
     return this.prisma.$transaction(async (tx) => {
       const i = await this.instrument(instrumentId, tx);
       const event = await tx.equipmentEvent.create({
-        data: { instrumentId, kind: dto.kind, performedOn, performedBy: dto.performedBy.trim(), outcome: dto.outcome, certificateNo: dto.certificateNo?.trim() || null, certificateFileId: dto.certificateFileId ?? null, nextDueOn: nextDue, notes: dto.notes?.trim() || null, createdById: actorId() },
+        data: {
+          instrumentId,
+          kind: dto.kind,
+          performedOn,
+          performedBy: dto.performedBy.trim(),
+          outcome: dto.outcome,
+          certificateNo: dto.certificateNo?.trim() || null,
+          certificateFileId: dto.certificateFileId ?? null,
+          nextDueOn: nextDue,
+          notes: dto.notes?.trim() || null,
+          createdById: actorId(),
+        },
       });
       const data: Prisma.InstrumentUpdateInput = {};
       if (dto.kind === 'CALIBRATION' && dto.outcome !== 'FAIL') {
@@ -126,7 +144,13 @@ export class QualityService implements OnModuleInit {
         version: { increment: 1 },
       },
     });
-    await this.audit.record({ action: 'equipment.schedule', entity: 'Instrument', entityId: instrumentId, before: { calibrationIntervalMonths: i.calibrationIntervalMonths, maintenanceIntervalMonths: i.maintenanceIntervalMonths, maintenanceDueAt: i.maintenanceDueAt }, after: dto });
+    await this.audit.record({
+      action: 'equipment.schedule',
+      entity: 'Instrument',
+      entityId: instrumentId,
+      before: { calibrationIntervalMonths: i.calibrationIntervalMonths, maintenanceIntervalMonths: i.maintenanceIntervalMonths, maintenanceDueAt: i.maintenanceDueAt },
+      after: dto,
+    });
   }
 
   async equipmentReminders(): Promise<number> {
@@ -137,7 +161,10 @@ export class QualityService implements OnModuleInit {
     return this.notifications.notifyHolders(this.prisma, 'quality.manage', {
       type: 'EQUIPMENT_DUE',
       title: overdue ? `${overdue} instrument(s) overdue for calibration or maintenance` : `${due.length} instrument(s) due for calibration or maintenance soon`,
-      body: due.slice(0, 8).map((e) => `${e.code} ${e.name}`).join(', '),
+      body: due
+        .slice(0, 8)
+        .map((e) => `${e.code} ${e.name}`)
+        .join(', '),
       link: '/quality?tab=equipment',
       dedupeKey: `equipment-due:${today}`,
     });
@@ -157,22 +184,57 @@ export class QualityService implements OnModuleInit {
     ]);
     return rows.map((r) => {
       const t = tests.find((x) => x.id === r.testId);
-      return { id: r.id, userId: r.userId, userName: users.find((u) => u.id === r.userId)?.name ?? '—', testId: r.testId, testCode: t?.code ?? '—', testName: t?.name ?? '—', authorisedOn: r.authorisedOn, validUntil: r.validUntil, authorisedByName: r.authorisedByName, evidence: r.evidence, evidenceFileId: r.evidenceFileId, state: this.state(r), withdrawnReason: r.withdrawnReason };
+      return {
+        id: r.id,
+        userId: r.userId,
+        userName: users.find((u) => u.id === r.userId)?.name ?? '—',
+        testId: r.testId,
+        testCode: t?.code ?? '—',
+        testName: t?.name ?? '—',
+        authorisedOn: r.authorisedOn,
+        validUntil: r.validUntil,
+        authorisedByName: r.authorisedByName,
+        evidence: r.evidence,
+        evidenceFileId: r.evidenceFileId,
+        state: this.state(r),
+        withdrawnReason: r.withdrawnReason,
+      };
     });
   }
 
   async authorise(dto: CreateAuthorisationDto) {
-    const [user, test] = await Promise.all([this.prisma.user.findFirst({ where: { id: dto.userId, deletedAt: null } }), this.prisma.testMaster.findFirst({ where: { id: dto.testId, deletedAt: null } })]);
+    const [user, test] = await Promise.all([
+      this.prisma.user.findFirst({ where: { id: dto.userId, deletedAt: null } }),
+      this.prisma.testMaster.findFirst({ where: { id: dto.testId, deletedAt: null } }),
+    ]);
     if (!user) throw notFound('User');
     if (!test) throw notFound('Test');
     const from = day(dto.authorisedOn);
     const until = dto.validUntil ? day(dto.validUntil) : null;
     if (until && until <= from) throw badRequest('Valid until must be after the date authorised', [{ field: 'validUntil', message: 'Before the start' }]);
-    const active = await this.prisma.staffAuthorisation.findFirst({ where: { userId: dto.userId, testId: dto.testId, withdrawnAt: null, OR: [{ validUntil: null }, { validUntil: { gte: istToday() } }] } });
+    const active = await this.prisma.staffAuthorisation.findFirst({
+      where: { userId: dto.userId, testId: dto.testId, withdrawnAt: null, OR: [{ validUntil: null }, { validUntil: { gte: istToday() } }] },
+    });
     if (active) throw rule('ALREADY_AUTHORISED', `${user.name} is already authorised for ${test.name}`);
     const me = currentUser();
-    const row = await this.prisma.staffAuthorisation.create({ data: { userId: dto.userId, testId: dto.testId, authorisedOn: from, validUntil: until, authorisedById: me?.id ?? null, authorisedByName: me?.name ?? null, evidence: dto.evidence?.trim() || null, evidenceFileId: dto.evidenceFileId ?? null } });
-    await this.audit.record({ action: 'competency.authorised', entity: 'User', entityId: dto.userId, after: { testId: dto.testId, testName: test.name, authorisedOn: dto.authorisedOn, validUntil: dto.validUntil ?? null } });
+    const row = await this.prisma.staffAuthorisation.create({
+      data: {
+        userId: dto.userId,
+        testId: dto.testId,
+        authorisedOn: from,
+        validUntil: until,
+        authorisedById: me?.id ?? null,
+        authorisedByName: me?.name ?? null,
+        evidence: dto.evidence?.trim() || null,
+        evidenceFileId: dto.evidenceFileId ?? null,
+      },
+    });
+    await this.audit.record({
+      action: 'competency.authorised',
+      entity: 'User',
+      entityId: dto.userId,
+      after: { testId: dto.testId, testName: test.name, authorisedOn: dto.authorisedOn, validUntil: dto.validUntil ?? null },
+    });
     return row;
   }
 
@@ -187,7 +249,10 @@ export class QualityService implements OnModuleInit {
 
   /** Which of these tests the person is not currently authorised for. */
   async missingAuthorisations(userId: string, testIds: string[], tx: Tx | PrismaService = this.prisma) {
-    const active = await tx.staffAuthorisation.findMany({ where: { userId, testId: { in: testIds }, withdrawnAt: null, OR: [{ validUntil: null }, { validUntil: { gte: istToday() } }] }, select: { testId: true } });
+    const active = await tx.staffAuthorisation.findMany({
+      where: { userId, testId: { in: testIds }, withdrawnAt: null, OR: [{ validUntil: null }, { validUntil: { gte: istToday() } }] },
+      select: { testId: true },
+    });
     const ok = new Set(active.map((a) => a.testId));
     return [...new Set(testIds)].filter((t) => !ok.has(t));
   }
@@ -195,7 +260,17 @@ export class QualityService implements OnModuleInit {
   async training(userId?: string) {
     const rows = await this.prisma.trainingRecord.findMany({ where: userId ? { userId } : {}, orderBy: { trainedOn: 'desc' }, take: 500 });
     const users = await this.prisma.user.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.userId))] } }, select: { id: true, name: true } });
-    return rows.map((r) => ({ id: r.id, userId: r.userId, userName: users.find((u) => u.id === r.userId)?.name ?? '—', title: r.title, trainedOn: r.trainedOn, trainer: r.trainer, hours: r.hours?.toString() ?? null, notes: r.notes, evidenceFileId: r.evidenceFileId }));
+    return rows.map((r) => ({
+      id: r.id,
+      userId: r.userId,
+      userName: users.find((u) => u.id === r.userId)?.name ?? '—',
+      title: r.title,
+      trainedOn: r.trainedOn,
+      trainer: r.trainer,
+      hours: r.hours?.toString() ?? null,
+      notes: r.notes,
+      evidenceFileId: r.evidenceFileId,
+    }));
   }
 
   async addTraining(dto: CreateTrainingDto) {
@@ -203,7 +278,18 @@ export class QualityService implements OnModuleInit {
     if (!user) throw notFound('User');
     const trainedOn = day(dto.trainedOn);
     if (trainedOn > istToday()) throw badRequest('That date is in the future', [{ field: 'trainedOn', message: 'In the future' }]);
-    const row = await this.prisma.trainingRecord.create({ data: { userId: dto.userId, title: dto.title.trim(), trainedOn, trainer: dto.trainer?.trim() || null, hours: dto.hours ?? null, notes: dto.notes?.trim() || null, evidenceFileId: dto.evidenceFileId ?? null, createdById: actorId() } });
+    const row = await this.prisma.trainingRecord.create({
+      data: {
+        userId: dto.userId,
+        title: dto.title.trim(),
+        trainedOn,
+        trainer: dto.trainer?.trim() || null,
+        hours: dto.hours ?? null,
+        notes: dto.notes?.trim() || null,
+        evidenceFileId: dto.evidenceFileId ?? null,
+        createdById: actorId(),
+      },
+    });
     await this.audit.record({ action: 'training.recorded', entity: 'User', entityId: dto.userId, after: { title: dto.title, trainedOn: dto.trainedOn } });
     return row;
   }
@@ -216,7 +302,10 @@ export class QualityService implements OnModuleInit {
 
   async ncList(q: NcQuery) {
     const rows = await this.prisma.nonConformance.findMany({
-      where: { ...(q.status ? { status: q.status } : {}), ...(q.q ? { OR: [{ ncNo: { contains: q.q, mode: 'insensitive' } }, { title: { contains: q.q, mode: 'insensitive' } }, { reference: { contains: q.q, mode: 'insensitive' } }] } : {}) },
+      where: {
+        ...(q.status ? { status: q.status } : {}),
+        ...(q.q ? { OR: [{ ncNo: { contains: q.q, mode: 'insensitive' } }, { title: { contains: q.q, mode: 'insensitive' } }, { reference: { contains: q.q, mode: 'insensitive' } }] } : {}),
+      },
       orderBy: [{ createdAt: 'desc' }],
       take: 500,
     });
@@ -248,12 +337,30 @@ export class QualityService implements OnModuleInit {
     const n = await this.prisma.$transaction(async (tx) => {
       const ncNo = await this.numbering.next(tx, 'NC');
       const row = await tx.nonConformance.create({
-        data: { ncNo, source: dto.source, title: dto.title.trim(), description: dto.description.trim(), severity: dto.severity, reference: dto.reference?.trim() || null, ownerId: dto.ownerId ?? null, ownerName, dueOn: dto.dueOn ? day(dto.dueOn) : null, createdById: me?.id ?? null, createdByName: me?.name ?? null },
+        data: {
+          ncNo,
+          source: dto.source,
+          title: dto.title.trim(),
+          description: dto.description.trim(),
+          severity: dto.severity,
+          reference: dto.reference?.trim() || null,
+          ownerId: dto.ownerId ?? null,
+          ownerName,
+          dueOn: dto.dueOn ? day(dto.dueOn) : null,
+          createdById: me?.id ?? null,
+          createdByName: me?.name ?? null,
+        },
       });
       await this.audit.record({ action: 'nc.raised', entity: 'NonConformance', entityId: row.id, after: { ncNo, title: row.title, severity: row.severity } }, tx);
       return row;
     });
-    if (n.ownerId) await this.notifications.send(this.prisma, [n.ownerId], { type: 'NC_ASSIGNED', title: `${n.ncNo}: ${n.title}`, body: `A non-conformance is assigned to you${n.dueOn ? `, due ${formatDate(n.dueOn)}` : ''}.`, link: `/quality?tab=nc&id=${n.id}` });
+    if (n.ownerId)
+      await this.notifications.send(this.prisma, [n.ownerId], {
+        type: 'NC_ASSIGNED',
+        title: `${n.ncNo}: ${n.title}`,
+        body: `A non-conformance is assigned to you${n.dueOn ? `, due ${formatDate(n.dueOn)}` : ''}.`,
+        link: `/quality?tab=nc&id=${n.id}`,
+      });
     return this.ncDto(n);
   }
 
@@ -295,13 +402,23 @@ export class QualityService implements OnModuleInit {
     }
     const { count } = await this.prisma.nonConformance.updateMany({ where: { id, version: dto.version }, data: data as Prisma.NonConformanceUpdateManyMutationInput });
     if (count !== 1) throw conflict();
-    await this.audit.record({ action: dto.status && dto.status !== n.status ? `nc.${dto.status.toLowerCase()}` : 'nc.update', entity: 'NonConformance', entityId: id, before: { status: n.status }, after: dto });
+    await this.audit.record({
+      action: dto.status && dto.status !== n.status ? `nc.${dto.status.toLowerCase()}` : 'nc.update',
+      entity: 'NonConformance',
+      entityId: id,
+      before: { status: n.status },
+      after: dto,
+    });
     return this.ncGet(id);
   }
 
   /** Active staff, names only: for choosing an analyst to authorise or the owner of a non-conformance. */
   async people() {
-    const users = await this.prisma.user.findMany({ where: { deletedAt: null, isActive: true }, select: { id: true, name: true, designation: true, roles: { select: { role: { select: { permissions: { where: { permissionCode: 'tests.work' }, select: { permissionCode: true } } } } } } }, orderBy: { name: 'asc' } });
+    const users = await this.prisma.user.findMany({
+      where: { deletedAt: null, isActive: true },
+      select: { id: true, name: true, designation: true, roles: { select: { role: { select: { permissions: { where: { permissionCode: 'tests.work' }, select: { permissionCode: true } } } } } } },
+      orderBy: { name: 'asc' },
+    });
     return users.map((u) => ({ id: u.id, name: u.name, designation: u.designation, analyst: u.roles.some((r) => r.role.permissions.length > 0) }));
   }
 
@@ -316,6 +433,12 @@ export class QualityService implements OnModuleInit {
     ]);
     const soon = new Date(today.getTime() + warn * 86_400_000);
     const authorisationsExpiringSoon = expiring + (await this.prisma.staffAuthorisation.count({ where: { withdrawnAt: null, validUntil: { gte: today, lte: soon } } }));
-    return { equipmentOverdue: equipment.filter((e) => e.status === 'OVERDUE').length, equipmentDueSoon: equipment.filter((e) => e.status === 'DUE_SOON').length, authorisationsExpiringSoon, ncOpen, ncOverdue };
+    return {
+      equipmentOverdue: equipment.filter((e) => e.status === 'OVERDUE').length,
+      equipmentDueSoon: equipment.filter((e) => e.status === 'DUE_SOON').length,
+      authorisationsExpiringSoon,
+      ncOpen,
+      ncOverdue,
+    };
   }
 }

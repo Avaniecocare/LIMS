@@ -10,7 +10,13 @@ import { bootApp, createUser, login, resetDb, type Client, type Ctx } from '../s
  * no session at all (@Public). Then, for every permission route and every built-in role, the API must refuse
  * exactly the roles that lack the permission.
  */
-interface Route { method: string; path: string; perms: string[] | undefined; isPublic: boolean; signedIn: string | undefined }
+interface Route {
+  method: string;
+  path: string;
+  perms: string[] | undefined;
+  isPublic: boolean;
+  signedIn: string | undefined;
+}
 
 let ctx: Ctx;
 let routes: Route[];
@@ -29,7 +35,13 @@ function collectRoutes(): Route[] {
         if (method === undefined) continue;
         const sub = ([] as string[]).concat(Reflect.getMetadata('path', handler) ?? '')[0];
         const meta = <T>(key: string) => (Reflect.getMetadata(key, handler) ?? Reflect.getMetadata(key, ctrl)) as T | undefined;
-        out.push({ method: RequestMethod[method], path: `/api/v1/${[base, sub].filter((x) => x && x !== '/').join('/')}`.replace(/\/+/g, '/'), perms: meta<string[]>(PERMS_KEY), isPublic: !!meta<boolean>(PUBLIC_KEY), signedIn: meta<string>(SIGNED_IN_KEY) });
+        out.push({
+          method: RequestMethod[method],
+          path: `/api/v1/${[base, sub].filter((x) => x && x !== '/').join('/')}`.replace(/\/+/g, '/'),
+          perms: meta<string[]>(PERMS_KEY),
+          isPublic: !!meta<boolean>(PUBLIC_KEY),
+          signedIn: meta<string>(SIGNED_IN_KEY),
+        });
       }
     }
   }

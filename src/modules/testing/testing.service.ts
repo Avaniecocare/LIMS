@@ -68,13 +68,29 @@ export class TestingService implements OnModuleInit {
         const company = this.company.snapshot();
         const html = testDataHtml(
           {
-            testName: t.testName, methodName: t.methodName, sampleNo: t.sample.sampleNo, jobNo: t.sample.job.jobNo, sampleDescription: t.sample.description, conductedByName: t.conductedByName, assignedToName: t.assignedTo?.name ?? null, status: t.status,
-            stages: t.stages, remarks: t.remarks, observations: t.observations, notes: t.notes,
+            testName: t.testName,
+            methodName: t.methodName,
+            sampleNo: t.sample.sampleNo,
+            jobNo: t.sample.job.jobNo,
+            sampleDescription: t.sample.description,
+            conductedByName: t.conductedByName,
+            assignedToName: t.assignedTo?.name ?? null,
+            status: t.status,
+            stages: t.stages,
+            remarks: t.remarks,
+            observations: t.observations,
+            notes: t.notes,
             results: t.results.map((r) => ({ name: r.name, unit: r.unit, value: enteredValue(r), working: r.calculations[0]?.working ?? null })),
           },
           company,
         );
-        return { buffer: await this.pdf.render(html, { company }), filename: `Test data ${t.sample.sampleNo} ${t.testCode}.pdf`.replace(/[/\\]/g, '-'), mimeType: 'application/pdf', entity: 'SampleTest', entityId: t.id };
+        return {
+          buffer: await this.pdf.render(html, { company }),
+          filename: `Test data ${t.sample.sampleNo} ${t.testCode}.pdf`.replace(/[/\\]/g, '-'),
+          mimeType: 'application/pdf',
+          entity: 'SampleTest',
+          entityId: t.id,
+        };
       },
     });
   }
@@ -103,8 +119,23 @@ export class TestingService implements OnModuleInit {
     // Impartiality is on by default; customer identity then never leaves through test endpoints.
     const impartial = hideCustomer ?? (await this.settings.get('controls.impartiality'));
     return {
-      id: t.id, testCode: t.testCode, testName: t.testName, methodName: t.methodName, status: t.status, urgent: t.urgent, dueDate: t.dueDate, overdue: !!t.dueDate && t.dueDate < today && !['APPROVED', 'CANCELLED'].includes(t.status), sampleNo: t.sample.sampleNo, jobNo: t.sample.job.jobNo, sampleDescription: t.sample.description,
-      customerName: impartial ? null : t.sample.job.customer.name, currentStage: t.stages.find((s) => !s.completedAt)?.name ?? null, rejectionReason: t.rejectionReason, holdReason: t.holdReason, version: t.version, analysisMode: t.analysisMode,
+      id: t.id,
+      testCode: t.testCode,
+      testName: t.testName,
+      methodName: t.methodName,
+      status: t.status,
+      urgent: t.urgent,
+      dueDate: t.dueDate,
+      overdue: !!t.dueDate && t.dueDate < today && !['APPROVED', 'CANCELLED'].includes(t.status),
+      sampleNo: t.sample.sampleNo,
+      jobNo: t.sample.job.jobNo,
+      sampleDescription: t.sample.description,
+      customerName: impartial ? null : t.sample.job.customer.name,
+      currentStage: t.stages.find((s) => !s.completedAt)?.name ?? null,
+      rejectionReason: t.rejectionReason,
+      holdReason: t.holdReason,
+      version: t.version,
+      analysisMode: t.analysisMode,
     };
   }
 
@@ -116,7 +147,15 @@ export class TestingService implements OnModuleInit {
       assignedToId: actorId(),
       status: open ? { in: ['ASSIGNED', 'IN_PROGRESS', 'ON_HOLD'] } : { in: ['RESULTS_SUBMITTED', 'APPROVED'] },
       sample: { job: { status: { not: 'CANCELLED' } } },
-      ...(q.q ? { OR: [{ testName: { contains: q.q, mode: 'insensitive' } }, { sample: { sampleNo: { contains: q.q, mode: 'insensitive' } } }, { sample: { job: { jobNo: { contains: q.q, mode: 'insensitive' } } } }] } : {}),
+      ...(q.q
+        ? {
+            OR: [
+              { testName: { contains: q.q, mode: 'insensitive' } },
+              { sample: { sampleNo: { contains: q.q, mode: 'insensitive' } } },
+              { sample: { job: { jobNo: { contains: q.q, mode: 'insensitive' } } } },
+            ],
+          }
+        : {}),
     };
     const [rows, total] = await Promise.all([
       this.prisma.sampleTest.findMany({ where, include: listInclude, orderBy: [{ urgent: 'desc' }, { dueDate: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }], ...skipTake(q) }),
@@ -128,7 +167,10 @@ export class TestingService implements OnModuleInit {
   }
 
   private async paramRows(tx: Tx | PrismaService, results: DetailRow['results']): Promise<ParamRow[]> {
-    const parameters = await tx.testParameter.findMany({ where: { id: { in: results.map((r) => r.parameterId) } }, include: { resultSet: { include: { options: { orderBy: { sortOrder: 'asc' } } } }, formula: { include: { versions: { orderBy: { versionNo: 'desc' }, take: 1 } } } } });
+    const parameters = await tx.testParameter.findMany({
+      where: { id: { in: results.map((r) => r.parameterId) } },
+      include: { resultSet: { include: { options: { orderBy: { sortOrder: 'asc' } } } }, formula: { include: { versions: { orderBy: { versionNo: 'desc' }, take: 1 } } } },
+    });
     const byId = new Map(parameters.map((p) => [p.id, p]));
     return results.map((r) => {
       const p = byId.get(r.parameterId);
@@ -156,14 +198,28 @@ export class TestingService implements OnModuleInit {
       const numeric = locked ? (r.numericValue !== null ? new Prisma.Decimal(r.numericValue).toFixed(r.decimals) : null) : c.numericValue;
       const qualifier = locked ? r.qualifier : c.qualifier;
       return {
-        parameterId: r.parameterId, code: r.code, name: r.name, kind: r.kind, unit: r.unit, decimals: r.decimals, accredited: r.accredited,
+        parameterId: r.parameterId,
+        code: r.code,
+        name: r.name,
+        kind: r.kind,
+        unit: r.unit,
+        decimals: r.decimals,
+        accredited: r.accredited,
         // Written as typed, so "<0.005" comes back into the input unchanged.
-        value: numeric !== null ? `${qualifier ?? ''}${numeric}` : locked ? r.textValue : c.textValue, numericValue: numeric, qualifier: qualifier ?? null, textValue: locked ? r.textValue : c.textValue,
+        value: numeric !== null ? `${qualifier ?? ''}${numeric}` : locked ? r.textValue : c.textValue,
+        numericValue: numeric,
+        qualifier: qualifier ?? null,
+        textValue: locked ? r.textValue : c.textValue,
         limits: (r.limits as unknown as LimitSnapshot[] | null) ?? [],
         passPrimary: locked ? r.passPrimary : c.passPrimary,
         passDual: locked ? r.passDual : c.passDual,
         options: byParam.get(r.parameterId)?.options ?? [],
-        calculation: stored && locked ? { inputs: stored.inputs as Record<string, string>, working: stored.working, result: String(stored.result), formulaVersion: stored.formulaVersion.versionNo } : c.calculation ? { inputs: c.calculation.inputs, working: c.calculation.working, result: c.calculation.result, formulaVersion: null } : null,
+        calculation:
+          stored && locked
+            ? { inputs: stored.inputs as Record<string, string>, working: stored.working, result: String(stored.result), formulaVersion: stored.formulaVersion.versionNo }
+            : c.calculation
+              ? { inputs: c.calculation.inputs, working: c.calculation.working, result: c.calculation.result, formulaVersion: null }
+              : null,
         error: locked ? null : c.error,
       };
     });
@@ -190,7 +246,14 @@ export class TestingService implements OnModuleInit {
     const approver = t.approvedById ? await this.prisma.user.findUnique({ where: { id: t.approvedById }, select: { name: true } }) : null;
     return {
       ...(await this.listItem(t)),
-      sampleId: t.sampleId, officeInstructions: t.officeInstructions, technicalData: t.technicalData, instrumentId: t.instrumentId, remarks: t.remarks, observations: t.observations, notes: t.notes, conductedByName: t.conductedByName,
+      sampleId: t.sampleId,
+      officeInstructions: t.officeInstructions,
+      technicalData: t.technicalData,
+      instrumentId: t.instrumentId,
+      remarks: t.remarks,
+      observations: t.observations,
+      notes: t.notes,
+      conductedByName: t.conductedByName,
       assignedToMe: t.assignedToId === actorId(),
       canEdit: t.status === 'IN_PROGRESS' && t.assignedToId === actorId() && can('tests.work') && t.sample.job.status !== 'ON_HOLD',
       blockOverdueInstruments: await this.settings.get('controls.blockOverdueInstruments'),
@@ -201,7 +264,11 @@ export class TestingService implements OnModuleInit {
       conversions: conversions.map((c) => ({ id: c.id, fromCode: c.fromUnit.code, fromSymbol: c.fromUnit.symbol, toCode: c.toUnit.code, toSymbol: c.toUnit.symbol })),
       // Suggestions follow the outcome so far; everything else stays selectable.
       remarkOptions: templates.map((r) => ({ id: r.id, code: r.code, text: r.text, outcome: r.outcome, suggested: r.outcome === outcome || (r.outcome === 'ANY' && r.testId === t.testId) })),
-      assignedToName: t.assignedTo?.name ?? null, submittedAt: t.submittedAt, approvedAt: t.approvedAt, approvedByName: approver?.name ?? null, outcome,
+      assignedToName: t.assignedTo?.name ?? null,
+      submittedAt: t.submittedAt,
+      approvedAt: t.approvedAt,
+      approvedByName: approver?.name ?? null,
+      outcome,
     };
   }
 
@@ -278,11 +345,28 @@ export class TestingService implements OnModuleInit {
       await tx.parameterResult.update({
         where: { sampleTestId_parameterId: { sampleTestId: t.id, parameterId: c.parameterId } },
         // "Entered by" follows the value: it moves only when this value changed.
-        data: { numericValue: c.numericValue, qualifier: c.qualifier, textValue: c.textValue, passPrimary: c.passPrimary, passDual: c.passDual, ...(changed ? { enteredById: actorId(), enteredAt: now } : {}) },
+        data: {
+          numericValue: c.numericValue,
+          qualifier: c.qualifier,
+          textValue: c.textValue,
+          passPrimary: c.passPrimary,
+          passDual: c.passDual,
+          ...(changed ? { enteredById: actorId(), enteredAt: now } : {}),
+        },
       });
     }
     // One audit entry per save listing each changed value, so every result's history (who, when, from what) is kept.
-    if (changes.length) await this.audit.record({ action: 'SampleTest.results', entity: 'SampleTest', entityId: t.id, before: Object.fromEntries(changes.map((c) => [c.parameter, c.from])), after: Object.fromEntries(changes.map((c) => [c.parameter, c.to])) }, tx);
+    if (changes.length)
+      await this.audit.record(
+        {
+          action: 'SampleTest.results',
+          entity: 'SampleTest',
+          entityId: t.id,
+          before: Object.fromEntries(changes.map((c) => [c.parameter, c.from])),
+          after: Object.fromEntries(changes.map((c) => [c.parameter, c.to])),
+        },
+        tx,
+      );
     return computed;
   }
 
@@ -300,7 +384,12 @@ export class TestingService implements OnModuleInit {
         const bad = computed.filter((c) => c.error && entered.has(c.parameterId));
         if (bad.length) {
           const names = new Map(t.results.map((r) => [r.parameterId, r.name]));
-          throw new AppError('RESULT_INVALID', 400, bad.map((b) => `${names.get(b.parameterId)}: ${b.error}`).join('; '), bad.map((b) => ({ field: b.parameterId, message: b.error! })));
+          throw new AppError(
+            'RESULT_INVALID',
+            400,
+            bad.map((b) => `${names.get(b.parameterId)}: ${b.error}`).join('; '),
+            bad.map((b) => ({ field: b.parameterId, message: b.error! })),
+          );
         }
       }
       if (dto.instrumentId !== undefined) await this.assertInstrument(tx, dto.instrumentId);
@@ -323,17 +412,37 @@ export class TestingService implements OnModuleInit {
       const computed = await this.persistValues(tx, t, new Map());
       const byId = new Map(t.results.map((r) => [r.parameterId, r]));
       const missing = computed.filter((c) => c.numericValue === null && c.textValue === null).map((c) => byId.get(c.parameterId)!.name);
-      if (missing.length) throw new AppError('RESULTS_MISSING', 422, `Enter a result for: ${missing.join(', ')}`, missing.map((m) => ({ field: m, message: 'Required' })));
+      if (missing.length)
+        throw new AppError(
+          'RESULTS_MISSING',
+          422,
+          `Enter a result for: ${missing.join(', ')}`,
+          missing.map((m) => ({ field: m, message: 'Required' })),
+        );
       const errors = computed.filter((c) => c.error);
       if (errors.length) throw rule('RESULTS_INVALID', errors.map((e) => `${byId.get(e.parameterId)!.name}: ${e.error}`).join('; '));
       // Each calculated result records exactly which formula version produced it.
       for (const c of computed) {
         if (!c.calculation) continue;
         await tx.calculationRecord.create({
-          data: { parameterResultId: byId.get(c.parameterId)!.id, formulaVersionId: c.calculation.formulaVersionId, inputs: c.calculation.inputs, working: c.calculation.working, result: c.calculation.result, createdById: actorId() },
+          data: {
+            parameterResultId: byId.get(c.parameterId)!.id,
+            formulaVersionId: c.calculation.formulaVersionId,
+            inputs: c.calculation.inputs,
+            working: c.calculation.working,
+            result: c.calculation.result,
+            createdById: actorId(),
+          },
         });
       }
-      await this.bump(tx, id, version, { status: 'RESULTS_SUBMITTED', submittedAt: new Date(), submittedById: actorId(), conductedById: actorId(), conductedByName: currentUser()!.name, rejectionReason: null });
+      await this.bump(tx, id, version, {
+        status: 'RESULTS_SUBMITTED',
+        submittedAt: new Date(),
+        submittedById: actorId(),
+        conductedById: actorId(),
+        conductedByName: currentUser()!.name,
+        rejectionReason: null,
+      });
       await this.audit.status(tx, { entity: 'SampleTest', entityId: id, from: t.status, to: 'RESULTS_SUBMITTED', jobId: t.sample.jobId });
       await this.notify?.(tx, { type: 'RESULTS_SUBMITTED', sampleTestId: id });
     });
@@ -378,7 +487,15 @@ export class TestingService implements OnModuleInit {
       deletedAt: null,
       status: 'RESULTS_SUBMITTED',
       ...(q.departmentId ? { departmentId: q.departmentId } : {}),
-      ...(q.q ? { OR: [{ testName: { contains: q.q, mode: 'insensitive' } }, { sample: { sampleNo: { contains: q.q, mode: 'insensitive' } } }, { sample: { job: { jobNo: { contains: q.q, mode: 'insensitive' } } } }] } : {}),
+      ...(q.q
+        ? {
+            OR: [
+              { testName: { contains: q.q, mode: 'insensitive' } },
+              { sample: { sampleNo: { contains: q.q, mode: 'insensitive' } } },
+              { sample: { job: { jobNo: { contains: q.q, mode: 'insensitive' } } } },
+            ],
+          }
+        : {}),
     };
     const [rows, total] = await Promise.all([
       this.prisma.sampleTest.findMany({ where, include: detailInclude, orderBy: [{ urgent: 'desc' }, orderBy(q, ['dueDate', 'submittedAt', 'testName'], 'submittedAt', 'asc')], ...skipTake(q) }),
@@ -386,14 +503,28 @@ export class TestingService implements OnModuleInit {
     ]);
     const me = actorId();
     // One parameter lookup for the whole page, not one per test; each row's slice keeps its own limits.
-    const allParams = await this.paramRows(this.prisma, rows.flatMap((t) => t.results));
+    const allParams = await this.paramRows(
+      this.prisma,
+      rows.flatMap((t) => t.results),
+    );
     let offset = 0;
     const data = await Promise.all(
       rows.map(async (t) => {
         const params = allParams.slice(offset, (offset += t.results.length));
         const results = this.resultView(t, params);
         return {
-          id: t.id, testCode: t.testCode, testName: t.testName, methodName: t.methodName, sampleNo: t.sample.sampleNo, jobNo: t.sample.job.jobNo, urgent: t.urgent, dueDate: t.dueDate, submittedAt: t.submittedAt, conductedByName: t.conductedByName, outcome: overallOutcome(results), version: t.version,
+          id: t.id,
+          testCode: t.testCode,
+          testName: t.testName,
+          methodName: t.methodName,
+          sampleNo: t.sample.sampleNo,
+          jobNo: t.sample.job.jobNo,
+          urgent: t.urgent,
+          dueDate: t.dueDate,
+          submittedAt: t.submittedAt,
+          conductedByName: t.conductedByName,
+          outcome: overallOutcome(results),
+          version: t.version,
           ownResult: t.conductedById === me || t.submittedById === me,
           results,
         };

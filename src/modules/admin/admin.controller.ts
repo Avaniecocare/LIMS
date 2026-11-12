@@ -41,103 +41,143 @@ export class AdminController {
     private readonly settings: SettingsService,
   ) {}
 
-  @Get('users') @Perm('admin.users') @ApiOkResponse({ type: UserPageDto })
+  @Get('users')
+  @Perm('admin.users')
+  @ApiOkResponse({ type: UserPageDto })
   listUsers(@Query() q: UserListQuery) {
     return this.admin.listUsers(q);
   }
 
-  @Get('users/:id') @Perm('admin.users') @ApiOkResponse({ type: UserDto })
+  @Get('users/:id')
+  @Perm('admin.users')
+  @ApiOkResponse({ type: UserDto })
   getUser(@Param('id', ParseUUIDPipe) id: string) {
     return this.admin.getUser(id);
   }
 
-  @Post('users') @Perm('admin.users') @ApiOkResponse({ type: UserDto })
+  @Post('users')
+  @Perm('admin.users')
+  @ApiOkResponse({ type: UserDto })
   createUser(@Body() dto: CreateUserDto) {
     return this.admin.createUser(dto);
   }
 
-  @Patch('users/:id') @Perm('admin.users') @ApiOkResponse({ type: UserDto })
+  @Patch('users/:id')
+  @Perm('admin.users')
+  @ApiOkResponse({ type: UserDto })
   updateUser(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUserDto) {
     return this.admin.updateUser(id, dto);
   }
 
-  @Post('users/:id/reset-password') @HttpCode(200) @Perm('admin.users') @ApiOkResponse({ type: OkDto })
+  @Post('users/:id/reset-password')
+  @HttpCode(200)
+  @Perm('admin.users')
+  @ApiOkResponse({ type: OkDto })
   async resetPassword(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminResetPasswordDto) {
     await this.admin.adminResetPassword(id, dto.newPassword);
     return { ok: true };
   }
 
   /** The image printed on reports this person signs. */
-  @Post('users/:id/signature') @HttpCode(200) @Perm('admin.users') @ApiOkResponse({ type: UserDto })
+  @Post('users/:id/signature')
+  @HttpCode(200)
+  @Perm('admin.users')
+  @ApiOkResponse({ type: UserDto })
   signature(@Param('id', ParseUUIDPipe) id: string, @Body() dto: SetSignatureDto) {
     return this.admin.setUserSignature(id, dto.fileId, dto.version);
   }
 
-  @Get('permissions') @Perm('admin.roles') @ApiOkResponse({ type: [PermissionDto] })
+  @Get('permissions')
+  @Perm('admin.roles')
+  @ApiOkResponse({ type: [PermissionDto] })
   permissions() {
     return this.admin.listPermissions();
   }
 
-  @Get('roles') @Perm('admin.roles', 'admin.users') @ApiOkResponse({ type: [RoleDto] })
+  @Get('roles')
+  @Perm('admin.roles', 'admin.users')
+  @ApiOkResponse({ type: [RoleDto] })
   roles() {
     return this.admin.listRoles();
   }
 
-  @Post('roles') @Perm('admin.roles') @ApiOkResponse({ type: RoleDto })
+  @Post('roles')
+  @Perm('admin.roles')
+  @ApiOkResponse({ type: RoleDto })
   createRole(@Body() dto: CreateRoleDto) {
     return this.admin.createRole(dto);
   }
 
-  @Patch('roles/:id') @Perm('admin.roles') @ApiOkResponse({ type: RoleDto })
+  @Patch('roles/:id')
+  @Perm('admin.roles')
+  @ApiOkResponse({ type: RoleDto })
   updateRole(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateRoleDto) {
     return this.admin.updateRole(id, dto);
   }
 
-  @Get('settings') @Perm('admin.settings') @ApiOkResponse({ type: [SettingDto] })
+  @Get('settings')
+  @Perm('admin.settings')
+  @ApiOkResponse({ type: [SettingDto] })
   listSettings() {
     return this.settings.all();
   }
 
-  @Put('settings/:key') @Perm('admin.settings') @ApiOkResponse({ type: [SettingDto] })
+  @Put('settings/:key')
+  @Perm('admin.settings')
+  @ApiOkResponse({ type: [SettingDto] })
   async updateSetting(@Param('key') key: string, @Body() dto: UpdateSettingDto) {
     await this.settings.set(key, dto.value, dto.version, dto.reason);
     return this.settings.all();
   }
 
-  @Get('terms') @Perm('admin.settings') @ApiOkResponse({ type: [TermsDto] })
+  @Get('terms')
+  @Perm('admin.settings')
+  @ApiOkResponse({ type: [TermsDto] })
   terms(@Query('kind') kind?: string) {
     if (!kind) return this.admin.latestTerms();
     if (kind !== 'QUOTATION' && kind !== 'INVOICE' && kind !== 'REPORT') throw badRequest('Unknown terms kind');
     return this.admin.termsHistory(kind);
   }
 
-  @Post('terms') @Perm('admin.settings') @ApiOkResponse({ type: TermsDto })
+  @Post('terms')
+  @Perm('admin.settings')
+  @ApiOkResponse({ type: TermsDto })
   addTerms(@Body() dto: CreateTermsDto) {
     return this.admin.addTerms(dto.kind, dto.body);
   }
 
-  @Get('holidays') @Perm('admin.settings') @ApiOkResponse({ type: [HolidayDto] })
+  @Get('holidays')
+  @Perm('admin.settings')
+  @ApiOkResponse({ type: [HolidayDto] })
   holidays() {
     return this.admin.listHolidays();
   }
 
-  @Post('holidays') @Perm('admin.settings') @ApiOkResponse({ type: HolidayDto })
+  @Post('holidays')
+  @Perm('admin.settings')
+  @ApiOkResponse({ type: HolidayDto })
   addHoliday(@Body() dto: CreateHolidayDto) {
     return this.admin.addHoliday(dto.date, dto.name);
   }
 
-  @Delete('holidays/:id') @Perm('admin.settings') @ApiOkResponse({ type: OkDto })
+  @Delete('holidays/:id')
+  @Perm('admin.settings')
+  @ApiOkResponse({ type: OkDto })
   async removeHoliday(@Param('id', ParseUUIDPipe) id: string) {
     await this.admin.removeHoliday(id);
     return { ok: true };
   }
 
-  @Get('audit') @Perm('admin.audit') @ApiOkResponse({ type: AuditPageDto })
+  @Get('audit')
+  @Perm('admin.audit')
+  @ApiOkResponse({ type: AuditPageDto })
   audit(@Query() q: AuditQuery) {
     return this.admin.listAudit(q);
   }
 
-  @Get('company') @Perm('admin.company.view') @ApiOkResponse({ type: CompanyDetailsDto })
+  @Get('company')
+  @Perm('admin.company.view')
+  @ApiOkResponse({ type: CompanyDetailsDto })
   company() {
     return this.admin.companyDetails();
   }
@@ -150,17 +190,20 @@ export class AdminController {
 export class SavedFiltersController {
   constructor(private readonly admin: AdminService) {}
 
-  @Get() @ApiOkResponse({ type: [SavedFilterDto] })
+  @Get()
+  @ApiOkResponse({ type: [SavedFilterDto] })
   list(@Query('screen') screen: string) {
     return this.admin.listSavedFilters(screen ?? '');
   }
 
-  @Post() @ApiOkResponse({ type: SavedFilterDto })
+  @Post()
+  @ApiOkResponse({ type: SavedFilterDto })
   create(@Body() dto: CreateSavedFilterDto) {
     return this.admin.createSavedFilter(dto);
   }
 
-  @Delete(':id') @ApiOkResponse({ type: OkDto })
+  @Delete(':id')
+  @ApiOkResponse({ type: OkDto })
   async remove(@Param('id', ParseUUIDPipe) id: string) {
     await this.admin.deleteSavedFilter(id);
     return { ok: true };

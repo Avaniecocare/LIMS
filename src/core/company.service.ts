@@ -133,7 +133,8 @@ export class CompanyService implements OnModuleInit, OnModuleDestroy {
       branding.logoFileId = await store(legacy.logoPath, `logo${extname(legacy.logoPath ?? '.png')}`);
       branding.faviconFileId = await store(legacy.faviconPath, `favicon${extname(legacy.faviconPath ?? '.png')}`);
     }
-    const insert = (key: string, value: unknown) => this.prisma.$executeRaw`INSERT INTO "Setting" ("key", "value", "version", "updatedAt") VALUES (${key}, ${JSON.stringify(value)}::jsonb, 1, now()) ON CONFLICT ("key") DO NOTHING`;
+    const insert = (key: string, value: unknown) =>
+      this.prisma.$executeRaw`INSERT INTO "Setting" ("key", "value", "version", "updatedAt") VALUES (${key}, ${JSON.stringify(value)}::jsonb, 1, now()) ON CONFLICT ("key") DO NOTHING`;
     if (!p) await insert(PROFILE_KEY, start.profile);
     // An install imported from COMPANY_* settings is already set up: its administrators skip the setup wizard.
     if (legacy && !p) await insert('setup.labCompleted', true);

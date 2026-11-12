@@ -41,7 +41,17 @@ export async function startWorker(): Promise<WorkerHandle> {
   for (const w of workers) {
     w.on('failed', (job, err) => {
       // The job's ids (never its payload, which can hold email addresses) plus the full error, so failures can be traced.
-      logger.error({ queue: w.name, jobId: job?.id, jobName: job?.name, attempts: job?.attemptsMade, data: job ? Object.fromEntries(Object.entries(job.data ?? {}).filter(([k]) => /Id$/.test(k))) : undefined, err }, 'job failed');
+      logger.error(
+        {
+          queue: w.name,
+          jobId: job?.id,
+          jobName: job?.name,
+          attempts: job?.attemptsMade,
+          data: job ? Object.fromEntries(Object.entries(job.data ?? {}).filter(([k]) => /Id$/.test(k))) : undefined,
+          err,
+        },
+        'job failed',
+      );
       reportError(err, { queue: w.name, jobId: job?.id });
     });
   }

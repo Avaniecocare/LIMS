@@ -19,7 +19,8 @@ beforeAll(async () => {
     const { loadBaseline } = await import('../../src/modules/rbac/baseline.js');
     await loadBaseline(tx);
   });
-  for (const [e, r] of Object.entries({ admin: ROLE_NAMES.admin, sales: ROLE_NAMES.sales, reception: ROLE_NAMES.reception, planner: ROLE_NAMES.planner, tech: ROLE_NAMES.tech, hod: ROLE_NAMES.hod })) await createUser(ctx, `${e}@j.example`, [r]);
+  for (const [e, r] of Object.entries({ admin: ROLE_NAMES.admin, sales: ROLE_NAMES.sales, reception: ROLE_NAMES.reception, planner: ROLE_NAMES.planner, tech: ROLE_NAMES.tech, hod: ROLE_NAMES.hod }))
+    await createUser(ctx, `${e}@j.example`, [r]);
   admin = await login(ctx, 'admin@j.example');
   sales = await login(ctx, 'sales@j.example');
   reception = await login(ctx, 'reception@j.example');
@@ -34,11 +35,28 @@ beforeAll(async () => {
 afterAll(() => ctx.app.close());
 
 const bookJob = async (extra: object = {}) =>
-  (await reception.post('/jobs', { customerId: fx.intra.id, noQuotationReason: 'Repeat customer on agreed rates', samples: [{ description: 'Fuel oil', quantity: '1 L', condition: 'Sealed', returnable: true, attributes: [{ label: 'Batch', value: 'B-77' }], testIds: [fx.tests.a, fx.tests.d] }], ...extra }).expect(201)).body;
+  (
+    await reception
+      .post('/jobs', {
+        customerId: fx.intra.id,
+        noQuotationReason: 'Repeat customer on agreed rates',
+        samples: [{ description: 'Fuel oil', quantity: '1 L', condition: 'Sealed', returnable: true, attributes: [{ label: 'Batch', value: 'B-77' }], testIds: [fx.tests.a, fx.tests.d] }],
+        ...extra,
+      })
+      .expect(201)
+  ).body;
 
 describe('job booking', () => {
   it('numbers jobs and samples, stores details and starts the timeline', async () => {
-    const j = await bookJob({ urgent: true, letterRef: 'L-1', letterDate: '2026-11-01', poNumber: 'PO-9', poDate: '2026-11-02', materialSpec: 'IS 1460', deviations: [{ typeId: deviationId, sampleIndex: 0, remark: 'Label torn' }] });
+    const j = await bookJob({
+      urgent: true,
+      letterRef: 'L-1',
+      letterDate: '2026-11-01',
+      poNumber: 'PO-9',
+      poDate: '2026-11-02',
+      materialSpec: 'IS 1460',
+      deviations: [{ typeId: deviationId, sampleIndex: 0, remark: 'Label torn' }],
+    });
     expect(j.jobNo).toMatch(/\/JOB\//);
     expect(j.samples[0].sampleNo).toMatch(/\/S\//);
     expect(j).toMatchObject({ status: 'RECEIVED', urgent: true, letterRef: 'L-1', poNumber: 'PO-9', customerName: fx.intra.name });
@@ -146,10 +164,11 @@ describe('documents', () => {
     expect(emails[0]).toMatchObject({ toAddress: 'customer@c.example', template: 'acknowledgement' });
   }, 60000);
 
-  it('the acknowledgement can carry photos of the samples as received, optionally, and only this job\'s', async () => {
+  it("the acknowledgement can carry photos of the samples as received, optionally, and only this job's", async () => {
     const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
     const j = await bookJob();
-    const photo = async (sampleId: string, name: string) => (await reception.post('/files').field('entity', 'Sample').field('entityId', sampleId).field('category', 'sample-image').attach('file', PNG, name).expect(201)).body.id as string;
+    const photo = async (sampleId: string, name: string) =>
+      (await reception.post('/files').field('entity', 'Sample').field('entityId', sampleId).field('category', 'sample-image').attach('file', PNG, name).expect(201)).body.id as string;
     const a = await photo(j.samples[0].id, 'front.png');
     const b = await photo(j.samples[0].id, 'side.png');
     const other = await bookJob();
@@ -227,17 +246,39 @@ describe('planning', () => {
     const list = (await planner.get(`/planning/tests?view=unplanned&jobId=${j.id}`).expect(200)).body;
     expect(list.data).toHaveLength(2);
     expect(JSON.stringify(list)).not.toContain(fx.intra.name);
-    const plan = (await planner.post('/planning/plans', { sampleIds: [j.samples[0].id], specificationId: spec.id, dualSpecificationId: dual.id, tests: [{ testId: fx.tests.a, officeInstructions: 'Careful' }, { testId: fx.tests.d, technicalData: 'Note' }] }).expect(201)).body;
+    const plan = (
+      await planner
+        .post('/planning/plans', {
+          sampleIds: [j.samples[0].id],
+          specificationId: spec.id,
+          dualSpecificationId: dual.id,
+          tests: [
+            { testId: fx.tests.a, officeInstructions: 'Careful' },
+            { testId: fx.tests.d, technicalData: 'Note' },
+          ],
+        })
+        .expect(201)
+    ).body;
     expect(plan.planNo).toMatch(/\/PL\//);
     const t = await ctx.prisma.sampleTest.findFirstOrThrow({ where: { id: { in: plan.sampleTestIds }, testId: fx.tests.d }, include: { results: true, stages: { orderBy: { seq: 'asc' } } } });
     expect(t.dueDate).toBeTruthy();
     expect(t.stages.map((s) => s.name)).toEqual(['Sample Received by Analyst', 'Sample Preparation', 'Analysis', 'Calculation and Result Entry']);
     const limits = t.results[0].limits as { spec: string; role: string; min: string | null }[];
-    expect(limits.map((l) => [l.spec, l.role])).toEqual([['GR-A', 'primary'], ['GR-B', 'dual']]);
+    expect(limits.map((l) => [l.spec, l.role])).toEqual([
+      ['GR-A', 'primary'],
+      ['GR-B', 'dual'],
+    ]);
     expect((await planner.get(`/jobs/${j.id}`).expect(200)).body.status).toBe('PLANNED');
     await planner.post('/planning/plans', { sampleIds: [j.samples[0].id], tests: [{ testId: fx.tests.a }] }).expect(422);
     // later master edits don't reach planned tests
-    await admin.patch(`/masters/specifications/${spec.id}`, { code: 'GR-A', name: 'Grade A', version: spec.id ? (await admin.get(`/masters/specifications/${spec.id}`).expect(200)).body.version : 1, limits: [] }).expect(200);
+    await admin
+      .patch(`/masters/specifications/${spec.id}`, {
+        code: 'GR-A',
+        name: 'Grade A',
+        version: spec.id ? (await admin.get(`/masters/specifications/${spec.id}`).expect(200)).body.version : 1,
+        limits: [],
+      })
+      .expect(200);
     const again = await ctx.prisma.parameterResult.findFirstOrThrow({ where: { sampleTestId: t.id } });
     expect((again.limits as unknown[]).length).toBe(2);
   });
@@ -312,7 +353,10 @@ describe('review follow-ups', () => {
 
   it('combines small JPEG pages, whose Buffers come from a shared pool', async () => {
     const { PdfService } = await import('../../src/modules/pdf/pdf.service.js');
-    const tiny = Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=', 'base64');
+    const tiny = Buffer.from(
+      '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=',
+      'base64',
+    );
     const pooled = Buffer.from(tiny); // small Buffers share an ArrayBuffer at a non-zero offset
     const pdf = await ctx.app.get(PdfService).mergeImagesToPdf([{ bytes: pooled, mimeType: 'image/jpeg' }]);
     expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');

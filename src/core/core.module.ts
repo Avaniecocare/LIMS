@@ -31,10 +31,7 @@ const services = [
 
 @Global()
 @Module({
-  providers: [
-    { provide: INFRA_CONFIG, useFactory: () => loadInfraConfig() },
-    ...services,
-  ],
+  providers: [{ provide: INFRA_CONFIG, useFactory: () => loadInfraConfig() }, ...services],
   exports: [INFRA_CONFIG, ...services],
 })
 export class CoreModule {}

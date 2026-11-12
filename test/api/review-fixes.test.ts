@@ -12,12 +12,27 @@ let fx: Awaited<ReturnType<typeof billingFixture>>;
 beforeAll(async () => {
   ctx = await bootApp();
   await resetDb(ctx);
-  const roles = { admin: ROLE_NAMES.admin, sales: ROLE_NAMES.sales, reception: ROLE_NAMES.reception, planner: ROLE_NAMES.planner, tech: ROLE_NAMES.tech, hod: ROLE_NAMES.hod, accounts: ROLE_NAMES.accounts, reviewer: ROLE_NAMES.reviewer, signatory: ROLE_NAMES.signatory };
+  const roles = {
+    admin: ROLE_NAMES.admin,
+    sales: ROLE_NAMES.sales,
+    reception: ROLE_NAMES.reception,
+    planner: ROLE_NAMES.planner,
+    tech: ROLE_NAMES.tech,
+    hod: ROLE_NAMES.hod,
+    accounts: ROLE_NAMES.accounts,
+    reviewer: ROLE_NAMES.reviewer,
+    signatory: ROLE_NAMES.signatory,
+  };
   for (const [e, r] of Object.entries(roles)) await createUser(ctx, `${e}@rf.example`, [r], `${e} person`);
   [admin, sales, reception, planner, tech, hod, accounts, reviewer, signatory] = await Promise.all(Object.keys(roles).map((e) => login(ctx, `${e}@rf.example`)));
   team = { reception, planner, tech, hod };
   fx = await billingFixture(admin, ctx);
-  for (const [testId, code] of [[fx.tests.a, 'APPEAR'], [fx.tests.d, 'DENSITY'], [fx.tests.k, 'KV']] as const) await admin.post('/masters/test-parameters', { testId, code, name: code, decimals: 2 }).expect(201);
+  for (const [testId, code] of [
+    [fx.tests.a, 'APPEAR'],
+    [fx.tests.d, 'DENSITY'],
+    [fx.tests.k, 'KV'],
+  ] as const)
+    await admin.post('/masters/test-parameters', { testId, code, name: code, decimals: 2 }).expect(201);
 });
 afterAll(() => ctx.app.close());
 
@@ -43,7 +58,9 @@ async function approveAll(jobId: string) {
 
 describe('documents can only be requested safely from a client', () => {
   it('rejects an email recipient or the final flag in client parameters', async () => {
-    const res = await accounts.post('/documents', { kind: 'statement-of-account', params: { customerId: fx.intra.id, email: { to: 'attacker@evil.example', subject: 'x', bodyHtml: 'x' } } }).expect(400);
+    const res = await accounts
+      .post('/documents', { kind: 'statement-of-account', params: { customerId: fx.intra.id, email: { to: 'attacker@evil.example', subject: 'x', bodyHtml: 'x' } } })
+      .expect(400);
     expect(res.body.error.fields.map((f: { field: string }) => f.field)).toContain('params.email');
     await admin.post('/documents', { kind: 'customer-export', params: { final: true } }).expect(400);
     expect(await ctx.prisma.emailLog.count({ where: { toAddress: 'attacker@evil.example' } })).toBe(0);
@@ -117,7 +134,17 @@ describe('results below or above the limit of measurement', () => {
     let d = (await tech.get(`/tests/${id}`).expect(200)).body;
     d = (await tech.post(`/tests/${id}/start`, { version: d.version }).expect(200)).body;
     const pid = (code: string) => d.results.find((r: { code: string }) => r.code === code).parameterId;
-    d = (await tech.put(`/tests/${id}/results`, { version: d.version, values: [{ parameterId: pid('PB'), value: '< 0.005' }, { parameterId: pid('WT'), value: '12.5' }] }).expect(200)).body;
+    d = (
+      await tech
+        .put(`/tests/${id}/results`, {
+          version: d.version,
+          values: [
+            { parameterId: pid('PB'), value: '< 0.005' },
+            { parameterId: pid('WT'), value: '12.5' },
+          ],
+        })
+        .expect(200)
+    ).body;
     const lead = d.results.find((r: { code: string }) => r.code === 'PB');
     expect(lead).toMatchObject({ value: '<0.005', numericValue: '0.005', qualifier: '<', passPrimary: true });
     d = (await tech.put(`/tests/${id}/results`, { version: d.version, values: [{ parameterId: pid('PB'), value: '<0.02' }] }).expect(200)).body;

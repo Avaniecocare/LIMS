@@ -15,8 +15,20 @@ const include = { contacts: { where: { deletedAt: null } }, addresses: { where: 
 type Row = Prisma.CustomerGetPayload<{ include: typeof include }>;
 
 const toDto = (c: Row) => ({
-  id: c.id, crn: c.crn, name: c.name, gstin: c.gstin, pan: c.pan, stateName: c.stateName, stateCode: c.stateCode, creditDays: c.creditDays,
-  withholdReportUntilPaid: c.withholdReportUntilPaid, notes: c.notes, isActive: c.isActive, version: c.version, contacts: c.contacts, addresses: c.addresses,
+  id: c.id,
+  crn: c.crn,
+  name: c.name,
+  gstin: c.gstin,
+  pan: c.pan,
+  stateName: c.stateName,
+  stateCode: c.stateCode,
+  creditDays: c.creditDays,
+  withholdReportUntilPaid: c.withholdReportUntilPaid,
+  notes: c.notes,
+  isActive: c.isActive,
+  version: c.version,
+  contacts: c.contacts,
+  addresses: c.addresses,
 });
 
 @Injectable()
@@ -40,8 +52,14 @@ export class CustomersService implements OnModuleInit {
           {
             name: 'Customers',
             columns: [
-              { header: 'CRN', key: 'crn' }, { header: 'Name', key: 'name', width: 36 }, { header: 'GSTIN', key: 'gstin', width: 18 }, { header: 'PAN', key: 'pan' },
-              { header: 'State', key: 'stateName' }, { header: 'State code', key: 'stateCode' }, { header: 'Credit days', key: 'creditDays' }, { header: 'Active', key: 'isActive' },
+              { header: 'CRN', key: 'crn' },
+              { header: 'Name', key: 'name', width: 36 },
+              { header: 'GSTIN', key: 'gstin', width: 18 },
+              { header: 'PAN', key: 'pan' },
+              { header: 'State', key: 'stateName' },
+              { header: 'State code', key: 'stateCode' },
+              { header: 'Credit days', key: 'creditDays' },
+              { header: 'Active', key: 'isActive' },
             ],
             rows,
           },
@@ -172,7 +190,13 @@ export class CustomersService implements OnModuleInit {
       this.prisma.report.count({ where: { sample: job, revisions: { some: { status: 'ISSUED' } } } }),
       this.prisma.job.findFirst({ where: { customerId: id, deletedAt: null }, orderBy: { receivedAt: 'asc' }, select: { receivedAt: true } }),
       this.prisma.job.findFirst({ where: { customerId: id, deletedAt: null }, orderBy: { updatedAt: 'desc' }, select: { updatedAt: true } }),
-      this.prisma.sampleTest.groupBy({ by: ['testName'], where: { deletedAt: null, status: { not: 'CANCELLED' }, sample: job }, _count: { _all: true }, orderBy: { _count: { testName: 'desc' } }, take: 8 }),
+      this.prisma.sampleTest.groupBy({
+        by: ['testName'],
+        where: { deletedAt: null, status: { not: 'CANCELLED' }, sample: job },
+        _count: { _all: true },
+        orderBy: { _count: { testName: 'desc' } },
+        take: 8,
+      }),
     ]);
     const jobCount = (statuses: string[]) => jobGroups.filter((g) => statuses.includes(g.status)).reduce((n, g) => n + g._count._all, 0);
     const testCount = (statuses: string[]) => testGroups.filter((g) => statuses.includes(g.status)).reduce((n, g) => n + g._count._all, 0);
@@ -195,7 +219,10 @@ export class CustomersService implements OnModuleInit {
       const [all, open, overdue, lastPayment] = await Promise.all([
         this.prisma.invoice.aggregate({ where: live, _sum: { grandTotal: true, paidAmount: true, creditedAmount: true } }),
         this.prisma.invoice.findMany({ where: { ...live, status: { in: ['ISSUED', 'PARTIALLY_PAID'] } }, select: { grandTotal: true, paidAmount: true, creditedAmount: true } }),
-        this.prisma.invoice.findMany({ where: { ...live, status: { in: ['ISSUED', 'PARTIALLY_PAID'] }, dueDate: { lt: istToday() } }, select: { grandTotal: true, paidAmount: true, creditedAmount: true } }),
+        this.prisma.invoice.findMany({
+          where: { ...live, status: { in: ['ISSUED', 'PARTIALLY_PAID'] }, dueDate: { lt: istToday() } },
+          select: { grandTotal: true, paidAmount: true, creditedAmount: true },
+        }),
         this.prisma.payment.findFirst({ where: { customerId: id, deletedAt: null }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
       ]);
       const due = (rows: { grandTotal: unknown; paidAmount: unknown; creditedAmount: unknown }[]) =>
@@ -210,9 +237,18 @@ export class CustomersService implements OnModuleInit {
     }
     return {
       quotations,
-      jobs: { total: jobGroups.reduce((n, g) => n + g._count._all, 0), open: jobCount(['RECEIVED', 'PLANNED', 'IN_TESTING', 'REPORTING', 'ON_HOLD']), completed: jobCount(['COMPLETED']), cancelled: jobCount(['CANCELLED']) },
+      jobs: {
+        total: jobGroups.reduce((n, g) => n + g._count._all, 0),
+        open: jobCount(['RECEIVED', 'PLANNED', 'IN_TESTING', 'REPORTING', 'ON_HOLD']),
+        completed: jobCount(['COMPLETED']),
+        cancelled: jobCount(['CANCELLED']),
+      },
       samples,
-      tests: { booked: testCount(['PLANNED', 'ASSIGNED', 'IN_PROGRESS', 'RESULTS_SUBMITTED', 'APPROVED', 'ON_HOLD']), approved: testCount(['APPROVED']), inProgress: testCount(['ASSIGNED', 'IN_PROGRESS', 'RESULTS_SUBMITTED']) },
+      tests: {
+        booked: testCount(['PLANNED', 'ASSIGNED', 'IN_PROGRESS', 'RESULTS_SUBMITTED', 'APPROVED', 'ON_HOLD']),
+        approved: testCount(['APPROVED']),
+        inProgress: testCount(['ASSIGNED', 'IN_PROGRESS', 'RESULTS_SUBMITTED']),
+      },
       reportsIssued,
       money,
       firstJobAt: firstJob?.receivedAt ?? null,
@@ -228,12 +264,23 @@ export class CustomersService implements OnModuleInit {
       deletedAt: null,
       sample: { job: { customerId: id } },
       ...(q.status ? { status: q.status } : {}),
-      ...(q.q ? { OR: [{ testName: { contains: q.q, mode: 'insensitive' } }, { testCode: { contains: q.q, mode: 'insensitive' } }, { sample: { sampleNo: { contains: q.q, mode: 'insensitive' } } }, { sample: { job: { jobNo: { contains: q.q, mode: 'insensitive' } } } }] } : {}),
+      ...(q.q
+        ? {
+            OR: [
+              { testName: { contains: q.q, mode: 'insensitive' } },
+              { testCode: { contains: q.q, mode: 'insensitive' } },
+              { sample: { sampleNo: { contains: q.q, mode: 'insensitive' } } },
+              { sample: { job: { jobNo: { contains: q.q, mode: 'insensitive' } } } },
+            ],
+          }
+        : {}),
     };
     const [rows, total] = await Promise.all([
       this.prisma.sampleTest.findMany({
         where,
-        include: { sample: { select: { id: true, sampleNo: true, description: true, job: { select: { id: true, jobNo: true } }, reports: { select: { id: true, reportNo: true, latestStatus: true } } } } },
+        include: {
+          sample: { select: { id: true, sampleNo: true, description: true, job: { select: { id: true, jobNo: true } }, reports: { select: { id: true, reportNo: true, latestStatus: true } } } },
+        },
         orderBy: orderBy(q, ['createdAt', 'testName', 'status'], 'createdAt', 'desc'),
         ...skipTake(q),
       }),
@@ -243,8 +290,21 @@ export class CustomersService implements OnModuleInit {
       rows.map((t) => {
         const report = t.sample.reports[0] ?? null;
         return {
-          id: t.id, testCode: t.testCode, testName: t.testName, methodName: t.methodName, sampleId: t.sample.id, sampleNo: t.sample.sampleNo, sampleDescription: t.sample.description, jobId: t.sample.job.id, jobNo: t.sample.job.jobNo,
-          status: t.status, bookedAt: t.createdAt, approvedAt: t.approvedAt, reportId: report?.id ?? null, reportNo: report?.reportNo ?? null, reportStatus: report?.latestStatus ?? null,
+          id: t.id,
+          testCode: t.testCode,
+          testName: t.testName,
+          methodName: t.methodName,
+          sampleId: t.sample.id,
+          sampleNo: t.sample.sampleNo,
+          sampleDescription: t.sample.description,
+          jobId: t.sample.job.id,
+          jobNo: t.sample.job.jobNo,
+          status: t.status,
+          bookedAt: t.createdAt,
+          approvedAt: t.approvedAt,
+          reportId: report?.id ?? null,
+          reportNo: report?.reportNo ?? null,
+          reportStatus: report?.latestStatus ?? null,
         };
       }),
       total,

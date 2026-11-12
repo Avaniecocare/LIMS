@@ -16,9 +16,24 @@ import { StorageService } from './storage.service.js';
 const COMMON = { contactName: 'Customer contact name', customerName: 'Customer (company) name', labName: 'Laboratory name', labPhone: 'Laboratory phone' } as const;
 export const WHATSAPP_KINDS = {
   report: { label: 'Test report', document: true, values: { ...COMMON, reportNo: 'Report number', sampleNo: 'Sample number', issuedOn: 'Issue date' }, order: ['contactName', 'reportNo', 'labName'] },
-  invoice: { label: 'Tax invoice', document: true, values: { ...COMMON, invoiceNo: 'Invoice number', amount: 'Amount, e.g. ₹15,576.00', invoiceDate: 'Invoice date', dueDate: 'Due date' }, order: ['contactName', 'invoiceNo', 'amount', 'dueDate', 'labName'] },
-  acknowledgement: { label: 'Samples received', document: true, values: { ...COMMON, jobNo: 'Job number', sampleCount: 'Number of samples', receivedOn: 'Date received' }, order: ['contactName', 'jobNo', 'labName'] },
-  reminder: { label: 'Payment reminder', document: false, values: { ...COMMON, invoiceNo: 'Invoice number', balance: 'Balance due, e.g. ₹15,576.00', dueDate: 'Due date', daysOverdue: 'Days overdue' }, order: ['contactName', 'invoiceNo', 'balance', 'dueDate', 'labName'] },
+  invoice: {
+    label: 'Tax invoice',
+    document: true,
+    values: { ...COMMON, invoiceNo: 'Invoice number', amount: 'Amount, e.g. ₹15,576.00', invoiceDate: 'Invoice date', dueDate: 'Due date' },
+    order: ['contactName', 'invoiceNo', 'amount', 'dueDate', 'labName'],
+  },
+  acknowledgement: {
+    label: 'Samples received',
+    document: true,
+    values: { ...COMMON, jobNo: 'Job number', sampleCount: 'Number of samples', receivedOn: 'Date received' },
+    order: ['contactName', 'jobNo', 'labName'],
+  },
+  reminder: {
+    label: 'Payment reminder',
+    document: false,
+    values: { ...COMMON, invoiceNo: 'Invoice number', balance: 'Balance due, e.g. ₹15,576.00', dueDate: 'Due date', daysOverdue: 'Days overdue' },
+    order: ['contactName', 'invoiceNo', 'balance', 'dueDate', 'labName'],
+  },
 } as const;
 export type WhatsappKind = keyof typeof WHATSAPP_KINDS;
 export const WHATSAPP_KIND_KEYS = Object.keys(WHATSAPP_KINDS) as WhatsappKind[];
@@ -87,7 +102,13 @@ export class WhatsappService {
     const row = await this.prisma.setting.findUnique({ where: { key: KEY } });
     const saved = (row?.value as Partial<Record<WhatsappKind, Partial<WhatsappTemplate>>> | undefined) ?? {};
     // Settings saved before the order could be chosen have no list of values: they keep the original order.
-    return { version: row?.version ?? 0, templates: Object.fromEntries(WHATSAPP_KIND_KEYS.map((k) => [k, { ...DEFAULT_TEMPLATES[k], ...saved[k], values: saved[k]?.values ?? DEFAULT_TEMPLATES[k].values }])) as Record<WhatsappKind, WhatsappTemplate> };
+    return {
+      version: row?.version ?? 0,
+      templates: Object.fromEntries(WHATSAPP_KIND_KEYS.map((k) => [k, { ...DEFAULT_TEMPLATES[k], ...saved[k], values: saved[k]?.values ?? DEFAULT_TEMPLATES[k].values }])) as Record<
+        WhatsappKind,
+        WhatsappTemplate
+      >,
+    };
   }
 
   async saveTemplates(templates: Record<string, WhatsappTemplate>, expectedVersion: number) {
@@ -125,8 +146,17 @@ export class WhatsappService {
     const params = t.values.map((k) => (input.values[k] ?? '').toString().replace(/\s+/g, ' ').trim() || '-');
     const row = await this.prisma.whatsappMessage.create({
       data: {
-        toNumber: to, kind: input.kind, template: t.name, language: t.language, params,
-        documentFileId: input.documentFileId ?? null, documentName: input.documentName ?? null, entity: input.entity, entityId: input.entityId, consentConfirmedBy: input.consentConfirmedBy, createdById: input.createdById ?? actorId(),
+        toNumber: to,
+        kind: input.kind,
+        template: t.name,
+        language: t.language,
+        params,
+        documentFileId: input.documentFileId ?? null,
+        documentName: input.documentName ?? null,
+        entity: input.entity,
+        entityId: input.entityId,
+        consentConfirmedBy: input.consentConfirmedBy,
+        createdById: input.createdById ?? actorId(),
       },
     });
     await this.queue.whatsapp.add('send', { messageId: row.id }, { jobId: `whatsapp-${row.id}` });
@@ -161,7 +191,12 @@ export class WhatsappService {
     const out = await this.call('messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messaging_product: 'whatsapp', to: m.toNumber, type: 'template', template: { name: m.template, language: { code: m.language }, ...(components.length ? { components } : {}) } }),
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: m.toNumber,
+        type: 'template',
+        template: { name: m.template, language: { code: m.language }, ...(components.length ? { components } : {}) },
+      }),
     });
     return out.messages?.[0]?.id ?? 'unknown';
   }
@@ -211,7 +246,10 @@ export class WhatsappService {
       const at = st.timestamp && /^\d+$/.test(st.timestamp) ? new Date(Number(st.timestamp) * 1000) : new Date();
       if (st.status === 'failed') {
         const e = st.errors?.[0];
-        await this.prisma.whatsappMessage.update({ where: { id: m.id }, data: { status: 'FAILED', lastError: `WhatsApp could not deliver it: ${e?.message ?? e?.title ?? 'no reason given'}${e?.code ? ` (code ${e.code})` : ''}`.slice(0, 500) } });
+        await this.prisma.whatsappMessage.update({
+          where: { id: m.id },
+          data: { status: 'FAILED', lastError: `WhatsApp could not deliver it: ${e?.message ?? e?.title ?? 'no reason given'}${e?.code ? ` (code ${e.code})` : ''}`.slice(0, 500) },
+        });
         changed++;
         continue;
       }

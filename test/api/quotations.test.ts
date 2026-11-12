@@ -126,7 +126,8 @@ describe('quotation workflow', () => {
     const revised = (await sales.post(`/quotations/${q.id}/revise`, { version: rejected.version, reason: 'Lower price' }).expect(200)).body;
     expect(revised).toMatchObject({ status: 'DRAFT', currentVersionNo: 2 });
     expect(revised.versions.map((v: { versionNo: number }) => v.versionNo)).toEqual([2, 1]);
-    const edited = (await sales.patch(`/quotations/${q.id}`, { version: revised.version, customerId: q.customerId, lines: [{ sampleDescription: 'x', testId: fx.tests.a, quantity: 1 }] }).expect(200)).body;
+    const edited = (await sales.patch(`/quotations/${q.id}`, { version: revised.version, customerId: q.customerId, lines: [{ sampleDescription: 'x', testId: fx.tests.a, quantity: 1 }] }).expect(200))
+      .body;
     expect(Number(edited.versions[0].subtotal)).toBe(550);
     expect(Number(edited.versions[1].subtotal)).toBe(13200); // version 1 untouched
     expect(edited.versions[1].lines).toHaveLength(5);

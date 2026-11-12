@@ -12,7 +12,17 @@ export async function billingFixture(admin: Client, ctx: Ctx, suffix = '') {
   const f = await test('FP', 'Flash Point', '1100');
   const k = await test('KV', 'Viscosity', '550');
   const g = await test('GC', 'GC-MSD', '10450');
-  const intra = (await admin.post('/customers', { name: `Intra ${suffix}`, stateName: 'Maharashtra', stateCode: '27', addresses: [{ kind: 'BILLING', line1: '1 Road', city: 'Pune', stateName: 'Maharashtra', stateCode: '27' }], contacts: [{ name: 'Priya', email: 'priya@intra.example', isPrimary: true }] }).expect(201)).body;
+  const intra = (
+    await admin
+      .post('/customers', {
+        name: `Intra ${suffix}`,
+        stateName: 'Maharashtra',
+        stateCode: '27',
+        addresses: [{ kind: 'BILLING', line1: '1 Road', city: 'Pune', stateName: 'Maharashtra', stateCode: '27' }],
+        contacts: [{ name: 'Priya', email: 'priya@intra.example', isPrimary: true }],
+      })
+      .expect(201)
+  ).body;
   const inter = (await admin.post('/customers', { name: `Inter ${suffix}`, stateName: 'Karnataka', stateCode: '29' }).expect(201)).body;
   void ctx;
   return { tests: { a, d, f, k, g }, intra, inter, testIds: [a, d, f, k, g] };

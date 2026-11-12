@@ -12,7 +12,15 @@ let ctx: Ctx;
 let admin: Client, tech: Client;
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 /** The editable branding fields (the stored picture ids are set by upload, not sent). */
-const editable = (b: Record<string, unknown>) => ({ appName: b.appName, primaryColor: b.primaryColor, accentColor: b.accentColor, surfaceColor: b.surfaceColor, navColor: b.navColor, loginTagline: b.loginTagline, poweredBy: b.poweredBy });
+const editable = (b: Record<string, unknown>) => ({
+  appName: b.appName,
+  primaryColor: b.primaryColor,
+  accentColor: b.accentColor,
+  surfaceColor: b.surfaceColor,
+  navColor: b.navColor,
+  loginTagline: b.loginTagline,
+  poweredBy: b.poweredBy,
+});
 const publicBranding = async () => (await ctx.http().get('/api/v1/public/branding').expect(200)).body;
 
 beforeAll(async () => {
@@ -34,7 +42,15 @@ describe('lab profile and branding', () => {
 
   it('a colour or name change shows on every screen at once, with no restart', async () => {
     const lab = (await admin.get('/admin/lab').expect(200)).body;
-    const branding = { appName: 'Greenfield Lab Suite', primaryColor: '#14532d', accentColor: '#166534', surfaceColor: '#f0fdf4', navColor: '#052e16', loginTagline: 'Testing you can trust', poweredBy: false };
+    const branding = {
+      appName: 'Greenfield Lab Suite',
+      primaryColor: '#14532d',
+      accentColor: '#166534',
+      surfaceColor: '#f0fdf4',
+      navColor: '#052e16',
+      loginTagline: 'Testing you can trust',
+      poweredBy: false,
+    };
     await admin.put('/admin/lab/branding', { version: lab.brandingVersion, branding }).expect(200);
     expect(await publicBranding()).toMatchObject({ productName: 'Greenfield Lab Suite', primaryColor: '#14532d', navColor: '#052e16', loginTagline: 'Testing you can trust', poweredBy: false });
     // Saving over someone else's change is refused rather than silently lost.
@@ -101,7 +117,7 @@ describe('setup wizard', () => {
     expect(list.find((t) => t.id === 'water')!.specifications.join(' ')).toContain('IS 10500');
   });
 
-  it('applying a template only adds, so applying again changes nothing and keeps the lab\'s own edits', async () => {
+  it("applying a template only adds, so applying again changes nothing and keeps the lab's own edits", async () => {
     await tech.post('/admin/lab/templates/apply', { templates: ['noise'] }).expect(403);
     await admin.post('/admin/lab/templates/apply', { templates: ['nothing-like-this'] }).expect(400);
     const firstRes = await admin.post('/admin/lab/templates/apply', { templates: ['water', 'noise'] });
@@ -170,7 +186,16 @@ describe('email templates', () => {
 describe('modules', () => {
   it('a module turned off disappears from the session, its pages and exports are refused, and turning it on brings it back', async () => {
     let list = (await admin.get('/admin/lab/modules').expect(200)).body;
-    expect(list.modules.map((m: { key: string; enabled: boolean }) => [m.key, m.enabled])).toEqual([['quotations', true], ['dispatch', true], ['billing', true], ['files', true], ['phoneUpload', true], ['analytics', true], ['quality', true], ['whatsapp', true]]);
+    expect(list.modules.map((m: { key: string; enabled: boolean }) => [m.key, m.enabled])).toEqual([
+      ['quotations', true],
+      ['dispatch', true],
+      ['billing', true],
+      ['files', true],
+      ['phoneUpload', true],
+      ['analytics', true],
+      ['quality', true],
+      ['whatsapp', true],
+    ]);
     await tech.put('/admin/lab/modules', { version: list.version, enabled: { billing: false } }).expect(403);
     await admin.put('/admin/lab/modules', { version: list.version, enabled: { warp: false } }).expect(400);
     list = (await admin.put('/admin/lab/modules', { version: list.version, enabled: { billing: false, phoneUpload: false } }).expect(200)).body;

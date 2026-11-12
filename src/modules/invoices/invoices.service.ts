@@ -72,7 +72,13 @@ export class InvoicesService implements OnModuleInit {
         const customer = (inv.customerSnapshot as unknown as CustomerSnapshot | null) ?? (await customerSnapshot(this.prisma as never, inv.customerId));
         const terms = inv.termsSnapshot ?? (await this.prisma.termsVersion.findFirst({ where: { kind: 'INVOICE' }, orderBy: { versionNo: 'desc' } }))?.body ?? null;
         const html = invoiceHtml({ ...inv, draft: inv.status === 'DRAFT', terms, company, customer });
-        return { buffer: await this.pdf.render(html, { company }), filename: `Tax Invoice ${inv.invoiceNo ?? 'Draft'}.pdf`.replace(/[/\\]/g, '-'), mimeType: 'application/pdf', entity: 'Invoice', entityId: inv.id };
+        return {
+          buffer: await this.pdf.render(html, { company }),
+          filename: `Tax Invoice ${inv.invoiceNo ?? 'Draft'}.pdf`.replace(/[/\\]/g, '-'),
+          mimeType: 'application/pdf',
+          entity: 'Invoice',
+          entityId: inv.id,
+        };
       },
     });
     this.documents.register('credit-note-pdf', {
@@ -81,10 +87,19 @@ export class InvoicesService implements OnModuleInit {
         const cn = await this.prisma.creditNote.findUniqueOrThrow({ where: { id: String(p.creditNoteId) }, include: { invoice: true } });
         const company = cn.companySnapshot as unknown as CompanySnapshot;
         const html = creditNoteHtml({ ...cn, invoiceNo: cn.invoice.invoiceNo, invoiceDate: cn.invoice.invoiceDate, company, customer: cn.customerSnapshot as unknown as CustomerSnapshot });
-        return { buffer: await this.pdf.render(html, { company }), filename: `Credit Note ${cn.creditNoteNo}.pdf`.replace(/[/\\]/g, '-'), mimeType: 'application/pdf', entity: 'CreditNote', entityId: cn.id };
+        return {
+          buffer: await this.pdf.render(html, { company }),
+          filename: `Credit Note ${cn.creditNoteNo}.pdf`.replace(/[/\\]/g, '-'),
+          mimeType: 'application/pdf',
+          entity: 'CreditNote',
+          entityId: cn.id,
+        };
       },
     });
-    this.documents.register('statement-of-account', { authorize: requirePermission('invoices.view'), run: (p) => this.renderStatement(String(p.customerId), p.from as string | undefined, p.to as string | undefined) });
+    this.documents.register('statement-of-account', {
+      authorize: requirePermission('invoices.view'),
+      run: (p) => this.renderStatement(String(p.customerId), p.from as string | undefined, p.to as string | undefined),
+    });
     this.documents.register('due-invoices-export', {
       // Every customer's contacts (or every unpaid amount) in one file: confirm the password first.
       sensitive: true,
@@ -96,9 +111,29 @@ export class InvoicesService implements OnModuleInit {
           {
             name: 'Due invoices',
             columns: [
-              { header: 'Customer', key: 'customerName', width: 32 }, { header: 'CRN', key: 'crn' }, { header: 'Invoice no.', key: 'invoiceNo', width: 22 }, { header: 'Invoice date', key: 'invoiceDate' }, { header: 'Due date', key: 'dueDate' }, { header: 'Amount', key: 'grandTotal' }, { header: 'Paid', key: 'paidAmount' }, { header: 'Credited', key: 'creditedAmount' }, { header: 'Balance', key: 'balance' }, { header: 'Days overdue', key: 'daysOverdue' }, { header: 'Ageing', key: 'ageingBucket' },
+              { header: 'Customer', key: 'customerName', width: 32 },
+              { header: 'CRN', key: 'crn' },
+              { header: 'Invoice no.', key: 'invoiceNo', width: 22 },
+              { header: 'Invoice date', key: 'invoiceDate' },
+              { header: 'Due date', key: 'dueDate' },
+              { header: 'Amount', key: 'grandTotal' },
+              { header: 'Paid', key: 'paidAmount' },
+              { header: 'Credited', key: 'creditedAmount' },
+              { header: 'Balance', key: 'balance' },
+              { header: 'Days overdue', key: 'daysOverdue' },
+              { header: 'Ageing', key: 'ageingBucket' },
             ],
-            rows: rows.map((r) => this.summary(r, today)).map((r) => ({ ...r, invoiceDate: r.invoiceDate ? formatDate(r.invoiceDate) : '', dueDate: r.dueDate ? formatDate(r.dueDate) : '', grandTotal: Number(r.grandTotal), paidAmount: Number(r.paidAmount), creditedAmount: Number(r.creditedAmount), balance: Number(r.balance) })),
+            rows: rows
+              .map((r) => this.summary(r, today))
+              .map((r) => ({
+                ...r,
+                invoiceDate: r.invoiceDate ? formatDate(r.invoiceDate) : '',
+                dueDate: r.dueDate ? formatDate(r.dueDate) : '',
+                grandTotal: Number(r.grandTotal),
+                paidAmount: Number(r.paidAmount),
+                creditedAmount: Number(r.creditedAmount),
+                balance: Number(r.balance),
+              })),
           },
         ]);
         return { buffer, filename: 'due-invoices.xlsx', mimeType: XLSX_MIME };
@@ -114,18 +149,77 @@ export class InvoicesService implements OnModuleInit {
     const open = OPEN.includes(i.status as 'ISSUED');
     const days = i.dueDate ? daysOverdue(i.dueDate, today) : 0;
     return {
-      id: i.id, invoiceNo: i.invoiceNo, customerId: i.customerId, customerName: i.customer.name, crn: i.customer.crn, status: i.status, invoiceDate: i.invoiceDate, dueDate: i.dueDate, grandTotal: str(i.grandTotal), paidAmount: str(i.paidAmount), creditedAmount: str(i.creditedAmount), balance: balance.toFixed(2),
-      overdue: open && days > 0 && balance.greaterThan(0), daysOverdue: open && days > 0 ? days : 0, ageingBucket: open && i.dueDate ? ageingBucket(i.dueDate, today) : null, isInterState: i.isInterState, version: i.version,
+      id: i.id,
+      invoiceNo: i.invoiceNo,
+      customerId: i.customerId,
+      customerName: i.customer.name,
+      crn: i.customer.crn,
+      status: i.status,
+      invoiceDate: i.invoiceDate,
+      dueDate: i.dueDate,
+      grandTotal: str(i.grandTotal),
+      paidAmount: str(i.paidAmount),
+      creditedAmount: str(i.creditedAmount),
+      balance: balance.toFixed(2),
+      overdue: open && days > 0 && balance.greaterThan(0),
+      daysOverdue: open && days > 0 ? days : 0,
+      ageingBucket: open && i.dueDate ? ageingBucket(i.dueDate, today) : null,
+      isInterState: i.isInterState,
+      version: i.version,
     };
   }
 
   private full(i: FullRow) {
     return {
       ...this.summary(i),
-      placeOfSupply: i.placeOfSupply, placeOfSupplyCode: i.placeOfSupplyCode, subtotal: str(i.subtotal), discountAmount: str(i.discountAmount), taxableAmount: str(i.taxableAmount), gstRate: str(i.gstRate), cgst: str(i.cgst), sgst: str(i.sgst), igst: str(i.igst), roundOff: str(i.roundOff), amountInWords: i.amountInWords, cancelReason: i.cancelReason, notes: i.notes, issuedAt: i.issuedAt,
-      lines: i.lines.map((l) => ({ id: l.id, seq: l.seq, jobId: l.jobId, sampleTestId: l.sampleTestId, description: l.description, sacCode: l.sacCode, quantity: l.quantity, rate: str(l.rate), rateSource: l.rateSource, amount: str(l.amount) })),
-      allocations: i.allocations.map((a) => ({ id: a.id, paymentId: a.paymentId, paymentNo: a.payment.paymentNo, paidOn: a.payment.paidOn, mode: a.payment.mode, reference: a.payment.reference, amount: str(a.amount) })),
-      creditNotes: i.creditNotes.map((c) => ({ id: c.id, creditNoteNo: c.creditNoteNo, issuedOn: c.issuedOn, reason: c.reason, taxableAmount: str(c.taxableAmount), cgst: str(c.cgst), sgst: str(c.sgst), igst: str(c.igst), roundOff: str(c.roundOff), total: str(c.total), amountInWords: c.amountInWords })),
+      placeOfSupply: i.placeOfSupply,
+      placeOfSupplyCode: i.placeOfSupplyCode,
+      subtotal: str(i.subtotal),
+      discountAmount: str(i.discountAmount),
+      taxableAmount: str(i.taxableAmount),
+      gstRate: str(i.gstRate),
+      cgst: str(i.cgst),
+      sgst: str(i.sgst),
+      igst: str(i.igst),
+      roundOff: str(i.roundOff),
+      amountInWords: i.amountInWords,
+      cancelReason: i.cancelReason,
+      notes: i.notes,
+      issuedAt: i.issuedAt,
+      lines: i.lines.map((l) => ({
+        id: l.id,
+        seq: l.seq,
+        jobId: l.jobId,
+        sampleTestId: l.sampleTestId,
+        description: l.description,
+        sacCode: l.sacCode,
+        quantity: l.quantity,
+        rate: str(l.rate),
+        rateSource: l.rateSource,
+        amount: str(l.amount),
+      })),
+      allocations: i.allocations.map((a) => ({
+        id: a.id,
+        paymentId: a.paymentId,
+        paymentNo: a.payment.paymentNo,
+        paidOn: a.payment.paidOn,
+        mode: a.payment.mode,
+        reference: a.payment.reference,
+        amount: str(a.amount),
+      })),
+      creditNotes: i.creditNotes.map((c) => ({
+        id: c.id,
+        creditNoteNo: c.creditNoteNo,
+        issuedOn: c.issuedOn,
+        reason: c.reason,
+        taxableAmount: str(c.taxableAmount),
+        cgst: str(c.cgst),
+        sgst: str(c.sgst),
+        igst: str(c.igst),
+        roundOff: str(c.roundOff),
+        total: str(c.total),
+        amountInWords: c.amountInWords,
+      })),
       reminders: i.reminders.map((r) => ({ id: r.id, kind: r.kind, at: r.at, emailLogId: r.emailLogId })),
     };
   }
@@ -153,7 +247,11 @@ export class InvoicesService implements OnModuleInit {
       this.prisma.invoice.count({ where }),
     ]);
     const today = istToday();
-    return toPage(rows.map((r) => this.summary(r, today)), total, q);
+    return toPage(
+      rows.map((r) => this.summary(r, today)),
+      total,
+      q,
+    );
   }
 
   // ---------------------------------------------------------------- ready to invoice
@@ -167,14 +265,33 @@ export class InvoicesService implements OnModuleInit {
       ...(q.q ? { OR: [{ jobNo: { contains: q.q, mode: 'insensitive' } }, { customer: { name: { contains: q.q, mode: 'insensitive' } } }] } : {}),
     };
     const [rows, total] = await Promise.all([
-      this.prisma.job.findMany({ where, include: { customer: { select: { name: true, crn: true } }, samples: { where: { status: { not: 'CANCELLED' } }, include: { tests: { where: billable(), select: { rate: true } }, reports: { select: { reportNo: true } } } } }, orderBy: { receivedAt: 'asc' }, ...skipTake(q) }),
+      this.prisma.job.findMany({
+        where,
+        include: {
+          customer: { select: { name: true, crn: true } },
+          samples: { where: { status: { not: 'CANCELLED' } }, include: { tests: { where: billable(), select: { rate: true } }, reports: { select: { reportNo: true } } } },
+        },
+        orderBy: { receivedAt: 'asc' },
+        ...skipTake(q),
+      }),
       this.prisma.job.count({ where }),
     ]);
     return toPage(
       rows.map((j) => {
         const tests = j.samples.flatMap((s) => s.tests);
         const amount = tests.reduce((sum, t) => sum.plus(t.rate === null ? 0 : str(t.rate)), new Decimal(0));
-        return { jobId: j.id, jobNo: j.jobNo, customerId: j.customerId, customerName: j.customer.name, crn: j.customer.crn, reportNos: j.samples.flatMap((s) => s.reports.map((r) => r.reportNo)), testCount: tests.length, amount: amount.toFixed(2), missingRates: tests.filter((t) => t.rate === null).length, receivedAt: j.receivedAt };
+        return {
+          jobId: j.id,
+          jobNo: j.jobNo,
+          customerId: j.customerId,
+          customerName: j.customer.name,
+          crn: j.customer.crn,
+          reportNos: j.samples.flatMap((s) => s.reports.map((r) => r.reportNo)),
+          testCount: tests.length,
+          amount: amount.toFixed(2),
+          missingRates: tests.filter((t) => t.rate === null).length,
+          receivedAt: j.receivedAt,
+        };
       }),
       total,
       q,
@@ -188,7 +305,22 @@ export class InvoicesService implements OnModuleInit {
     if (Number(pct) < 0 || Number(pct) > 100) throw badRequest('Discount must be between 0 and 100', [{ field: 'discountPct', message: 'Between 0 and 100' }]);
     const gstRate = await this.settings.get('tax.gstRate', tx);
     const t = computeTax({ amounts: inv.lines.map((l) => str(l.amount)), discountPct: pct, gstRate, customerStateCode: inv.placeOfSupplyCode, labStateCode: this.company.config.gstStateCode });
-    await tx.invoice.update({ where: { id: invoiceId }, data: { subtotal: t.subtotal, discountAmount: t.discountAmount, taxableAmount: t.taxableAmount, gstRate: t.gstRate, isInterState: t.isInterState, cgst: t.cgst, sgst: t.sgst, igst: t.igst, roundOff: t.roundOff, grandTotal: t.grandTotal, amountInWords: t.amountInWords } });
+    await tx.invoice.update({
+      where: { id: invoiceId },
+      data: {
+        subtotal: t.subtotal,
+        discountAmount: t.discountAmount,
+        taxableAmount: t.taxableAmount,
+        gstRate: t.gstRate,
+        isInterState: t.isInterState,
+        cgst: t.cgst,
+        sgst: t.sgst,
+        igst: t.igst,
+        roundOff: t.roundOff,
+        grandTotal: t.grandTotal,
+        amountInWords: t.amountInWords,
+      },
+    });
   }
 
   async create(dto: CreateInvoiceDto) {
@@ -216,13 +348,31 @@ export class InvoicesService implements OnModuleInit {
             // Units and the agreed amount come from the accepted quotation; otherwise one unit at the looked-up rate.
             const quantity = t.billQuantity ?? 1;
             const amount = t.billAmount !== null && t.billAmount !== undefined ? str(t.billAmount) : dec(rate).times(quantity).toFixed(2);
-            lines.push({ seq: seq++, jobId: job.id, sampleTestId: t.id, description: `${sample.sampleNo} · ${t.testName}${t.methodName ? ` (${t.methodName})` : ''}`, sacCode: this.company.config.sacCode, quantity, rate, rateSource: t.rate !== null ? t.rateSource : fallback?.source, amount });
+            lines.push({
+              seq: seq++,
+              jobId: job.id,
+              sampleTestId: t.id,
+              description: `${sample.sampleNo} · ${t.testName}${t.methodName ? ` (${t.methodName})` : ''}`,
+              sacCode: this.company.config.sacCode,
+              quantity,
+              rate,
+              rateSource: t.rate !== null ? t.rateSource : fallback?.source,
+              amount,
+            });
           }
         }
       }
       if (!lines.length) throw rule('NOTHING_TO_BILL', 'These jobs have no approved tests left to bill');
       const inv = await tx.invoice.create({
-        data: { customerId: dto.customerId, placeOfSupply: customer.stateName, placeOfSupplyCode: customer.stateCode, notes: dto.notes, createdById: actorId(), isDemo: customer.isDemo, lines: { createMany: { data: lines } } },
+        data: {
+          customerId: dto.customerId,
+          placeOfSupply: customer.stateName,
+          placeOfSupplyCode: customer.stateCode,
+          notes: dto.notes,
+          createdById: actorId(),
+          isDemo: customer.isDemo,
+          lines: { createMany: { data: lines } },
+        },
       });
       await this.recompute(tx, inv.id, dto.discountPct ?? (await this.quotedDiscount(tx, jobs)));
       await this.audit.status(tx, { entity: 'Invoice', entityId: inv.id, from: null, to: 'DRAFT' });
@@ -272,7 +422,13 @@ export class InvoicesService implements OnModuleInit {
       const { count } = await tx.invoice.updateMany({
         where: { id, version: dto.version },
         data: {
-          status: 'ISSUED', invoiceNo, invoiceDate, dueDate, issuedAt: new Date(), issuedById: actorId(), version: { increment: 1 },
+          status: 'ISSUED',
+          invoiceNo,
+          invoiceDate,
+          dueDate,
+          issuedAt: new Date(),
+          issuedById: actorId(),
+          version: { increment: 1 },
           companySnapshot: this.company.snapshot() as unknown as Prisma.InputJsonValue,
           customerSnapshot: (await customerSnapshot(tx, inv.customerId)) as unknown as Prisma.InputJsonValue,
           termsSnapshot: terms?.body ?? null,
@@ -313,7 +469,11 @@ export class InvoicesService implements OnModuleInit {
   }
 
   emails(id: string) {
-    return this.prisma.emailLog.findMany({ where: { entity: 'Invoice', entityId: id }, orderBy: { createdAt: 'desc' }, select: { id: true, toAddress: true, ccAddress: true, subject: true, template: true, status: true, attempts: true, lastError: true, sentAt: true, createdAt: true } });
+    return this.prisma.emailLog.findMany({
+      where: { entity: 'Invoice', entityId: id },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, toAddress: true, ccAddress: true, subject: true, template: true, status: true, attempts: true, lastError: true, sentAt: true, createdAt: true },
+    });
   }
 
   async cancel(id: string, version: number, reason: string) {
@@ -359,8 +519,22 @@ export class InvoicesService implements OnModuleInit {
       const creditNoteNo = await this.numbering.next(tx, 'CREDIT_NOTE', issuedOn);
       const cn = await tx.creditNote.create({
         data: {
-          creditNoteNo, invoiceId, issuedOn, reason: dto.reason, taxableAmount: t.taxableAmount, gstRate: t.gstRate, cgst: t.cgst, sgst: t.sgst, igst: t.igst, roundOff: t.roundOff, total: t.grandTotal, amountInWords: amountInWords(t.grandTotal),
-          customerSnapshot: inv.customerSnapshot ?? {}, companySnapshot: this.company.snapshot() as unknown as Prisma.InputJsonValue, createdById: actorId(), isDemo: inv.isDemo,
+          creditNoteNo,
+          invoiceId,
+          issuedOn,
+          reason: dto.reason,
+          taxableAmount: t.taxableAmount,
+          gstRate: t.gstRate,
+          cgst: t.cgst,
+          sgst: t.sgst,
+          igst: t.igst,
+          roundOff: t.roundOff,
+          total: t.grandTotal,
+          amountInWords: amountInWords(t.grandTotal),
+          customerSnapshot: inv.customerSnapshot ?? {},
+          companySnapshot: this.company.snapshot() as unknown as Prisma.InputJsonValue,
+          createdById: actorId(),
+          isDemo: inv.isDemo,
         },
       });
       await this.applyMoney(tx, invoiceId, { credited: total });
@@ -372,7 +546,18 @@ export class InvoicesService implements OnModuleInit {
   // ---------------------------------------------------------------- payments
   private paymentDto(p: Prisma.PaymentGetPayload<{ include: { customer: { select: { name: true } }; allocations: { include: { invoice: { select: { invoiceNo: true } } } } } }>) {
     return {
-      id: p.id, paymentNo: p.paymentNo, customerId: p.customerId, customerName: p.customer.name, paidOn: p.paidOn, mode: p.mode, reference: p.reference, amount: str(p.amount), unapplied: str(p.unapplied), isAdvance: p.isAdvance, notes: p.notes, reversed: !!p.deletedAt,
+      id: p.id,
+      paymentNo: p.paymentNo,
+      customerId: p.customerId,
+      customerName: p.customer.name,
+      paidOn: p.paidOn,
+      mode: p.mode,
+      reference: p.reference,
+      amount: str(p.amount),
+      unapplied: str(p.unapplied),
+      isAdvance: p.isAdvance,
+      notes: p.notes,
+      reversed: !!p.deletedAt,
       allocations: p.allocations.map((a) => ({ invoiceId: a.invoiceId, invoiceNo: a.invoice.invoiceNo, amount: str(a.amount) })),
     };
   }
@@ -405,7 +590,19 @@ export class InvoicesService implements OnModuleInit {
       if (allocated.greaterThan(amount)) throw badRequest('You have allocated more than the payment', [{ field: 'allocations', message: 'More than the payment' }]);
       const paymentNo = await this.numbering.next(tx, 'PAYMENT', new Date(dto.paidOn));
       const payment = await tx.payment.create({
-        data: { paymentNo, customerId: dto.customerId, paidOn: new Date(dto.paidOn), mode: dto.mode, reference: dto.reference, amount: amount.toFixed(2), unapplied: amount.minus(allocated).toFixed(2), isAdvance: amount.greaterThan(allocated), notes: dto.notes, createdById: actorId(), isDemo: customer.isDemo },
+        data: {
+          paymentNo,
+          customerId: dto.customerId,
+          paidOn: new Date(dto.paidOn),
+          mode: dto.mode,
+          reference: dto.reference,
+          amount: amount.toFixed(2),
+          unapplied: amount.minus(allocated).toFixed(2),
+          isAdvance: amount.greaterThan(allocated),
+          notes: dto.notes,
+          createdById: actorId(),
+          isDemo: customer.isDemo,
+        },
       });
       await this.allocate(tx, payment.id, dto.customerId, dto.allocations ?? []);
       await this.audit.record({ action: 'Payment.create', entity: 'Payment', entityId: payment.id, after: { paymentNo, amount: amount.toFixed(2), allocations: dto.allocations ?? [] } }, tx);
@@ -461,13 +658,19 @@ export class InvoicesService implements OnModuleInit {
       ...(q.customerId ? { customerId: q.customerId } : {}),
       ...(q.unapplied ? { unapplied: { gt: 0 }, deletedAt: null } : {}),
       ...(q.from || q.to ? { paidOn: { ...(q.from ? { gte: new Date(q.from) } : {}), ...(q.to ? { lte: new Date(q.to) } : {}) } } : {}),
-      ...(q.q ? { OR: [{ paymentNo: { contains: q.q, mode: 'insensitive' } }, { reference: { contains: q.q, mode: 'insensitive' } }, { customer: { name: { contains: q.q, mode: 'insensitive' } } }] } : {}),
+      ...(q.q
+        ? { OR: [{ paymentNo: { contains: q.q, mode: 'insensitive' } }, { reference: { contains: q.q, mode: 'insensitive' } }, { customer: { name: { contains: q.q, mode: 'insensitive' } } }] }
+        : {}),
     };
     const [rows, total] = await Promise.all([
       this.prisma.payment.findMany({ where, include: this.paymentInclude, orderBy: orderBy(q, ['paidOn', 'amount', 'paymentNo'], 'paidOn'), ...skipTake(q) }),
       this.prisma.payment.count({ where }),
     ]);
-    return toPage(rows.map((r) => this.paymentDto(r)), total, q);
+    return toPage(
+      rows.map((r) => this.paymentDto(r)),
+      total,
+      q,
+    );
   }
 
   // ---------------------------------------------------------------- due invoices
@@ -477,7 +680,10 @@ export class InvoicesService implements OnModuleInit {
       status: { in: OPEN },
       ...(q.customerId ? { customerId: q.customerId } : {}),
       // Together, so neither filter replaces the other.
-      AND: [...(q.bucket ? [{ dueDate: bucketDueDateRange(q.bucket as AgeingBucket, today) }] : []), ...(q.overdue === 'true' ? [{ dueDate: { lt: today } }] : q.overdue === 'false' ? [{ dueDate: { gte: today } }] : [])],
+      AND: [
+        ...(q.bucket ? [{ dueDate: bucketDueDateRange(q.bucket as AgeingBucket, today) }] : []),
+        ...(q.overdue === 'true' ? [{ dueDate: { lt: today } }] : q.overdue === 'false' ? [{ dueDate: { gte: today } }] : []),
+      ],
       ...(q.q ? { OR: [{ invoiceNo: { contains: q.q, mode: 'insensitive' } }, { customer: { name: { contains: q.q, mode: 'insensitive' } } }] } : {}),
     };
   }
@@ -489,7 +695,11 @@ export class InvoicesService implements OnModuleInit {
       this.read.invoice.findMany({ where, include: summaryInclude, orderBy: orderBy(q, ['dueDate', 'invoiceDate', 'grandTotal', 'invoiceNo'], 'dueDate', 'asc'), ...skipTake(q) }),
       this.read.invoice.count({ where }),
     ]);
-    return toPage(rows.map((r) => this.summary(r, today)), total, q);
+    return toPage(
+      rows.map((r) => this.summary(r, today)),
+      total,
+      q,
+    );
   }
 
   /** Ageing and customer totals: the one definition dashboards and reports share. */
@@ -525,12 +735,24 @@ export class InvoicesService implements OnModuleInit {
     const customer = await this.prisma.customer.findFirstOrThrow({ where: { id: customerId } });
     const toDate = to ? new Date(to) : istToday();
     const fromDate = from ? new Date(from) : null;
-    const invoices = await this.prisma.invoice.findMany({ where: { customerId, status: { notIn: ['DRAFT', 'CANCELLED'] }, invoiceDate: { lte: toDate } }, select: { id: true, invoiceNo: true, invoiceDate: true, grandTotal: true } });
-    const payments = await this.prisma.payment.findMany({ where: { customerId, deletedAt: null, paidOn: { lte: toDate } }, select: { paymentNo: true, paidOn: true, amount: true, mode: true, reference: true } });
+    const invoices = await this.prisma.invoice.findMany({
+      where: { customerId, status: { notIn: ['DRAFT', 'CANCELLED'] }, invoiceDate: { lte: toDate } },
+      select: { id: true, invoiceNo: true, invoiceDate: true, grandTotal: true },
+    });
+    const payments = await this.prisma.payment.findMany({
+      where: { customerId, deletedAt: null, paidOn: { lte: toDate } },
+      select: { paymentNo: true, paidOn: true, amount: true, mode: true, reference: true },
+    });
     const credits = await this.prisma.creditNote.findMany({ where: { invoice: { customerId }, issuedOn: { lte: toDate } }, select: { creditNoteNo: true, issuedOn: true, total: true } });
     const moves = [
       ...invoices.map((i) => ({ date: i.invoiceDate!, type: 'Invoice', reference: i.invoiceNo ?? '', debit: dec(str(i.grandTotal)), credit: null as Decimal | null })),
-      ...payments.map((p) => ({ date: p.paidOn, type: `Payment (${p.mode})`, reference: [p.paymentNo, p.reference].filter(Boolean).join(' · '), debit: null as Decimal | null, credit: dec(str(p.amount)) })),
+      ...payments.map((p) => ({
+        date: p.paidOn,
+        type: `Payment (${p.mode})`,
+        reference: [p.paymentNo, p.reference].filter(Boolean).join(' · '),
+        debit: null as Decimal | null,
+        credit: dec(str(p.amount)),
+      })),
       ...credits.map((c) => ({ date: c.issuedOn, type: 'Credit note', reference: c.creditNoteNo, debit: null as Decimal | null, credit: dec(str(c.total)) })),
     ].sort((a, b) => a.date.getTime() - b.date.getTime());
     let running = new Decimal(0);
@@ -541,10 +763,28 @@ export class InvoicesService implements OnModuleInit {
       entries.push({ date: m.date, type: m.type, reference: m.reference, debit: m.debit?.toFixed(2) ?? null, credit: m.credit?.toFixed(2) ?? null, balance: running.toFixed(2) });
     }
     const opening = fromDate ? moves.filter((m) => m.date < fromDate).reduce((s, m) => s.plus(m.debit ?? 0).minus(m.credit ?? 0), new Decimal(0)) : null;
-    if (opening && !opening.isZero()) entries.unshift({ date: fromDate!, type: 'Opening balance', reference: '', debit: opening.isPositive() ? opening.toFixed(2) : null, credit: opening.isNegative() ? opening.abs().toFixed(2) : null, balance: opening.toFixed(2) });
+    if (opening && !opening.isZero())
+      entries.unshift({
+        date: fromDate!,
+        type: 'Opening balance',
+        reference: '',
+        debit: opening.isPositive() ? opening.toFixed(2) : null,
+        credit: opening.isNegative() ? opening.abs().toFixed(2) : null,
+        balance: opening.toFixed(2),
+      });
     const summary = await this.dueSummary({ customerId });
     const company = this.company.snapshot();
-    const html = statementHtml({ company, customerName: customer.name, crn: customer.crn, gstin: customer.gstin, from: fromDate, to: toDate, entries, closingBalance: running.toFixed(2), ageing: summary.ageing });
+    const html = statementHtml({
+      company,
+      customerName: customer.name,
+      crn: customer.crn,
+      gstin: customer.gstin,
+      from: fromDate,
+      to: toDate,
+      entries,
+      closingBalance: running.toFixed(2),
+      ageing: summary.ageing,
+    });
     return { buffer: await this.pdf.render(html, { company }), filename: `Statement ${customer.crn}.pdf`, mimeType: 'application/pdf', entity: 'Customer', entityId: customerId };
   }
 
@@ -588,7 +828,10 @@ export class InvoicesService implements OnModuleInit {
   async sendScheduledReminders(today = istToday()): Promise<number> {
     if (!(await this.settings.get('reminders.enabled'))) return 0;
     const schedule = await this.settings.get('reminders.scheduleDays');
-    const rows = await this.prisma.invoice.findMany({ where: { deletedAt: null, status: { in: OPEN }, dueDate: { lt: today } }, select: { id: true, dueDate: true, customerId: true, reminders: { where: { kind: 'AUTOMATIC' }, select: { at: true } } } });
+    const rows = await this.prisma.invoice.findMany({
+      where: { deletedAt: null, status: { in: OPEN }, dueDate: { lt: today } },
+      select: { id: true, dueDate: true, customerId: true, reminders: { where: { kind: 'AUTOMATIC' }, select: { at: true } } },
+    });
     let sent = 0;
     for (const r of rows) {
       const days = daysOverdue(r.dueDate!, today);

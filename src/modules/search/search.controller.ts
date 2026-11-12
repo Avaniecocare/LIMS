@@ -14,7 +14,8 @@ const LIMIT = 8;
 export class SearchController {
   constructor(private readonly prisma: PrismaService) {}
 
-  @Get() @ApiOkResponse({ type: [SearchResultDto] })
+  @Get()
+  @ApiOkResponse({ type: [SearchResultDto] })
   async search(@Query('q') raw?: string): Promise<SearchResultDto[]> {
     const q = (raw ?? '').trim().slice(0, 100);
     if (q.length < 2) return [];
@@ -45,7 +46,8 @@ export class SearchController {
    * A keyboard-mode scanner types the code and presses Enter. Technicians can scan too, but only
    * reach tests assigned to them, and never the job or customer behind the sample.
    */
-  @Get('scan') @ApiOkResponse({ type: ScanResultDto })
+  @Get('scan')
+  @ApiOkResponse({ type: ScanResultDto })
   async scan(@Query('code') raw?: string): Promise<ScanResultDto> {
     const code = (raw ?? '').trim().slice(0, 100);
     if (!code) return { link: null };

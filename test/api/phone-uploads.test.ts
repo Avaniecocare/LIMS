@@ -20,7 +20,15 @@ const phone = {
 beforeAll(async () => {
   ctx = await bootApp();
   await resetDb(ctx);
-  for (const [e, r] of Object.entries({ admin: ROLE_NAMES.admin, reception: ROLE_NAMES.reception, planner: ROLE_NAMES.planner, tech: ROLE_NAMES.tech, hod: ROLE_NAMES.hod, reviewer: ROLE_NAMES.reviewer })) await createUser(ctx, `${e}@ph.example`, [r], `${e} person`);
+  for (const [e, r] of Object.entries({
+    admin: ROLE_NAMES.admin,
+    reception: ROLE_NAMES.reception,
+    planner: ROLE_NAMES.planner,
+    tech: ROLE_NAMES.tech,
+    hod: ROLE_NAMES.hod,
+    reviewer: ROLE_NAMES.reviewer,
+  }))
+    await createUser(ctx, `${e}@ph.example`, [r], `${e} person`);
   [admin, reception, planner, tech, hod, reviewer] = await Promise.all(['admin', 'reception', 'planner', 'tech', 'hod', 'reviewer'].map((e) => login(ctx, `${e}@ph.example`)));
   team = { reception, planner, tech, hod };
   fx = await billingFixture(admin, ctx);

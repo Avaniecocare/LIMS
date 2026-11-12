@@ -20,11 +20,24 @@ export interface JobDocument {
   customerName: string;
   crn: string;
   receivedBy: string | null;
-  samples: { sampleNo: string; description: string; condition: string | null; quantity: string | null; size: string | null; returnable: boolean; attributes: { label: string; value: string }[]; tests: string[] }[];
+  samples: {
+    sampleNo: string;
+    description: string;
+    condition: string | null;
+    quantity: string | null;
+    size: string | null;
+    returnable: boolean;
+    attributes: { label: string; value: string }[];
+    tests: string[];
+  }[];
   deviations: { sampleNo: string | null; typeLabel: string; remark: string | null }[];
 }
 
-const kv = (rows: [string, unknown][]) => `<table class="plain">${rows.filter(([, v]) => v !== null && v !== undefined && v !== '').map(([k, v]) => `<tr><td class="bold" style="width:34%">${esc(k)}</td><td>${multiline(v)}</td></tr>`).join('')}</table>`;
+const kv = (rows: [string, unknown][]) =>
+  `<table class="plain">${rows
+    .filter(([, v]) => v !== null && v !== undefined && v !== '')
+    .map(([k, v]) => `<tr><td class="bold" style="width:34%">${esc(k)}</td><td>${multiline(v)}</td></tr>`)
+    .join('')}</table>`;
 
 function jobHeader(j: JobDocument): string {
   return `<div class="grid"><div class="box">${kv([
@@ -51,7 +64,10 @@ function jobHeader(j: JobDocument): string {
 function sampleTable(j: JobDocument): string {
   const rows = j.samples
     .map(
-      (s, i) => `<tr><td class="center">${i + 1}</td><td>${esc(s.sampleNo)}</td><td>${esc(s.description)}${s.attributes.length ? `<div class="small muted">${s.attributes.map((a) => `${esc(a.label)}: ${esc(a.value)}`).join('; ')}</div>` : ''}</td>
+      (
+        s,
+        i,
+      ) => `<tr><td class="center">${i + 1}</td><td>${esc(s.sampleNo)}</td><td>${esc(s.description)}${s.attributes.length ? `<div class="small muted">${s.attributes.map((a) => `${esc(a.label)}: ${esc(a.value)}`).join('; ')}</div>` : ''}</td>
       <td>${esc(s.condition)}</td><td>${esc(s.quantity)}</td><td>${esc(s.size)}</td><td>${s.returnable ? 'Yes' : 'No'}</td><td>${s.tests.map(esc).join('<br>')}</td></tr>`,
     )
     .join('');
@@ -64,8 +80,12 @@ function deviations(j: JobDocument): string {
 }
 
 export function srfHtml(j: JobDocument, company: CompanySnapshot): string {
-  return page(`SRF ${j.jobNo}`, company, `${letterhead(company)}<h1>Sample Request Form</h1>${jobHeader(j)}${sampleTable(j)}${deviations(j)}
-  <table class="plain" style="margin-top:28px"><tr><td>Received by: ${esc(j.receivedBy)}</td><td class="right">Customer representative: ______________________</td></tr></table>`);
+  return page(
+    `SRF ${j.jobNo}`,
+    company,
+    `${letterhead(company)}<h1>Sample Request Form</h1>${jobHeader(j)}${sampleTable(j)}${deviations(j)}
+  <table class="plain" style="margin-top:28px"><tr><td>Received by: ${esc(j.receivedBy)}</td><td class="right">Customer representative: ______________________</td></tr></table>`,
+  );
 }
 
 export interface AckPhoto {
@@ -77,14 +97,21 @@ export interface AckPhoto {
 function ackPhotos(photos: AckPhoto[]): string {
   if (!photos.length) return '';
   return `<h2>Photographs of samples as received</h2><div style="display:flex;flex-wrap:wrap;gap:6mm">${photos
-    .map((p, i) => `<figure class="keep" style="margin:0;width:85mm"><img src="${p.dataUri}" alt="" style="width:85mm;height:64mm;object-fit:contain;display:block;border:0.2mm solid #ccc"><figcaption class="small muted">Photo ${i + 1}${p.caption ? `: ${esc(p.caption)}` : ''}</figcaption></figure>`)
+    .map(
+      (p, i) =>
+        `<figure class="keep" style="margin:0;width:85mm"><img src="${p.dataUri}" alt="" style="width:85mm;height:64mm;object-fit:contain;display:block;border:0.2mm solid #ccc"><figcaption class="small muted">Photo ${i + 1}${p.caption ? `: ${esc(p.caption)}` : ''}</figcaption></figure>`,
+    )
     .join('')}</div>`;
 }
 
 export function acknowledgementHtml(j: JobDocument, company: CompanySnapshot, photos: AckPhoto[] = []): string {
-  return page(`Acknowledgement ${j.jobNo}`, company, `${letterhead(company)}<h1>Sample Acknowledgement</h1>
+  return page(
+    `Acknowledgement ${j.jobNo}`,
+    company,
+    `${letterhead(company)}<h1>Sample Acknowledgement</h1>
   <p>Dear ${esc(j.kindAttention ?? 'Sir/Madam')},</p><p>We have received the samples listed below under job <strong>${esc(j.jobNo)}</strong> on ${formatDateTime(j.receivedAt)}. Please quote this number in all correspondence.</p>
-  ${sampleTable(j)}${deviations(j)}${ackPhotos(photos)}<p style="margin-top:20px">For <strong>${esc(company.legalName)}</strong></p>`);
+  ${sampleTable(j)}${deviations(j)}${ackPhotos(photos)}<p style="margin-top:20px">For <strong>${esc(company.legalName)}</strong></p>`,
+  );
 }
 
 export interface LabelDoc {
@@ -129,7 +156,9 @@ export interface JobCardTest {
 export function jobCardHtml(card: { jobNo: string; customerName: string | null; tests: JobCardTest[] }, company: CompanySnapshot): string {
   const rows = card.tests
     .map(
-      (t) => `<div class="box keep" style="margin-top:8px"><table class="plain"><tr><td class="bold" style="width:50%">${esc(t.testName)}</td><td class="right">${t.urgent ? '<span class="bold">URGENT</span> · ' : ''}Due ${formatDate(t.dueDate)}</td></tr>
+      (
+        t,
+      ) => `<div class="box keep" style="margin-top:8px"><table class="plain"><tr><td class="bold" style="width:50%">${esc(t.testName)}</td><td class="right">${t.urgent ? '<span class="bold">URGENT</span> · ' : ''}Due ${formatDate(t.dueDate)}</td></tr>
       <tr><td>Sample: ${esc(t.sampleNo)} — ${esc(t.sampleDescription)}</td><td class="right">Method: ${esc(t.methodName)}</td></tr>
       <tr><td>Analyst: ${esc(t.assignee)}</td><td class="right">Instrument: ${esc(t.instrument)}${t.analysisMode ? ` · ${esc(t.analysisMode)}` : ''}</td></tr></table>
       ${t.officeInstructions ? `<p class="small"><span class="bold">Office instructions:</span> ${multiline(t.officeInstructions)}</p>` : ''}
@@ -138,5 +167,9 @@ export function jobCardHtml(card: { jobNo: string; customerName: string | null; 
       <table class="small"><thead><tr>${t.stages.map((s) => `<th>${esc(s)}</th>`).join('')}</tr></thead><tbody><tr style="height:26px">${t.stages.map(() => '<td></td>').join('')}</tr></tbody></table></div>`,
     )
     .join('');
-  return page(`Job card ${card.jobNo}`, company, `${letterhead(company)}<h1>Job Card</h1><table class="plain"><tr><td><span class="bold">Job no.:</span> ${esc(card.jobNo)}</td>${card.customerName ? `<td class="right"><span class="bold">Customer:</span> ${esc(card.customerName)}</td>` : ''}</tr></table>${rows}`);
+  return page(
+    `Job card ${card.jobNo}`,
+    company,
+    `${letterhead(company)}<h1>Job Card</h1><table class="plain"><tr><td><span class="bold">Job no.:</span> ${esc(card.jobNo)}</td>${card.customerName ? `<td class="right"><span class="bold">Customer:</span> ${esc(card.customerName)}</td>` : ''}</tr></table>${rows}`,
+  );
 }

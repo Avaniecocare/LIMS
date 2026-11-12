@@ -21,7 +21,19 @@ beforeAll(async () => {
   await resetDb(ctx);
   const { loadBaseline } = await import('../../src/modules/rbac/baseline.js');
   await ctx.prisma.$transaction(loadBaseline);
-  for (const [e, r] of Object.entries({ admin: ROLE_NAMES.admin, reception: ROLE_NAMES.reception, planner: ROLE_NAMES.planner, tech: ROLE_NAMES.tech, hod: ROLE_NAMES.hod, reviewer: ROLE_NAMES.reviewer, signatory: ROLE_NAMES.signatory, accounts: ROLE_NAMES.accounts, mgmt: ROLE_NAMES.management, sales: ROLE_NAMES.sales })) await createUser(ctx, `${e}@a.example`, [r], `${e} person`);
+  for (const [e, r] of Object.entries({
+    admin: ROLE_NAMES.admin,
+    reception: ROLE_NAMES.reception,
+    planner: ROLE_NAMES.planner,
+    tech: ROLE_NAMES.tech,
+    hod: ROLE_NAMES.hod,
+    reviewer: ROLE_NAMES.reviewer,
+    signatory: ROLE_NAMES.signatory,
+    accounts: ROLE_NAMES.accounts,
+    mgmt: ROLE_NAMES.management,
+    sales: ROLE_NAMES.sales,
+  }))
+    await createUser(ctx, `${e}@a.example`, [r], `${e} person`);
   const c = (n: string) => login(ctx, `${n}@a.example`);
   admin = await c('admin');
   accounts = await c('accounts');
@@ -64,7 +76,32 @@ describe('reports module', () => {
 
   it('has rows for the core reports on real data', async () => {
     const total = async (key: string, q = '') => (await admin.get(`/mis/${key}?pageSize=5${q}`).expect(200)).body.meta.total as number;
-    for (const key of ['pending-samples', 'tat-crossed', 'performance-technician', 'performance-machine', 'daily-collection-summary', 'daily-collection-full', 'daily-sample-detail', 'daily-plan-detail', 'pending-plan-detail', 'daily-test-results', 'result-pending', 'pending-tests-summary', 'sample-status', 'collector-detail', 'collector-daily', 'collector-monthly', 'technician-analysis', 'pending-by-test', 'complete-test-detail', 'sample-returnable', 'quotation-register', 'invoice-register', 'payment-register', 'outstanding-ageing']) {
+    for (const key of [
+      'pending-samples',
+      'tat-crossed',
+      'performance-technician',
+      'performance-machine',
+      'daily-collection-summary',
+      'daily-collection-full',
+      'daily-sample-detail',
+      'daily-plan-detail',
+      'pending-plan-detail',
+      'daily-test-results',
+      'result-pending',
+      'pending-tests-summary',
+      'sample-status',
+      'collector-detail',
+      'collector-daily',
+      'collector-monthly',
+      'technician-analysis',
+      'pending-by-test',
+      'complete-test-detail',
+      'sample-returnable',
+      'quotation-register',
+      'invoice-register',
+      'payment-register',
+      'outstanding-ageing',
+    ]) {
       expect(await total(key), key).toBeGreaterThan(0);
     }
     expect(await total('quotation-register', `&customerId=${fx.inter.id}`)).toBe(0);
@@ -117,7 +154,10 @@ describe('dashboard', () => {
     expect(metric(d.commercial, 'quotations-sent').value).toBeGreaterThanOrEqual(0);
     const summary = (await accounts.get('/invoices/due/summary').expect(200)).body;
     expect(metric(d.commercial, 'outstanding').value).toBe(Number(summary.total));
-    const registerTotal = (await admin.get('/mis/invoice-register?from=2020-01-01&to=2099-12-31&pageSize=100').expect(200)).body.data.reduce((s: number, r: { total: string }) => s + Number(r.total), 0);
+    const registerTotal = (await admin.get('/mis/invoice-register?from=2020-01-01&to=2099-12-31&pageSize=100').expect(200)).body.data.reduce(
+      (s: number, r: { total: string }) => s + Number(r.total),
+      0,
+    );
     expect(metric(d.commercial, 'billed').value).toBe(registerTotal);
     const paid = (await admin.get('/mis/payment-register?from=2020-01-01&to=2099-12-31&pageSize=100').expect(200)).body.data.reduce((s: number, r: { amount: string }) => s + Number(r.amount), 0);
     expect(metric(d.commercial, 'collected').value).toBe(paid);
@@ -150,7 +190,9 @@ describe('dashboard', () => {
 describe('notifications', () => {
   it('tells a technician about an assignment, in-app and by email, respecting preferences', async () => {
     const before = (await tech.get('/notifications').expect(200)).body.unread;
-    const { sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.a]);
+    const {
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.a]);
     const list = (await tech.get('/notifications').expect(200)).body;
     expect(list.unread).toBe(before + 1);
     expect(list.data[0]).toMatchObject({ type: 'ASSIGNED', link: `/my-tests/${id}` });
@@ -170,7 +212,9 @@ describe('notifications', () => {
   });
 
   it('notifies approvers and sends work back with the reason', async () => {
-    const { sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.a]);
+    const {
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.a]);
     const d = await workTest(team, id, { P: 'OK' });
     const hodList = (await team.hod.get('/notifications').expect(200)).body;
     expect(hodList.data[0].type).toBe('APPROVAL_DUE');
@@ -180,7 +224,9 @@ describe('notifications', () => {
   });
 
   it('never notifies people about their own action', async () => {
-    const { sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.a]);
+    const {
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.a]);
     await workTest(team, id, { P: 'OK' });
     expect((await tech.get('/notifications').expect(200)).body.data.some((n: { type: string; title: string }) => n.type === 'APPROVAL_DUE')).toBe(false);
   });
@@ -222,7 +268,10 @@ describe('notifications', () => {
 describe('technician isolation across the whole API', () => {
   it('no GET endpoint returns customer identity or pricing to a technician', async () => {
     const doc = buildOpenApi(ctx.app) as { paths: Record<string, Record<string, unknown>> };
-    const job = await ctx.prisma.job.findFirstOrThrow({ where: { samples: { some: { tests: { some: { assignedToId: tech.userId } } } } }, include: { samples: { include: { tests: true, reports: { include: { revisions: true } } } } } });
+    const job = await ctx.prisma.job.findFirstOrThrow({
+      where: { samples: { some: { tests: { some: { assignedToId: tech.userId } } } } },
+      include: { samples: { include: { tests: true, reports: { include: { revisions: true } } } } },
+    });
     const sample = job.samples[0];
     const test = await ctx.prisma.sampleTest.findFirstOrThrow({ where: { assignedToId: tech.userId } });
     const quotation = await ctx.prisma.quotation.findFirstOrThrow();
@@ -230,11 +279,20 @@ describe('technician isolation across the whole API', () => {
     const payment = await ctx.prisma.payment.findFirstOrThrow();
     const report = await ctx.prisma.report.findFirstOrThrow({ include: { revisions: true } });
     const ids: Record<string, string> = {
-      id: test.id, revisionId: report.revisions[0].id, key: 'pending-samples',
+      id: test.id,
+      revisionId: report.revisions[0].id,
+      key: 'pending-samples',
     };
     const perResource: [RegExp, string][] = [
-      [/^\/api\/v1\/jobs\//, job.id], [/^\/api\/v1\/samples\//, sample.id], [/^\/api\/v1\/customers\//, fx.intra.id], [/^\/api\/v1\/quotations\//, quotation.id],
-      [/^\/api\/v1\/invoices\//, invoice.id], [/^\/api\/v1\/payments\//, payment.id], [/^\/api\/v1\/reports\//, report.id], [/^\/api\/v1\/orders\//, job.id], [/^\/api\/v1\/dispatch\//, job.id],
+      [/^\/api\/v1\/jobs\//, job.id],
+      [/^\/api\/v1\/samples\//, sample.id],
+      [/^\/api\/v1\/customers\//, fx.intra.id],
+      [/^\/api\/v1\/quotations\//, quotation.id],
+      [/^\/api\/v1\/invoices\//, invoice.id],
+      [/^\/api\/v1\/payments\//, payment.id],
+      [/^\/api\/v1\/reports\//, report.id],
+      [/^\/api\/v1\/orders\//, job.id],
+      [/^\/api\/v1\/dispatch\//, job.id],
     ];
     const secrets = [fx.intra.name, fx.inter.name, fx.intra.crn, fx.inter.crn, 'priya@intra.example'];
     const allowedOk: string[] = [];
@@ -245,7 +303,11 @@ describe('technician isolation across the whole API', () => {
         const specific = perResource.find(([re]) => re.test(path));
         return name === 'id' && specific ? specific[1] : (ids[name] ?? test.id);
       });
-      const q = url.includes('/search') ? `?q=${encodeURIComponent(fx.intra.name)}&code=${encodeURIComponent(sample.sampleNo)}` : url.includes('/files') && !url.includes('/url') ? `?entity=Job&entityId=${job.id}` : '';
+      const q = url.includes('/search')
+        ? `?q=${encodeURIComponent(fx.intra.name)}&code=${encodeURIComponent(sample.sampleNo)}`
+        : url.includes('/files') && !url.includes('/url')
+          ? `?entity=Job&entityId=${job.id}`
+          : '';
       const res = await tech.get(url + q);
       const text = JSON.stringify(res.body);
       for (const secret of secrets) expect(text.includes(secret), `${url} leaked ${secret}`).toBe(false);
@@ -257,12 +319,36 @@ describe('technician isolation across the whole API', () => {
     // The walk really reached the routes a technician uses.
     for (const p of ['/api/v1/tests/my', '/api/v1/tests/{id}', '/api/v1/notifications', '/api/v1/dashboard', '/api/v1/auth/me']) expect(allowedOk).toContain(p);
     // And none of the business lists.
-    for (const p of ['/api/v1/customers', '/api/v1/jobs', '/api/v1/samples', '/api/v1/quotations', '/api/v1/invoices', '/api/v1/reports', '/api/v1/masters/standard-rates']) expect(allowedOk).not.toContain(p);
+    for (const p of ['/api/v1/customers', '/api/v1/jobs', '/api/v1/samples', '/api/v1/quotations', '/api/v1/invoices', '/api/v1/reports', '/api/v1/masters/standard-rates'])
+      expect(allowedOk).not.toContain(p);
   });
 
   it('job card PDF template leaves out prices', async () => {
     const { jobCardHtml } = await import('../../src/modules/pdf/templates/job-documents.js');
-    const html = jobCardHtml({ jobNo: 'J-1', customerName: null, tests: [{ testName: 'T', methodName: 'M', sampleNo: 'S-1', sampleDescription: 'D', dueDate: null, urgent: false, assignee: 'A', instrument: null, analysisMode: null, officeInstructions: null, technicalData: null, parameters: ['P'], stages: ['One'] }] }, { legalName: 'X', labAddress: '', phone: '', email: '', gstin: '', pan: '', branding: { primaryColor: '#000000', logoDataUri: null } } as never);
+    const html = jobCardHtml(
+      {
+        jobNo: 'J-1',
+        customerName: null,
+        tests: [
+          {
+            testName: 'T',
+            methodName: 'M',
+            sampleNo: 'S-1',
+            sampleDescription: 'D',
+            dueDate: null,
+            urgent: false,
+            assignee: 'A',
+            instrument: null,
+            analysisMode: null,
+            officeInstructions: null,
+            technicalData: null,
+            parameters: ['P'],
+            stages: ['One'],
+          },
+        ],
+      },
+      { legalName: 'X', labAddress: '', phone: '', email: '', gstin: '', pan: '', branding: { primaryColor: '#000000', logoDataUri: null } } as never,
+    );
     expect(html).not.toMatch(/₹|Rate|Price/);
     expect(html).not.toContain('Customer:');
   });
@@ -311,7 +397,16 @@ describe('customer identity and prices through documents', () => {
   });
 
   it('a temporary password only allows changing it', async () => {
-    const created = (await admin.post('/admin/users', { email: 'new@a.example', name: 'New Person', password: 'Temp-Password-1!', roleIds: [(await ctx.prisma.role.findUniqueOrThrow({ where: { name: ROLE_NAMES.sales } })).id] }).expect(201)).body;
+    const created = (
+      await admin
+        .post('/admin/users', {
+          email: 'new@a.example',
+          name: 'New Person',
+          password: 'Temp-Password-1!',
+          roleIds: [(await ctx.prisma.role.findUniqueOrThrow({ where: { name: ROLE_NAMES.sales } })).id],
+        })
+        .expect(201)
+    ).body;
     const c = await login(ctx, 'new@a.example', 'Temp-Password-1!');
     expect((await c.get('/auth/me').expect(200)).body.mustChangePassword).toBe(true);
     const blocked = await c.get('/customers').expect(403);

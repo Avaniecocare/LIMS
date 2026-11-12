@@ -6,8 +6,23 @@ import { bluepeak } from '../support/company-env.js';
 const { branding, ...rest } = loadCompanyConfig(bluepeak);
 const company: CompanySnapshot = { ...rest, branding: { primaryColor: branding.primaryColor, accentColor: branding.accentColor, logoDataUri: null } };
 const job: JobDocument = {
-  jobNo: 'JOB-1', receivedAt: new Date('2026-11-12T05:00:00Z'), urgent: false, letterRef: null, letterDate: null, materialSpec: null, poNumber: null, poDate: null, receiptMode: null,
-  reportIssueDetails: null, reportIssueAddress: null, kindAttention: 'Rohan Mehta', contactEmail: null, contactPhone: null, customerName: 'Green Valley', crn: 'CRN-1', receivedBy: null,
+  jobNo: 'JOB-1',
+  receivedAt: new Date('2026-11-12T05:00:00Z'),
+  urgent: false,
+  letterRef: null,
+  letterDate: null,
+  materialSpec: null,
+  poNumber: null,
+  poDate: null,
+  receiptMode: null,
+  reportIssueDetails: null,
+  reportIssueAddress: null,
+  kindAttention: 'Rohan Mehta',
+  contactEmail: null,
+  contactPhone: null,
+  customerName: 'Green Valley',
+  crn: 'CRN-1',
+  receivedBy: null,
   samples: [{ sampleNo: 'S-1', description: 'MS plate', condition: 'Good', quantity: '1', size: null, returnable: false, attributes: [], tests: ['Tensile'] }],
   deviations: [],
 };

@@ -13,7 +13,8 @@ const daysFromNow = (n: number) => new Date(Date.now() + n * 86_400_000).toISOSt
 beforeAll(async () => {
   ctx = await bootApp();
   await resetDb(ctx);
-  for (const [e, r] of Object.entries({ admin: ROLE_NAMES.admin, reception: ROLE_NAMES.reception, planner: ROLE_NAMES.planner, tech: ROLE_NAMES.tech, hod: ROLE_NAMES.hod })) await createUser(ctx, `${e}@q.example`, [r], `${e} person`);
+  for (const [e, r] of Object.entries({ admin: ROLE_NAMES.admin, reception: ROLE_NAMES.reception, planner: ROLE_NAMES.planner, tech: ROLE_NAMES.tech, hod: ROLE_NAMES.hod }))
+    await createUser(ctx, `${e}@q.example`, [r], `${e} person`);
   await createUser(ctx, 'qm@q.example', ['Quality Manager'], 'Quinn Quality');
   [admin, reception, planner, tech, qm] = await Promise.all(['admin', 'reception', 'planner', 'tech', 'qm'].map((e) => login(ctx, `${e}@q.example`)));
   fx = await billingFixture(admin, ctx);
@@ -39,7 +40,9 @@ describe('equipment', () => {
     const inst = (await admin.post('/masters/instruments', { code: 'UTM-1', name: 'Universal testing machine' }).expect(201)).body;
     const row = async () => (await qm.get('/quality/equipment').expect(200)).body.find((e: { id: string }) => e.id === inst.id);
     expect((await row()).status).toBe('NOT_SCHEDULED');
-    await qm.patch(`/quality/equipment/${inst.id}/schedule`, { version: (await row()).version, calibrationIntervalMonths: 12, maintenanceIntervalMonths: 6, maintenanceDueAt: daysFromNow(5) }).expect(200);
+    await qm
+      .patch(`/quality/equipment/${inst.id}/schedule`, { version: (await row()).version, calibrationIntervalMonths: 12, maintenanceIntervalMonths: 6, maintenanceDueAt: daysFromNow(5) })
+      .expect(200);
     expect((await row()).status).toBe('DUE_SOON');
     await tech.post(`/quality/equipment/${inst.id}/events`, { kind: 'CALIBRATION', performedOn: today(), performedBy: 'NABL-accredited agency', outcome: 'PASS' }).expect(403);
     await qm.post(`/quality/equipment/${inst.id}/events`, { kind: 'CALIBRATION', performedOn: daysFromNow(2), performedBy: 'x', outcome: 'PASS' }).expect(400);
@@ -51,7 +54,9 @@ describe('equipment', () => {
     expect((await qm.get(`/quality/equipment/${inst.id}/events`).expect(200)).body).toHaveLength(2);
 
     // Failed calibration: due today, so planners can no longer pick it if overdue instruments are blocked.
-    await qm.post(`/quality/equipment/${inst.id}/events`, { kind: 'CALIBRATION', performedOn: today(), performedBy: 'Calibration agency', outcome: 'FAIL', notes: 'Load cell out of tolerance' }).expect(201);
+    await qm
+      .post(`/quality/equipment/${inst.id}/events`, { kind: 'CALIBRATION', performedOn: today(), performedBy: 'Calibration agency', outcome: 'FAIL', notes: 'Load cell out of tolerance' })
+      .expect(201);
     expect(String((await row()).calibrationDueAt).slice(0, 10)).toBe(today());
 
     await admin.post('/masters/instruments', { code: 'OVEN-1', name: 'Drying oven', lastCalibratedAt: daysFromNow(-400), calibrationDueAt: daysFromNow(-10) }).expect(201);
@@ -69,7 +74,9 @@ describe('competency', () => {
   it('authorises an analyst for a test, refuses a duplicate, withdraws it, and can make planners respect it', async () => {
     const techUser = await ctx.prisma.user.findUniqueOrThrow({ where: { email: 'tech@q.example' } });
     await tech.post('/quality/authorisations', { userId: techUser.id, testId: fx.tests.d, authorisedOn: today() }).expect(403);
-    await qm.post('/quality/authorisations', { userId: techUser.id, testId: fx.tests.d, authorisedOn: today(), validUntil: daysFromNow(365), evidence: 'Five supervised trials within limits' }).expect(201);
+    await qm
+      .post('/quality/authorisations', { userId: techUser.id, testId: fx.tests.d, authorisedOn: today(), validUntil: daysFromNow(365), evidence: 'Five supervised trials within limits' })
+      .expect(201);
     await qm.post('/quality/authorisations', { userId: techUser.id, testId: fx.tests.d, authorisedOn: today() }).expect(422);
     const list = (await qm.get(`/quality/authorisations?userId=${techUser.id}`).expect(200)).body;
     expect(list[0]).toMatchObject({ userName: 'tech person', state: 'ACTIVE', authorisedByName: 'Quinn Quality' });
@@ -100,7 +107,19 @@ describe('non-conformance and CAPA', () => {
   it('anyone can raise one; each step needs what it should; the owner cannot verify their own action', async () => {
     const qmUser = await ctx.prisma.user.findUniqueOrThrow({ where: { email: 'qm@q.example' } });
     const adminUser = await ctx.prisma.user.findUniqueOrThrow({ where: { email: 'admin@q.example' } });
-    let nc = (await tech.post('/quality/nc', { source: 'Routine work', title: 'Wrong buffer used for pH calibration', description: 'pH 7 buffer past expiry', severity: 'MAJOR', reference: 'LAB/S/26-27/000045', ownerId: qmUser.id, dueOn: daysFromNow(14) }).expect(201)).body;
+    let nc = (
+      await tech
+        .post('/quality/nc', {
+          source: 'Routine work',
+          title: 'Wrong buffer used for pH calibration',
+          description: 'pH 7 buffer past expiry',
+          severity: 'MAJOR',
+          reference: 'LAB/S/26-27/000045',
+          ownerId: qmUser.id,
+          dueOn: daysFromNow(14),
+        })
+        .expect(201)
+    ).body;
     expect(nc.ncNo).toMatch(/\/NC\/\d{2}-\d{2}\/0001$/);
     expect(nc).toMatchObject({ status: 'OPEN', ownerName: 'Quinn Quality', createdByName: 'tech person' });
     // The analyst can follow what they reported, but not open the register.
@@ -109,7 +128,8 @@ describe('non-conformance and CAPA', () => {
     expect((await qm.get('/quality/nc/mine').expect(200)).body).toEqual([]);
     await tech.patch(`/quality/nc/${nc.id}`, { version: nc.version, status: 'ACTION' }).expect(403);
     expect((await qm.patch(`/quality/nc/${nc.id}`, { version: nc.version, status: 'ACTION' }).expect(422)).body.error.message).toContain('correction or the root cause');
-    nc = (await qm.patch(`/quality/nc/${nc.id}`, { version: nc.version, status: 'ACTION', correction: 'Buffers replaced, meter recalibrated', rootCause: 'No expiry check before use' }).expect(200)).body;
+    nc = (await qm.patch(`/quality/nc/${nc.id}`, { version: nc.version, status: 'ACTION', correction: 'Buffers replaced, meter recalibrated', rootCause: 'No expiry check before use' }).expect(200))
+      .body;
     await qm.patch(`/quality/nc/${nc.id}`, { version: nc.version, status: 'CLOSED' }).expect(422);
     nc = (await qm.patch(`/quality/nc/${nc.id}`, { version: nc.version, status: 'VERIFICATION', correctiveAction: 'Expiry check added to the daily calibration log' }).expect(200)).body;
     expect((await qm.patch(`/quality/nc/${nc.id}`, { version: nc.version, status: 'CLOSED', verification: 'Log reviewed for 4 weeks' }).expect(422)).body.error.code).toBe('SELF_VERIFY');
@@ -138,7 +158,17 @@ describe('privacy (DPDP Act)', () => {
   it("tracks a request to its deadline, finds the person's data, erases a contact, and keeps documents", async () => {
     const contact = await ctx.prisma.customerContact.create({ data: { customerId: fx.intra.id, name: 'Priya Contact', email: 'priya@customer.example', phone: '+91 90000 00000' } });
     await tech.get('/privacy/requests').expect(403);
-    const req = (await admin.post('/privacy/requests', { kind: 'ERASURE', requesterName: 'Priya Contact', requesterEmail: 'Priya@Customer.example', details: 'Please delete my details; I have left the company.', receivedOn: today() }).expect(201)).body;
+    const req = (
+      await admin
+        .post('/privacy/requests', {
+          kind: 'ERASURE',
+          requesterName: 'Priya Contact',
+          requesterEmail: 'Priya@Customer.example',
+          details: 'Please delete my details; I have left the company.',
+          receivedOn: today(),
+        })
+        .expect(201)
+    ).body;
     expect(String(req.dueOn).slice(0, 10)).toBe(daysFromNow(30));
     const found = (await admin.get('/privacy/personal-data?email=priya@customer.example').expect(200)).body;
     expect(found.items).toEqual([expect.objectContaining({ place: 'Customer contact', erasable: true })]);
@@ -147,14 +177,22 @@ describe('privacy (DPDP Act)', () => {
     expect((await fresh.post(`/privacy/requests/${req.id}/erase`).expect(403)).body.error.code).toBe('REAUTH_REQUIRED');
     expect((await admin.post(`/privacy/requests/${req.id}/erase`).expect(200)).body).toEqual({ contacts: 1 });
     expect(await ctx.prisma.customerContact.findUniqueOrThrow({ where: { id: contact.id } })).toMatchObject({ name: 'Erased on request', email: null, phone: null });
-    const done = (await admin.post(`/privacy/requests/${req.id}/resolve`, { version: req.version, status: 'DONE', resolution: 'Contact details erased; issued documents kept as required by GST rules.' }).expect(200)).body;
+    const done = (
+      await admin
+        .post(`/privacy/requests/${req.id}/resolve`, { version: req.version, status: 'DONE', resolution: 'Contact details erased; issued documents kept as required by GST rules.' })
+        .expect(200)
+    ).body;
     expect(done).toMatchObject({ status: 'DONE', resolvedByName: 'admin person' });
     await admin.post(`/privacy/requests/${req.id}/resolve`, { version: done.version, status: 'DONE', resolution: 'again' }).expect(422);
   });
 
   it('logs a breach with the 72-hour reporting clock, and records when the Board and people were told', async () => {
     const detectedAt = new Date(Date.now() - 3_600_000).toISOString();
-    const b = (await admin.post('/privacy/breaches', { detectedAt, description: 'A laptop with exported customer contacts was lost', dataAffected: 'Names, emails and phones of customer contacts', peopleAffected: 40 }).expect(201)).body;
+    const b = (
+      await admin
+        .post('/privacy/breaches', { detectedAt, description: 'A laptop with exported customer contacts was lost', dataAffected: 'Names, emails and phones of customer contacts', peopleAffected: 40 })
+        .expect(201)
+    ).body;
     expect(new Date(b.boardReportDueAt).getTime() - new Date(detectedAt).getTime()).toBe(72 * 3_600_000);
     const updated = (await admin.patch(`/privacy/breaches/${b.id}`, { version: b.version, reportedToBoardAt: new Date().toISOString(), containment: 'Device wiped remotely' }).expect(200)).body;
     expect(updated.reportedToBoardAt).toBeTruthy();

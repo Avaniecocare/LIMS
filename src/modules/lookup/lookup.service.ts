@@ -54,7 +54,15 @@ export class LookupService {
       const first = offices[0];
       const state = first?.State ? gstStateByName(first.State) : null;
       const result = first
-        ? { pincode: pin, found: true, city: first.District ?? null, district: first.District ?? null, stateName: state?.name ?? first.State ?? null, stateCode: state?.code ?? null, localities: [...new Set(offices.map((o) => o.Name).filter((x): x is string => !!x))].slice(0, 30) }
+        ? {
+            pincode: pin,
+            found: true,
+            city: first.District ?? null,
+            district: first.District ?? null,
+            stateName: state?.name ?? first.State ?? null,
+            stateCode: state?.code ?? null,
+            localities: [...new Set(offices.map((o) => o.Name).filter((x): x is string => !!x))].slice(0, 30),
+          }
         : { pincode: pin, found: false, city: null, district: null, stateName: null, stateCode: null, localities: [] };
       await this.redis.client.set(cacheKey, JSON.stringify(result), 'EX', result.found ? 30 * 24 * 3600 : 24 * 3600);
       return result;
@@ -73,7 +81,17 @@ export class LookupService {
     if (!/^[1-9][0-9]{5}$/.test(pin)) throw badRequest('A PIN code is six digits and does not start with 0', [{ field: 'pincode', message: 'Six digits' }]);
     const region = (): PincodeResult => {
       const state = stateForPin(pin);
-      return { pincode: pin, found: !!state, city: null, district: null, stateName: state?.name ?? null, stateCode: state?.code ?? null, localities: [], match: state ? 'region' : 'none', nearbyPincode: null };
+      return {
+        pincode: pin,
+        found: !!state,
+        city: null,
+        district: null,
+        stateName: state?.name ?? null,
+        stateCode: state?.code ?? null,
+        localities: [],
+        match: state ? 'region' : 'none',
+        nearbyPincode: null,
+      };
     };
     if (!this.infra.pincodeLookupUrl) return region();
     const exact = await this.directory(pin);

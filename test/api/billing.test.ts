@@ -20,7 +20,19 @@ beforeAll(async () => {
   await resetDb(ctx);
   const { loadBaseline } = await import('../../src/modules/rbac/baseline.js');
   await ctx.prisma.$transaction(loadBaseline);
-  for (const [e, r] of Object.entries({ admin: ROLE_NAMES.admin, reception: ROLE_NAMES.reception, planner: ROLE_NAMES.planner, tech: ROLE_NAMES.tech, hod: ROLE_NAMES.hod, reviewer: ROLE_NAMES.reviewer, signatory: ROLE_NAMES.signatory, accounts: ROLE_NAMES.accounts, dispatch: ROLE_NAMES.dispatch, mgmt: ROLE_NAMES.management })) await createUser(ctx, `${e}@b.example`, [r], `${e} person`);
+  for (const [e, r] of Object.entries({
+    admin: ROLE_NAMES.admin,
+    reception: ROLE_NAMES.reception,
+    planner: ROLE_NAMES.planner,
+    tech: ROLE_NAMES.tech,
+    hod: ROLE_NAMES.hod,
+    reviewer: ROLE_NAMES.reviewer,
+    signatory: ROLE_NAMES.signatory,
+    accounts: ROLE_NAMES.accounts,
+    dispatch: ROLE_NAMES.dispatch,
+    mgmt: ROLE_NAMES.management,
+  }))
+    await createUser(ctx, `${e}@b.example`, [r], `${e} person`);
   const c = async (n: string) => login(ctx, `${n}@b.example`);
   admin = await c('admin');
   reception = await c('reception');
@@ -172,7 +184,9 @@ describe('payments', () => {
     expect((await accounts.get('/invoices/due?pageSize=100').expect(200)).body.data.find((d: { id: string }) => d.id === inv.id).balance).toBe('798.00');
     const over = await accounts.post('/payments', { customerId: fx.intra.id, paidOn: '2026-11-05', mode: 'UPI', amount: '799', allocations: [{ invoiceId: inv.id, amount: '799' }] }).expect(422);
     expect(over.body.error.code).toBe('OVERPAYMENT');
-    await accounts.post('/payments', { customerId: fx.intra.id, paidOn: '2026-11-05', mode: 'UPI', reference: 'UTR-1', amount: '798', allocations: [{ invoiceId: inv.id, amount: '798' }] }).expect(201);
+    await accounts
+      .post('/payments', { customerId: fx.intra.id, paidOn: '2026-11-05', mode: 'UPI', reference: 'UTR-1', amount: '798', allocations: [{ invoiceId: inv.id, amount: '798' }] })
+      .expect(201);
     got = (await accounts.get(`/invoices/${inv.id}`).expect(200)).body;
     expect(got.status).toBe('PAID');
     expect(got.balance).toBe('0.00');
@@ -242,7 +256,11 @@ describe('payments', () => {
 
 describe('due invoices', () => {
   it('calculates overdue from the due date; filters ageing buckets; totals by customer', async () => {
-    const cust = (await admin.post('/customers', { name: 'Ageing Co', stateName: 'Maharashtra', stateCode: '27', creditDays: 0, contacts: [{ name: 'Pay', email: 'pay@ageing.example', isPrimary: true }] }).expect(201)).body;
+    const cust = (
+      await admin
+        .post('/customers', { name: 'Ageing Co', stateName: 'Maharashtra', stateCode: '27', creditDays: 0, contacts: [{ name: 'Pay', email: 'pay@ageing.example', isPrimary: true }] })
+        .expect(201)
+    ).body;
     const make = async (invoiceDate: string) => {
       const { job } = await issuedJob(ctx, team, cust.id, [fx.tests.a], { P: 'OK' });
       const inv = (await accounts.post('/invoices', { customerId: cust.id, jobIds: [job.id] }).expect(201)).body;
@@ -311,14 +329,27 @@ describe('dispatch', () => {
   }, 60000);
 
   it('tracks returnable samples and retention', async () => {
-    const job = (await reception.post('/jobs', { customerId: fx.intra.id, noQuotationReason: 'x', samples: [{ description: 'keep', returnable: true }, { description: 'scrap', returnable: false }] }).expect(201)).body;
+    const job = (
+      await reception
+        .post('/jobs', {
+          customerId: fx.intra.id,
+          noQuotationReason: 'x',
+          samples: [
+            { description: 'keep', returnable: true },
+            { description: 'scrap', returnable: false },
+          ],
+        })
+        .expect(201)
+    ).body;
     const [keep, scrap] = job.samples;
     const pending = (await dispatch.get('/dispatch/returnables?view=pending&pageSize=100').expect(200)).body.data;
     expect(pending.map((p: { id: string }) => p.id)).toContain(keep.id);
     expect(pending.map((p: { id: string }) => p.id)).not.toContain(scrap.id);
     await dispatch.post(`/dispatch/samples/${scrap.id}/return`, { version: scrap.version, returnedAt: '2026-11-04', returnStatus: 'Returned' }).expect(422);
     await dispatch.post(`/dispatch/samples/${keep.id}/return`, { version: keep.version, returnedAt: '2026-11-04', returnStatus: 'Handed to customer' }).expect(200);
-    expect((await dispatch.get('/dispatch/returnables?view=returned&pageSize=100').expect(200)).body.data.find((p: { id: string }) => p.id === keep.id)).toMatchObject({ returnStatus: 'Handed to customer' });
+    expect((await dispatch.get('/dispatch/returnables?view=returned&pageSize=100').expect(200)).body.data.find((p: { id: string }) => p.id === keep.id)).toMatchObject({
+      returnStatus: 'Handed to customer',
+    });
     await dispatch.post(`/dispatch/samples/${keep.id}/dispose`, { version: keep.version + 1, disposedAt: '2026-11-05' }).expect(422);
     await ctx.prisma.sample.update({ where: { id: scrap.id }, data: { retentionUntil: new Date('2020-01-01') } });
     const dueForDisposal = (await dispatch.get('/dispatch/returnables?view=due-for-disposal&pageSize=100').expect(200)).body.data;
@@ -330,7 +361,10 @@ describe('dispatch', () => {
 describe('cancellation', () => {
   it('shows the impact first, requires permission and reason, drops out of billing, stays visible', async () => {
     const { plannedTests } = await import('../support/workflow.js');
-    const { job, sampleTestIds: [a, b] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.a, fx.tests.d]);
+    const {
+      job,
+      sampleTestIds: [a, b],
+    } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.a, fx.tests.d]);
     await tech.post('/cancellations/preview', { type: 'test', id: a }).expect(403);
     await reception.post('/cancellations/preview', { type: 'job', id: job.id }).expect(403);
     const preview = (await planner.post('/cancellations/preview', { type: 'test', id: a }).expect(200)).body;
@@ -358,7 +392,10 @@ describe('cancellation', () => {
   });
 
   it('blocks when a report is approved or issued; removes draft invoice lines otherwise', async () => {
-    const { job, sampleTestIds: [a] } = await issuedJob(ctx, team, fx.intra.id, [fx.tests.a], { P: 'OK' });
+    const {
+      job,
+      sampleTestIds: [a],
+    } = await issuedJob(ctx, team, fx.intra.id, [fx.tests.a], { P: 'OK' });
     const preview = (await admin.post('/cancellations/preview', { type: 'job', id: job.id }).expect(200)).body;
     expect(preview.canCancel).toBe(false);
     expect(preview.blockers[0]).toContain('Revise');

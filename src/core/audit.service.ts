@@ -55,10 +55,7 @@ export class AuditService {
   }
 
   /** Audit + status history for one workflow transition. */
-  async status(
-    tx: Tx,
-    e: { entity: string; entityId: string; from: string | null; to: string; reason?: string | null; jobId?: string | null; meta?: unknown },
-  ): Promise<void> {
+  async status(tx: Tx, e: { entity: string; entityId: string; from: string | null; to: string; reason?: string | null; jobId?: string | null; meta?: unknown }): Promise<void> {
     const ctx = getContext();
     await tx.statusEvent.create({
       data: {

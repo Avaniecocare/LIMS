@@ -6,7 +6,16 @@ const daysAgo = (n: number) => new Date(today.getTime() - n * 86_400_000);
 
 describe('ageing buckets', () => {
   it.each([
-    [-10, 'Not Due'], [0, 'Not Due'], [1, '0-30'], [30, '0-30'], [31, '31-60'], [60, '31-60'], [61, '61-90'], [90, '61-90'], [91, '90+'], [400, '90+'],
+    [-10, 'Not Due'],
+    [0, 'Not Due'],
+    [1, '0-30'],
+    [30, '0-30'],
+    [31, '31-60'],
+    [60, '31-60'],
+    [61, '61-90'],
+    [90, '61-90'],
+    [91, '90+'],
+    [400, '90+'],
   ] as const)('%i days overdue is %s', (days, bucket) => {
     expect(ageingBucket(daysAgo(days), today)).toBe(bucket);
     expect(daysOverdue(daysAgo(days), today)).toBe(days);

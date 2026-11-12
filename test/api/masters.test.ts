@@ -80,7 +80,9 @@ describe('tests and parameters', () => {
     expect(f.body.variables.sort()).toEqual(['area', 'max_load']);
     await admin.post('/masters/test-parameters', { testId: t.body.id, code: 'UTS', name: 'UTS', kind: 'CALCULATED' }).expect(400);
     await admin.post('/masters/test-parameters', { testId: t.body.id, code: 'UTS', name: 'UTS', kind: 'CALCULATED', formulaId: f.body.id, formulaBindings: { max_load: 'LOAD' } }).expect(400);
-    await admin.post('/masters/test-parameters', { testId: t.body.id, code: 'UTS', name: 'UTS', kind: 'CALCULATED', formulaId: f.body.id, formulaBindings: { max_load: 'LOAD', area: 'A0' } }).expect(201);
+    await admin
+      .post('/masters/test-parameters', { testId: t.body.id, code: 'UTS', name: 'UTS', kind: 'CALCULATED', formulaId: f.body.id, formulaBindings: { max_load: 'LOAD', area: 'A0' } })
+      .expect(201);
     const got = await admin.get(`/masters/tests/${t.body.id}`).expect(200);
     expect(got.body.parameterCount).toBe(1);
     expect(got.body.stages[0]).toBe('Sample Received by Analyst');
@@ -159,16 +161,35 @@ describe('Excel', () => {
   };
 
   it('imports new and existing rows', async () => {
-    const buffer = await workbook([['Code', 'Name', 'Symbol'], ['KG', 'Kilogram', 'kg'], ['G', 'Gram', 'g']]);
+    const buffer = await workbook([
+      ['Code', 'Name', 'Symbol'],
+      ['KG', 'Kilogram', 'kg'],
+      ['G', 'Gram', 'g'],
+    ]);
     const res = await attach(admin, '/masters/units/import', buffer).expect(200);
     expect(res.body).toEqual({ created: 2, updated: 0, errors: [] });
-    const again = await attach(admin, '/masters/units/import', await workbook([['Code', 'Name', 'Symbol'], ['KG', 'Kilogram (SI)', 'kg']])).expect(200);
+    const again = await attach(
+      admin,
+      '/masters/units/import',
+      await workbook([
+        ['Code', 'Name', 'Symbol'],
+        ['KG', 'Kilogram (SI)', 'kg'],
+      ]),
+    ).expect(200);
     expect(again.body).toEqual({ created: 0, updated: 1, errors: [] });
   });
 
   it('saves nothing when any row is invalid, and names the rows', async () => {
     const before = await ctx.prisma.unit.count();
-    const res = await attach(admin, '/masters/units/import', await workbook([['Code', 'Name', 'Symbol'], ['OK1', 'Okay', 'ok'], ['BAD', '', '']])).expect(200);
+    const res = await attach(
+      admin,
+      '/masters/units/import',
+      await workbook([
+        ['Code', 'Name', 'Symbol'],
+        ['OK1', 'Okay', 'ok'],
+        ['BAD', '', ''],
+      ]),
+    ).expect(200);
     expect(res.body.created).toBe(0);
     expect(res.body.errors[0].row).toBe(3);
     expect(await ctx.prisma.unit.count()).toBe(before);
@@ -203,13 +224,15 @@ describe('customers', () => {
   const base = { name: 'Acme Industries', stateName: 'Maharashtra', stateCode: '27' };
 
   it('auto numbers, stores contacts and addresses, audits', async () => {
-    const c = await sales.post('/customers', {
-      ...base,
-      gstin: '27AAAAA0000A1Z2',
-      creditDays: 45,
-      contacts: [{ name: 'Priya', email: 'p@acme.example', isPrimary: true }],
-      addresses: [{ kind: 'BILLING', line1: '1 Road', city: 'Pune', stateName: 'Maharashtra', stateCode: '27', pincode: '411001' }],
-    }).expect(201);
+    const c = await sales
+      .post('/customers', {
+        ...base,
+        gstin: '27AAAAA0000A1Z2',
+        creditDays: 45,
+        contacts: [{ name: 'Priya', email: 'p@acme.example', isPrimary: true }],
+        addresses: [{ kind: 'BILLING', line1: '1 Road', city: 'Pune', stateName: 'Maharashtra', stateCode: '27', pincode: '411001' }],
+      })
+      .expect(201);
     expect(c.body.crn).toMatch(/^CRN-\d{5}$/);
     expect(c.body.contacts).toHaveLength(1);
     const contactId = c.body.contacts[0].id;

@@ -39,16 +39,61 @@ export class SampleDisposeDto {
   @IsDateString() disposedAt: string;
 }
 
-export class DispatchItemDto { kind: string; id: string; reference: string; description: string; }
+export class DispatchItemDto {
+  kind: string;
+  id: string;
+  reference: string;
+  description: string;
+}
 export class DispatchDto {
-  id: string; dispatchNo: string; jobId: string; jobNo: string; customerName: string | null; dispatchDate: Date; modeId: string; modeLabel: string; courierName: string | null; carrierName: string | null; docketNo: string | null; carrierContact: string | null; remarks: string | null; items: DispatchItemDto[]; createdAt: Date;
+  id: string;
+  dispatchNo: string;
+  jobId: string;
+  jobNo: string;
+  customerName: string | null;
+  dispatchDate: Date;
+  modeId: string;
+  modeLabel: string;
+  courierName: string | null;
+  carrierName: string | null;
+  docketNo: string | null;
+  carrierContact: string | null;
+  remarks: string | null;
+  items: DispatchItemDto[];
+  createdAt: Date;
 }
-export class DispatchPageDto { data: DispatchDto[]; meta: PageMetaDto; }
+export class DispatchPageDto {
+  data: DispatchDto[];
+  meta: PageMetaDto;
+}
 export class DispatchableJobDto {
-  jobId: string; jobNo: string; customerName: string | null; reports: { reportId: string; reportNo: string; revisionNo: number; withheld: boolean }[]; returnableSamples: { sampleId: string; sampleNo: string; description: string }[];
+  jobId: string;
+  jobNo: string;
+  customerName: string | null;
+  reports: { reportId: string; reportNo: string; revisionNo: number; withheld: boolean }[];
+  returnableSamples: { sampleId: string; sampleNo: string; description: string }[];
 }
-export class DispatchablePageDto { data: DispatchableJobDto[]; meta: PageMetaDto; }
+export class DispatchablePageDto {
+  data: DispatchableJobDto[];
+  meta: PageMetaDto;
+}
 export class ReturnableRowDto {
-  id: string; sampleNo: string; description: string; jobId: string; jobNo: string; customerName: string | null; returnable: boolean; returnStatus: string | null; returnedAt: Date | null; retentionUntil: Date | null; disposedAt: Date | null; status: string; version: number; dueForDisposal: boolean;
+  id: string;
+  sampleNo: string;
+  description: string;
+  jobId: string;
+  jobNo: string;
+  customerName: string | null;
+  returnable: boolean;
+  returnStatus: string | null;
+  returnedAt: Date | null;
+  retentionUntil: Date | null;
+  disposedAt: Date | null;
+  status: string;
+  version: number;
+  dueForDisposal: boolean;
 }
-export class ReturnablePageDto { data: ReturnableRowDto[]; meta: PageMetaDto; }
+export class ReturnablePageDto {
+  data: ReturnableRowDto[];
+  meta: PageMetaDto;
+}

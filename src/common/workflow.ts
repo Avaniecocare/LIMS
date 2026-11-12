@@ -95,4 +95,3 @@ export function assertTransition(machine: Machine, from: string, to: string, rea
 export function assertSystemTransition(machine: Machine, from: string, to: string): void {
   if (!machine[from]?.[to]) throw invalidTransition(from, to);
 }
-

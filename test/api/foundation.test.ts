@@ -14,7 +14,25 @@ afterAll(async () => {
 describe('public branding', () => {
   it('returns exactly the allowed fields', async () => {
     const res = await ctx.http().get('/api/v1/public/branding').expect(200);
-    expect(Object.keys(res.body).sort()).toEqual(['accentColor', 'companyName', 'faviconUrl', 'loginImageUrl', 'loginTagline', 'logoUrl', 'navColor', 'poweredBy', 'poweredByName', 'primaryColor', 'privacyContactEmail', 'privacyUrl', 'productName', 'supportEmail', 'supportPhone', 'surfaceColor', 'termsUrl']);
+    expect(Object.keys(res.body).sort()).toEqual([
+      'accentColor',
+      'companyName',
+      'faviconUrl',
+      'loginImageUrl',
+      'loginTagline',
+      'logoUrl',
+      'navColor',
+      'poweredBy',
+      'poweredByName',
+      'primaryColor',
+      'privacyContactEmail',
+      'privacyUrl',
+      'productName',
+      'supportEmail',
+      'supportPhone',
+      'surfaceColor',
+      'termsUrl',
+    ]);
     const text = JSON.stringify(res.body);
     for (const secret of ['000000000000', 'AAAAA0000A', 'EXMP0000001', '27AAAAA0000A1Z2']) expect(text).not.toContain(secret);
   });
@@ -29,7 +47,9 @@ describe('first-run setup', () => {
   it('creates the first Admin once, then refuses', async () => {
     expect((await ctx.http().get('/api/v1/public/setup-status').expect(200)).body.setupRequired).toBe(true);
     await ctx.http().post('/api/v1/public/setup').send({ adminEmail: 'first@x.example', adminName: 'First', adminPassword: 'weak' }).expect(400);
-    await ctx.http().post('/api/v1/public/setup')
+    await ctx
+      .http()
+      .post('/api/v1/public/setup')
       .send({ adminEmail: 'first@x.example', adminName: 'First Admin', adminPassword: PASSWORD, gstRate: 18, terms: { report: 'Report terms' } })
       .expect(201);
     expect((await ctx.http().get('/api/v1/public/setup-status').expect(200)).body.setupRequired).toBe(false);

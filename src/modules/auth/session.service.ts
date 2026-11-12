@@ -15,7 +15,14 @@ export interface SessionData {
   reauthAt?: number;
 }
 
-export interface SessionInfo { id: string; createdAt: number; lastSeenAt: number | null; ip: string | null; userAgent: string | null; current: boolean }
+export interface SessionInfo {
+  id: string;
+  createdAt: number;
+  lastSeenAt: number | null;
+  ip: string | null;
+  userAgent: string | null;
+  current: boolean;
+}
 
 /** Sessions are listed by a short public id derived from the stored key, never by the cookie value. */
 const publicId = (key: string) => key.slice(-16);

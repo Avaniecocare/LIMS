@@ -4,19 +4,31 @@ import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-va
 export const MAX_PAGE_SIZE = 200;
 
 export class PageQuery {
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1)
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   page?: number = 1;
 
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(MAX_PAGE_SIZE)
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(MAX_PAGE_SIZE)
   pageSize?: number = 25;
 
-  @IsOptional() @IsString() @MaxLength(120)
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
   sort?: string;
 
-  @IsOptional() @IsIn(['asc', 'desc'])
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
   order?: 'asc' | 'desc';
 
-  @IsOptional() @IsString() @MaxLength(200)
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
   q?: string;
 }
 

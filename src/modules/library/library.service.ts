@@ -42,11 +42,7 @@ export class LibraryService {
     if (can('tests.viewAll')) entities.push('SampleTest');
     return {
       deletedAt: null,
-      OR: [
-        { entity: null, category: LIBRARY },
-        { entity: { in: entities } },
-        { entity: null, createdById: currentUser()?.id ?? '' },
-      ],
+      OR: [{ entity: null, category: LIBRARY }, { entity: { in: entities } }, { entity: null, createdById: currentUser()?.id ?? '' }],
     };
   }
 
@@ -99,7 +95,10 @@ export class LibraryService {
 
   async removeFolder(id: string) {
     this.assertManage();
-    const f = await this.prisma.fileFolder.findFirst({ where: { id, deletedAt: null }, include: { _count: { select: { files: { where: { deletedAt: null } }, children: { where: { deletedAt: null } } } } } });
+    const f = await this.prisma.fileFolder.findFirst({
+      where: { id, deletedAt: null },
+      include: { _count: { select: { files: { where: { deletedAt: null } }, children: { where: { deletedAt: null } } } } },
+    });
     if (!f) throw notFound('Folder');
     if (f._count.files || f._count.children) throw badRequest('Only an empty folder can be removed. Move or remove what is inside it first.');
     await this.prisma.fileFolder.update({ where: { id }, data: { deletedAt: new Date() } });
@@ -129,9 +128,19 @@ export class LibraryService {
     const manage = can('files.manage');
     return toPage(
       rows.map((r) => ({
-        id: r.id, originalName: r.originalName, mimeType: r.mimeType, sizeBytes: r.sizeBytes, category: r.category, entity: r.entity, entityId: r.entityId,
-        entityLabel: r.entity && r.entityId ? (labels.get(`${r.entity}:${r.entityId}`) ?? null) : null, folderId: r.folderId, folderName: r.folder?.name ?? null,
-        description: r.description, createdAt: r.createdAt, createdByName: r.createdById ? (userName.get(r.createdById) ?? null) : null,
+        id: r.id,
+        originalName: r.originalName,
+        mimeType: r.mimeType,
+        sizeBytes: r.sizeBytes,
+        category: r.category,
+        entity: r.entity,
+        entityId: r.entityId,
+        entityLabel: r.entity && r.entityId ? (labels.get(`${r.entity}:${r.entityId}`) ?? null) : null,
+        folderId: r.folderId,
+        folderName: r.folder?.name ?? null,
+        description: r.description,
+        createdAt: r.createdAt,
+        createdByName: r.createdById ? (userName.get(r.createdById) ?? null) : null,
         canEdit: manage && r.category === LIBRARY,
       })),
       total,
@@ -153,13 +162,34 @@ export class LibraryService {
       this.prisma.quotation.findMany({ where: { id: { in: ids('Quotation') } }, select: { id: true, quotationNo: true } }),
       this.prisma.sampleTest.findMany({ where: { id: { in: ids('SampleTest') } }, select: { id: true, testName: true, sample: { select: { sampleNo: true } } } }),
     ]);
-    put('Customer', customers.map((c) => ({ id: c.id, label: `${c.name} (${c.crn})` })));
-    put('Job', jobs.map((j) => ({ id: j.id, label: `Job ${j.jobNo}` })));
-    put('Sample', samples.map((s) => ({ id: s.id, label: `Sample ${s.sampleNo}` })));
-    put('Report', reports.map((r) => ({ id: r.id, label: `Report ${r.reportNo}` })));
-    put('Invoice', invoices.map((i) => ({ id: i.id, label: `Invoice ${i.invoiceNo ?? 'draft'}` })));
-    put('Quotation', quotations.map((x) => ({ id: x.id, label: `Quotation ${x.quotationNo}` })));
-    put('SampleTest', tests.map((t) => ({ id: t.id, label: `${t.sample.sampleNo} · ${t.testName}` })));
+    put(
+      'Customer',
+      customers.map((c) => ({ id: c.id, label: `${c.name} (${c.crn})` })),
+    );
+    put(
+      'Job',
+      jobs.map((j) => ({ id: j.id, label: `Job ${j.jobNo}` })),
+    );
+    put(
+      'Sample',
+      samples.map((s) => ({ id: s.id, label: `Sample ${s.sampleNo}` })),
+    );
+    put(
+      'Report',
+      reports.map((r) => ({ id: r.id, label: `Report ${r.reportNo}` })),
+    );
+    put(
+      'Invoice',
+      invoices.map((i) => ({ id: i.id, label: `Invoice ${i.invoiceNo ?? 'draft'}` })),
+    );
+    put(
+      'Quotation',
+      quotations.map((x) => ({ id: x.id, label: `Quotation ${x.quotationNo}` })),
+    );
+    put(
+      'SampleTest',
+      tests.map((t) => ({ id: t.id, label: `${t.sample.sampleNo} · ${t.testName}` })),
+    );
     return out;
   }
 
@@ -175,9 +205,21 @@ export class LibraryService {
     this.assertManage();
     await this.assertFolder(input.folderId);
     await this.assertLink(input.entity, input.entityId);
-    const file = await this.storage.storeLibraryUpload({ buffer: input.buffer, originalName: input.originalName, mimeType: '', category: LIBRARY, entity: input.entity ?? null, entityId: input.entityId ?? null });
+    const file = await this.storage.storeLibraryUpload({
+      buffer: input.buffer,
+      originalName: input.originalName,
+      mimeType: '',
+      category: LIBRARY,
+      entity: input.entity ?? null,
+      entityId: input.entityId ?? null,
+    });
     const saved = await this.prisma.fileObject.update({ where: { id: file.id }, data: { folderId: input.folderId ?? null, description: input.description?.trim() || null } });
-    await this.audit.record({ action: 'file.upload', entity: 'FileObject', entityId: file.id, after: { name: saved.originalName, folderId: saved.folderId, linkedTo: input.entity ? `${input.entity}:${input.entityId}` : null, sha256: saved.sha256 } });
+    await this.audit.record({
+      action: 'file.upload',
+      entity: 'FileObject',
+      entityId: file.id,
+      after: { name: saved.originalName, folderId: saved.folderId, linkedTo: input.entity ? `${input.entity}:${input.entityId}` : null, sha256: saved.sha256 },
+    });
     return saved;
   }
 
@@ -201,7 +243,13 @@ export class LibraryService {
       ...(dto.entity !== undefined ? { entity: dto.entity ?? null, entityId: dto.entityId ?? null } : {}),
     };
     const saved = await this.prisma.fileObject.update({ where: { id }, data });
-    await this.audit.record({ action: 'file.update', entity: 'FileObject', entityId: id, before: { name: f.originalName, folderId: f.folderId, description: f.description, entity: f.entity, entityId: f.entityId }, after: { name: saved.originalName, folderId: saved.folderId, description: saved.description, entity: saved.entity, entityId: saved.entityId } });
+    await this.audit.record({
+      action: 'file.update',
+      entity: 'FileObject',
+      entityId: id,
+      before: { name: f.originalName, folderId: f.folderId, description: f.description, entity: f.entity, entityId: f.entityId },
+      after: { name: saved.originalName, folderId: saved.folderId, description: saved.description, entity: saved.entity, entityId: saved.entityId },
+    });
     return saved;
   }
 
@@ -223,6 +271,7 @@ export class LibraryService {
 }
 
 function duplicateName(e: unknown) {
-  if (typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002') return badRequest('A folder with this name already exists here', [{ field: 'name', message: 'Already exists here' }]);
+  if (typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002')
+    return badRequest('A folder with this name already exists here', [{ field: 'name', message: 'Already exists here' }]);
   return e;
 }

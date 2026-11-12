@@ -40,10 +40,23 @@ export class PrivacyService {
     if (receivedOn > istToday()) throw badRequest('That date is in the future', [{ field: 'receivedOn', message: 'In the future' }]);
     const days = await this.settings.get('privacy.responseDays');
     const r = await this.prisma.dataRequest.create({
-      data: { kind: dto.kind, requesterName: dto.requesterName.trim(), requesterEmail: dto.requesterEmail.trim().toLowerCase(), details: dto.details.trim(), receivedOn, dueOn: new Date(receivedOn.getTime() + days * 86_400_000), createdById: currentUser()?.id ?? null },
+      data: {
+        kind: dto.kind,
+        requesterName: dto.requesterName.trim(),
+        requesterEmail: dto.requesterEmail.trim().toLowerCase(),
+        details: dto.details.trim(),
+        receivedOn,
+        dueOn: new Date(receivedOn.getTime() + days * 86_400_000),
+        createdById: currentUser()?.id ?? null,
+      },
     });
     await this.audit.record({ action: 'privacy.request.received', entity: 'DataRequest', entityId: r.id, after: { kind: r.kind, dueOn: r.dueOn } });
-    await this.notifications.notifyHolders(this.prisma, 'privacy.manage', { type: 'PRIVACY_REQUEST', title: `Privacy request: ${r.kind.toLowerCase().replace('_', ' ')}`, body: `From ${r.requesterName}. Answer by ${r.dueOn.toISOString().slice(0, 10)}.`, link: '/admin?tab=privacy' });
+    await this.notifications.notifyHolders(this.prisma, 'privacy.manage', {
+      type: 'PRIVACY_REQUEST',
+      title: `Privacy request: ${r.kind.toLowerCase().replace('_', ' ')}`,
+      body: `From ${r.requesterName}. Answer by ${r.dueOn.toISOString().slice(0, 10)}.`,
+      link: '/admin?tab=privacy',
+    });
     return this.requestDto(r);
   }
 
@@ -52,10 +65,13 @@ export class PrivacyService {
     const r = await this.prisma.dataRequest.findUnique({ where: { id } });
     if (!r) throw notFound('Request');
     if (r.status !== 'OPEN') throw rule('ALREADY_ANSWERED', 'This request has already been answered');
-    const { count } = await this.prisma.dataRequest.updateMany({ where: { id, version: dto.version }, data: { status: dto.status, resolution: dto.resolution.trim(), resolvedAt: new Date(), resolvedByName: currentUser()?.name ?? null, version: { increment: 1 } } });
+    const { count } = await this.prisma.dataRequest.updateMany({
+      where: { id, version: dto.version },
+      data: { status: dto.status, resolution: dto.resolution.trim(), resolvedAt: new Date(), resolvedByName: currentUser()?.name ?? null, version: { increment: 1 } },
+    });
     if (count !== 1) throw conflict();
     await this.audit.record({ action: `privacy.request.${dto.status.toLowerCase()}`, entity: 'DataRequest', entityId: id, after: { resolution: dto.resolution } });
-    return this.requestDto((await this.prisma.dataRequest.findUniqueOrThrow({ where: { id } })));
+    return this.requestDto(await this.prisma.dataRequest.findUniqueOrThrow({ where: { id } }));
   }
 
   /** Where this email address appears, for answering an access request. */
@@ -89,7 +105,10 @@ export class PrivacyService {
     const contacts = await this.prisma.customerContact.findMany({ where: { email: { equals: r.requesterEmail, mode: 'insensitive' }, deletedAt: null }, select: { id: true, customerId: true } });
     await this.prisma.$transaction(async (tx) => {
       for (const c of contacts) await tx.customerContact.update({ where: { id: c.id }, data: { name: 'Erased on request', email: null, phone: null, designation: null, isPrimary: false } });
-      await this.audit.record({ action: 'privacy.erased', entity: 'DataRequest', entityId: requestId, after: { contacts: contacts.length, customers: [...new Set(contacts.map((c) => c.customerId))] } }, tx);
+      await this.audit.record(
+        { action: 'privacy.erased', entity: 'DataRequest', entityId: requestId, after: { contacts: contacts.length, customers: [...new Set(contacts.map((c) => c.customerId))] } },
+        tx,
+      );
     });
     return { contacts: contacts.length };
   }
@@ -106,9 +125,24 @@ export class PrivacyService {
     const detectedAt = new Date(dto.detectedAt);
     if (detectedAt.getTime() > Date.now() + 60_000) throw badRequest('That time is in the future', [{ field: 'detectedAt', message: 'In the future' }]);
     const me = currentUser();
-    const b = await this.prisma.breachIncident.create({ data: { detectedAt, description: dto.description.trim(), dataAffected: dto.dataAffected.trim(), peopleAffected: dto.peopleAffected ?? null, containment: dto.containment?.trim() || null, createdById: me?.id ?? null, createdByName: me?.name ?? null } });
+    const b = await this.prisma.breachIncident.create({
+      data: {
+        detectedAt,
+        description: dto.description.trim(),
+        dataAffected: dto.dataAffected.trim(),
+        peopleAffected: dto.peopleAffected ?? null,
+        containment: dto.containment?.trim() || null,
+        createdById: me?.id ?? null,
+        createdByName: me?.name ?? null,
+      },
+    });
     await this.audit.record({ action: 'privacy.breach.logged', entity: 'BreachIncident', entityId: b.id, after: { detectedAt, dataAffected: b.dataAffected } });
-    await this.notifications.notifyHolders(this.prisma, 'privacy.manage', { type: 'SECURITY_ALERT', title: 'A personal data breach was logged', body: 'The Data Protection Board and the people affected must be told without delay; the detailed report is due within 72 hours.', link: '/admin?tab=privacy' });
+    await this.notifications.notifyHolders(this.prisma, 'privacy.manage', {
+      type: 'SECURITY_ALERT',
+      title: 'A personal data breach was logged',
+      body: 'The Data Protection Board and the people affected must be told without delay; the detailed report is due within 72 hours.',
+      link: '/admin?tab=privacy',
+    });
     return this.breachDto(b);
   }
 

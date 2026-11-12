@@ -10,15 +10,7 @@ import { SettingsService } from '../../core/settings.service.js';
 import { assertPasswordPolicy } from '../auth/auth.service.js';
 import { SessionService } from '../auth/session.service.js';
 import { PERMISSIONS } from '../rbac/catalog.js';
-import type {
-  AuditQuery,
-  CreateRoleDto,
-  CreateSavedFilterDto,
-  CreateUserDto,
-  UpdateRoleDto,
-  UpdateUserDto,
-  UserListQuery,
-} from './admin.dto.js';
+import type { AuditQuery, CreateRoleDto, CreateSavedFilterDto, CreateUserDto, UpdateRoleDto, UpdateUserDto, UserListQuery } from './admin.dto.js';
 
 const userInclude = { roles: { include: { role: { select: { id: true, name: true } } } } } as const;
 type UserRow = Prisma.UserGetPayload<{ include: typeof userInclude }>;
@@ -120,7 +112,10 @@ export class AdminService {
         await this.assertRolesExist(tx, roleIds);
         // Only roles that are being added need checking: removing a role someone already has is always allowed.
         const current = new Set(before.roles.map((r) => r.roleId));
-        await this.assertCanGrant(tx, roleIds.filter((r) => !current.has(r)));
+        await this.assertCanGrant(
+          tx,
+          roleIds.filter((r) => !current.has(r)),
+        );
         if (id === currentUser()?.id) await this.assertKeepsAdminAccess(tx, roleIds);
         await tx.userRole.deleteMany({ where: { userId: id } });
         await tx.userRole.createMany({ data: roleIds.map((roleId) => ({ userId: id, roleId })) });
@@ -260,10 +255,7 @@ export class AdminService {
         await tx.rolePermission.deleteMany({ where: { roleId: id } });
         await tx.rolePermission.createMany({ data: permissions.map((permissionCode) => ({ roleId: id, permissionCode })) });
       }
-      await this.audit.record(
-        { action: 'role.update', entity: 'Role', entityId: id, before: { ...before, permissions: before.permissions.map((p) => p.permissionCode) }, after: dto },
-        tx,
-      );
+      await this.audit.record({ action: 'role.update', entity: 'Role', entityId: id, before: { ...before, permissions: before.permissions.map((p) => p.permissionCode) }, after: dto }, tx);
       // At least one active role must still be able to manage users, or the deployment is unrecoverable.
       const adminCapable = await tx.rolePermission.count({
         where: { permissionCode: 'admin.users', role: { isActive: true, deletedAt: null, users: { some: {} } } },
@@ -327,7 +319,11 @@ export class AdminService {
       this.prisma.auditLog.findMany({ where, orderBy: orderBy(q, ['at', 'action', 'entity', 'userName'], 'at'), ...skipTake(q) }),
       this.prisma.auditLog.count({ where }),
     ]);
-    return toPage(rows.map((r) => ({ ...r, id: r.id.toString() })), total, q);
+    return toPage(
+      rows.map((r) => ({ ...r, id: r.id.toString() })),
+      total,
+      q,
+    );
   }
 
   // ------------------------------------------------------------- company

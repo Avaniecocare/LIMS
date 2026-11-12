@@ -26,9 +26,30 @@ export class OrderQuery extends PageQuery {
 }
 
 export class OrderDto {
-  id: string; orderNo: string; customerId: string; customerName: string; source: OrderSource; reference: string | null; description: string | null;
-  receivedOn: Date; stage: OrderStage; ownerId: string | null; ownerName: string | null; version: number; createdAt: Date; quotationCount: number;
+  id: string;
+  orderNo: string;
+  customerId: string;
+  customerName: string;
+  source: OrderSource;
+  reference: string | null;
+  description: string | null;
+  receivedOn: Date;
+  stage: OrderStage;
+  ownerId: string | null;
+  ownerName: string | null;
+  version: number;
+  createdAt: Date;
+  quotationCount: number;
 }
-export class OrderPageDto { data: OrderDto[]; meta: PageMetaDto; }
-export class PipelineStageDto { stage: OrderStage; count: number; }
-export class OwnerDto { id: string; name: string; }
+export class OrderPageDto {
+  data: OrderDto[];
+  meta: PageMetaDto;
+}
+export class PipelineStageDto {
+  stage: OrderStage;
+  count: number;
+}
+export class OwnerDto {
+  id: string;
+  name: string;
+}

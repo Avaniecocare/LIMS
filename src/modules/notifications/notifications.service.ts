@@ -70,9 +70,12 @@ export class NotificationsService implements OnModuleInit {
     };
     this.reports.notify = async (tx, e) => {
       const r = await tx.report.findUniqueOrThrow({ where: { id: e.reportId } });
-      if (e.type === 'REPORT_READY_FOR_REVIEW') await this.send(tx, await this.holders(tx, 'reports.review'), { type: 'APPROVAL_DUE', title: `Report to review: ${r.reportNo}`, link: `/approvals/reports/${r.id}` });
-      if (e.type === 'REPORT_READY_FOR_APPROVAL') await this.send(tx, await this.holders(tx, 'reports.approve'), { type: 'APPROVAL_DUE', title: `Report to sign: ${r.reportNo}`, link: `/approvals/reports/${r.id}` });
-      if (e.type === 'REPORT_REJECTED') await this.send(tx, await this.holders(tx, 'reports.review'), { type: 'SENT_BACK', title: `Report sent back: ${r.reportNo}`, body: e.reason, link: `/approvals/reports/${r.id}` });
+      if (e.type === 'REPORT_READY_FOR_REVIEW')
+        await this.send(tx, await this.holders(tx, 'reports.review'), { type: 'APPROVAL_DUE', title: `Report to review: ${r.reportNo}`, link: `/approvals/reports/${r.id}` });
+      if (e.type === 'REPORT_READY_FOR_APPROVAL')
+        await this.send(tx, await this.holders(tx, 'reports.approve'), { type: 'APPROVAL_DUE', title: `Report to sign: ${r.reportNo}`, link: `/approvals/reports/${r.id}` });
+      if (e.type === 'REPORT_REJECTED')
+        await this.send(tx, await this.holders(tx, 'reports.review'), { type: 'SENT_BACK', title: `Report sent back: ${r.reportNo}`, body: e.reason, link: `/approvals/reports/${r.id}` });
     };
     this.scheduler.register({ name: 'tat-check', pattern: '0 8 * * *', run: () => this.tatCheck() });
     this.scheduler.register({ name: 'quotations-expiring', pattern: '15 8 * * *', run: () => this.quotationsExpiring() });
@@ -82,7 +85,10 @@ export class NotificationsService implements OnModuleInit {
   }
 
   private async holders(tx: Tx | PrismaService, permission: string): Promise<string[]> {
-    const users = await tx.user.findMany({ where: { isActive: true, deletedAt: null, roles: { some: { role: { isActive: true, deletedAt: null, permissions: { some: { permissionCode: permission } } } } } }, select: { id: true } });
+    const users = await tx.user.findMany({
+      where: { isActive: true, deletedAt: null, roles: { some: { role: { isActive: true, deletedAt: null, permissions: { some: { permissionCode: permission } } } } } },
+      select: { id: true },
+    });
     return users.map((u) => u.id);
   }
 
@@ -121,7 +127,12 @@ export class NotificationsService implements OnModuleInit {
 
   private async onAssigned(tx: Tx, sampleTestId: string, userId: string) {
     const t = await tx.sampleTest.findUniqueOrThrow({ where: { id: sampleTestId }, include: { sample: { select: { sampleNo: true } } } });
-    await this.send(tx, [userId], { type: 'ASSIGNED', title: `Assigned: ${t.testName} on ${t.sample.sampleNo}`, body: t.dueDate ? `Due ${formatDate(t.dueDate)}` : undefined, link: `/my-tests/${t.id}` });
+    await this.send(tx, [userId], {
+      type: 'ASSIGNED',
+      title: `Assigned: ${t.testName} on ${t.sample.sampleNo}`,
+      body: t.dueDate ? `Due ${formatDate(t.dueDate)}` : undefined,
+      link: `/my-tests/${t.id}`,
+    });
   }
 
   // ---------------------------------------------------------------- scheduled checks
@@ -150,22 +161,39 @@ export class NotificationsService implements OnModuleInit {
   }
 
   async quotationsExpiring(today = istToday()): Promise<number> {
-    const rows = await this.prisma.quotation.findMany({ where: { deletedAt: null, status: 'SENT', validUntil: { gte: today, lte: new Date(today.getTime() + 3 * DAY) } }, select: { id: true, quotationNo: true, validUntil: true, createdById: true } });
+    const rows = await this.prisma.quotation.findMany({
+      where: { deletedAt: null, status: 'SENT', validUntil: { gte: today, lte: new Date(today.getTime() + 3 * DAY) } },
+      select: { id: true, quotationNo: true, validUntil: true, createdById: true },
+    });
     let sent = 0;
     for (const q of rows) {
       const to = q.createdById ? [q.createdById] : await this.holders(this.prisma, 'quotations.edit');
-      sent += await this.send(this.prisma, to, { type: 'QUOTATION_EXPIRING', title: `Quotation ${q.quotationNo} expires ${formatDate(q.validUntil)}`, link: `/quotations/${q.id}`, dedupeKey: `quotation-expiring:${q.id}:${q.validUntil.toISOString().slice(0, 10)}` });
+      sent += await this.send(this.prisma, to, {
+        type: 'QUOTATION_EXPIRING',
+        title: `Quotation ${q.quotationNo} expires ${formatDate(q.validUntil)}`,
+        link: `/quotations/${q.id}`,
+        dedupeKey: `quotation-expiring:${q.id}:${q.validUntil.toISOString().slice(0, 10)}`,
+      });
     }
     await this.mail.sweepQueued();
     return sent;
   }
 
   async invoicesOverdue(today = istToday()): Promise<number> {
-    const rows = await this.prisma.invoice.findMany({ where: { deletedAt: null, status: { in: ['ISSUED', 'PARTIALLY_PAID'] }, dueDate: { lt: today } }, select: { id: true, invoiceNo: true, dueDate: true } });
+    const rows = await this.prisma.invoice.findMany({
+      where: { deletedAt: null, status: { in: ['ISSUED', 'PARTIALLY_PAID'] }, dueDate: { lt: today } },
+      select: { id: true, invoiceNo: true, dueDate: true },
+    });
     const accounts = await this.holders(this.prisma, 'invoices.edit');
     let sent = 0;
     for (const i of rows) {
-      sent += await this.send(this.prisma, accounts, { type: 'INVOICE_OVERDUE', title: `Invoice ${i.invoiceNo} is overdue`, body: `Due ${formatDate(i.dueDate)}`, link: `/invoices/${i.id}`, dedupeKey: `invoice-overdue:${i.id}` });
+      sent += await this.send(this.prisma, accounts, {
+        type: 'INVOICE_OVERDUE',
+        title: `Invoice ${i.invoiceNo} is overdue`,
+        body: `Due ${formatDate(i.dueDate)}`,
+        link: `/invoices/${i.id}`,
+        dedupeKey: `invoice-overdue:${i.id}`,
+      });
     }
     await this.mail.sweepQueued();
     return sent;
@@ -180,7 +208,14 @@ export class NotificationsService implements OnModuleInit {
       this.prisma.notification.count({ where }),
       this.prisma.notification.count({ where: { userId, readAt: null } }),
     ]);
-    return { ...toPage(rows.map((n) => ({ id: n.id, type: n.type, title: n.title, body: n.body, link: n.link, readAt: n.readAt, createdAt: n.createdAt })), total, q), unread };
+    return {
+      ...toPage(
+        rows.map((n) => ({ id: n.id, type: n.type, title: n.title, body: n.body, link: n.link, readAt: n.readAt, createdAt: n.createdAt })),
+        total,
+        q,
+      ),
+      unread,
+    };
   }
 
   async markRead(id: string) {

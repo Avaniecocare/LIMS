@@ -33,7 +33,12 @@ export class SecurityService implements OnModuleInit {
 
   onModuleInit() {
     setForbiddenHook((userId) => this.onForbidden(userId));
-    setSensitiveExportHook((kind) => this.alert(`${currentUser()?.name ?? 'Someone'} exported ${kind === 'customer-export' ? 'all customers and their contacts' : 'all due invoices'}`, `export:${kind}:${currentUser()?.id}:${new Date().toISOString().slice(0, 13)}`));
+    setSensitiveExportHook((kind) =>
+      this.alert(
+        `${currentUser()?.name ?? 'Someone'} exported ${kind === 'customer-export' ? 'all customers and their contacts' : 'all due invoices'}`,
+        `export:${kind}:${currentUser()?.id}:${new Date().toISOString().slice(0, 13)}`,
+      ),
+    );
     this.admin.onPrivilegeChange = (c) => this.alert(c.summary, null);
   }
 
@@ -60,7 +65,12 @@ export class SecurityService implements OnModuleInit {
     if (recent >= 10) throw rule('TOO_MANY_REQUESTS', 'You have made several access requests today. Wait for an answer before asking again.');
     const row = await this.prisma.accessRequest.create({ data: { userId: me.id, page: dto.page, reason: dto.reason.trim() } });
     await this.audit.record({ action: 'access.requested', entity: 'AccessRequest', entityId: row.id, after: { page: dto.page, reason: dto.reason } });
-    await this.notifications.notifyHolders(this.prisma, 'admin.users', { type: 'ACCESS_REQUEST', title: `${me.name} asked for access to ${dto.page}`, body: dto.reason.slice(0, 200), link: '/admin?tab=access' });
+    await this.notifications.notifyHolders(this.prisma, 'admin.users', {
+      type: 'ACCESS_REQUEST',
+      title: `${me.name} asked for access to ${dto.page}`,
+      body: dto.reason.slice(0, 200),
+      link: '/admin?tab=access',
+    });
     return this.dto(row.id);
   }
 
@@ -71,7 +81,10 @@ export class SecurityService implements OnModuleInit {
 
   async list(q: AccessRequestQuery) {
     const where = q.status ? { status: q.status } : {};
-    const [rows, total] = await Promise.all([this.prisma.accessRequest.findMany({ where, orderBy: { createdAt: 'desc' }, select: { id: true }, ...skipTake(q) }), this.prisma.accessRequest.count({ where })]);
+    const [rows, total] = await Promise.all([
+      this.prisma.accessRequest.findMany({ where, orderBy: { createdAt: 'desc' }, select: { id: true }, ...skipTake(q) }),
+      this.prisma.accessRequest.count({ where }),
+    ]);
     return toPage(await Promise.all(rows.map((r) => this.dto(r.id))), total, q);
   }
 
@@ -89,9 +102,17 @@ export class SecurityService implements OnModuleInit {
     await this.admin.addRoleToUser(row.userId, dto.roleId);
     const me = currentUser()!;
     const role = await this.prisma.role.findUniqueOrThrow({ where: { id: dto.roleId } });
-    await this.prisma.accessRequest.update({ where: { id }, data: { status: 'APPROVED', grantedRoleId: role.id, decidedById: me.id, decidedByName: me.name, decisionNote: dto.note?.trim() || null, decidedAt: new Date() } });
+    await this.prisma.accessRequest.update({
+      where: { id },
+      data: { status: 'APPROVED', grantedRoleId: role.id, decidedById: me.id, decidedByName: me.name, decisionNote: dto.note?.trim() || null, decidedAt: new Date() },
+    });
     await this.audit.record({ action: 'access.approved', entity: 'AccessRequest', entityId: id, after: { role: role.name, note: dto.note } });
-    await this.notifications.send(this.prisma, [row.userId], { type: 'ACCESS_DECISION', title: `Your access request for ${row.page} was approved`, body: `You now have the role ${role.name}. Reload the page to see it.${dto.note ? ` ${dto.note}` : ''}`, link: row.page });
+    await this.notifications.send(this.prisma, [row.userId], {
+      type: 'ACCESS_DECISION',
+      title: `Your access request for ${row.page} was approved`,
+      body: `You now have the role ${role.name}. Reload the page to see it.${dto.note ? ` ${dto.note}` : ''}`,
+      link: row.page,
+    });
     return this.dto(id);
   }
 
@@ -108,8 +129,19 @@ export class SecurityService implements OnModuleInit {
     const r = await this.prisma.accessRequest.findUniqueOrThrow({ where: { id }, include: { user: { select: { name: true, email: true, roles: { select: { role: { select: { name: true } } } } } } } });
     const granted = r.grantedRoleId ? await this.prisma.role.findUnique({ where: { id: r.grantedRoleId }, select: { name: true } }) : null;
     return {
-      id: r.id, userId: r.userId, userName: r.user.name, userEmail: r.user.email, currentRoles: r.user.roles.map((x) => x.role.name), page: r.page, reason: r.reason, status: r.status,
-      grantedRoleName: granted?.name ?? null, decidedByName: r.decidedByName, decisionNote: r.decisionNote, decidedAt: r.decidedAt, createdAt: r.createdAt,
+      id: r.id,
+      userId: r.userId,
+      userName: r.user.name,
+      userEmail: r.user.email,
+      currentRoles: r.user.roles.map((x) => x.role.name),
+      page: r.page,
+      reason: r.reason,
+      status: r.status,
+      grantedRoleName: granted?.name ?? null,
+      decidedByName: r.decidedByName,
+      decisionNote: r.decisionNote,
+      decidedAt: r.decidedAt,
+      createdAt: r.createdAt,
     };
   }
 
@@ -128,9 +160,18 @@ export class SecurityService implements OnModuleInit {
       const perms = new Set(roles.flatMap((r) => r.role.permissions.map((p) => p.permissionCode)));
       if (u.isActive) for (const p of perms) holders.set(p, (holders.get(p) ?? 0) + 1);
       return {
-        id: u.id, name: u.name, email: u.email, isActive: u.isActive, roles: roles.map((r) => r.role.name), permissionCount: perms.size, lastLoginAt: u.lastLoginAt,
-        adminCapable: perms.has('admin.users') || perms.has('admin.roles'), dormant: u.isActive && (!u.lastLoginAt || u.lastLoginAt.getTime() < cutoff),
-        locked: !!u.lockedUntil && u.lockedUntil > new Date(), mustChangePassword: u.mustChangePassword, createdAt: u.createdAt,
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        isActive: u.isActive,
+        roles: roles.map((r) => r.role.name),
+        permissionCount: perms.size,
+        lastLoginAt: u.lastLoginAt,
+        adminCapable: perms.has('admin.users') || perms.has('admin.roles'),
+        dormant: u.isActive && (!u.lastLoginAt || u.lastLoginAt.getTime() < cutoff),
+        locked: !!u.lockedUntil && u.lockedUntil > new Date(),
+        mustChangePassword: u.mustChangePassword,
+        createdAt: u.createdAt,
       };
     });
     await this.audit.record({ action: 'access.reviewed', entity: 'Security', after: { users: rows.length } });

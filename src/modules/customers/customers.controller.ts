@@ -10,37 +10,51 @@ import { CustomersService } from './customers.service.js';
 export class CustomersController {
   constructor(private readonly customers: CustomersService) {}
 
-  @Get() @Perm('customers.view') @ApiOkResponse({ type: CustomerPageDto })
+  @Get()
+  @Perm('customers.view')
+  @ApiOkResponse({ type: CustomerPageDto })
   list(@Query() q: CustomerQuery) {
     return this.customers.list(q);
   }
 
-  @Get(':id') @Perm('customers.view') @ApiOkResponse({ type: CustomerDto })
+  @Get(':id')
+  @Perm('customers.view')
+  @ApiOkResponse({ type: CustomerDto })
   get(@Param('id', ParseUUIDPipe) id: string) {
     return this.customers.get(id);
   }
 
-  @Post() @Perm('customers.edit') @ApiOkResponse({ type: CustomerDto })
+  @Post()
+  @Perm('customers.edit')
+  @ApiOkResponse({ type: CustomerDto })
   create(@Body() dto: CreateCustomerDto) {
     return this.customers.create(dto);
   }
 
-  @Patch(':id') @Perm('customers.edit') @ApiOkResponse({ type: CustomerDto })
+  @Patch(':id')
+  @Perm('customers.edit')
+  @ApiOkResponse({ type: CustomerDto })
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateCustomerDto) {
     return this.customers.update(id, dto);
   }
 
-  @Get(':id/summary') @Perm('customers.view') @ApiOkResponse({ type: CustomerSummaryDto })
+  @Get(':id/summary')
+  @Perm('customers.view')
+  @ApiOkResponse({ type: CustomerSummaryDto })
   summary(@Param('id', ParseUUIDPipe) id: string) {
     return this.customers.summary(id);
   }
 
-  @Get(':id/tests') @Perm('customers.view') @ApiOkResponse({ type: CustomerTestPageDto })
+  @Get(':id/tests')
+  @Perm('customers.view')
+  @ApiOkResponse({ type: CustomerTestPageDto })
   tests(@Param('id', ParseUUIDPipe) id: string, @Query() q: CustomerTestsQuery) {
     return this.customers.tests(id, q);
   }
 
-  @Get(':id/history') @Perm('customers.view') @ApiOkResponse({ type: [HistoryEntryDto] })
+  @Get(':id/history')
+  @Perm('customers.view')
+  @ApiOkResponse({ type: [HistoryEntryDto] })
   history(@Param('id', ParseUUIDPipe) id: string) {
     return this.customers.history(id);
   }

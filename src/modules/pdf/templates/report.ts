@@ -120,8 +120,7 @@ export function reportHtml(r: ReportRenderInput): string {
   const outOfScope = nabl ? all.filter((x) => !x.p.accredited) : [];
   const dual = c.specificationNames.length > 1;
 
-  const kv = (rows: [string, unknown][]) =>
-    rows.map(([k, v]) => `<tr><th style="width:24%">${esc(k)}</th><td>${multiline(v)}</td></tr>`).join('');
+  const kv = (rows: [string, unknown][]) => rows.map(([k, v]) => `<tr><th style="width:24%">${esc(k)}</th><td>${multiline(v)}</td></tr>`).join('');
 
   const pageOne = `${letterhead(co)}
   <table class="small" style="margin-bottom:6px"><tr><th>Format no.</th><td>${esc(r.format.formatNo)}</td><th>Issue no. and date</th><td>${esc(r.format.issueNo)}${r.format.issueDate ? `, ${esc(r.format.issueDate)}` : ''}</td><th>Revision no. and date</th><td>${esc(r.format.revisionNo)}${r.format.revisionDate ? `, ${esc(r.format.revisionDate)}` : ''}</td></tr></table>
@@ -158,7 +157,9 @@ export function reportHtml(r: ReportRenderInput): string {
     ? `<div>${r.signature.imageDataUri ? `<img src="${r.signature.imageDataUri}" alt="" style="height:36px;display:block">` : ''}<div class="bold">${esc(r.signature.name)}</div>${r.signature.designation && r.signature.designation !== 'Authorised Signatory' ? `<div>${esc(r.signature.designation)}</div>` : ''}<div class="small">Authorised Signatory</div></div>`
     : '<div class="muted">Not yet approved</div>';
   // Wording rule: this product applies no certificate, so it must never claim "Digitally Signed".
-  const approval = r.signature ? `<p class="small">Electronically approved by ${esc(r.signature.name)} on ${formatDateTime(r.signature.signedAt)}. Report hash (SHA-256): <span style="word-break:break-all">${esc(r.signature.contentSha256)}</span></p>` : '';
+  const approval = r.signature
+    ? `<p class="small">Electronically approved by ${esc(r.signature.name)} on ${formatDateTime(r.signature.signedAt)}. Report hash (SHA-256): <span style="word-break:break-all">${esc(r.signature.contentSha256)}</span></p>`
+    : '';
 
   const results = `<div class="page-break"></div><h2>Results</h2>
   ${nabl ? `<h2>Tests within the scope of accreditation${co.accreditation.nablCertificateNo ? ` (certificate ${esc(co.accreditation.nablCertificateNo)})` : ''}</h2>` : ''}

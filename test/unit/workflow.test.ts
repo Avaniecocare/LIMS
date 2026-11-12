@@ -3,8 +3,17 @@ import { decideTransition, INVOICE, JOB, MACHINES, QUOTATION, REPORT, TEST, type
 import { DEFAULT_ROLES } from '../../src/modules/rbac/catalog.js';
 
 const R = {
-  admin: 'Admin', sales: 'Sales / Business Development', reception: 'Sample Reception', planner: 'Lab Manager / Planner', tech: 'Technician / Analyst', hod: 'Head of Department',
-  reviewer: 'Report Reviewer', signatory: 'Authorised Signatory', dispatch: 'Dispatch', accounts: 'Accounts', management: 'Management',
+  admin: 'Admin',
+  sales: 'Sales / Business Development',
+  reception: 'Sample Reception',
+  planner: 'Lab Manager / Planner',
+  tech: 'Technician / Analyst',
+  hod: 'Head of Department',
+  reviewer: 'Report Reviewer',
+  signatory: 'Authorised Signatory',
+  dispatch: 'Dispatch',
+  accounts: 'Accounts',
+  management: 'Management',
 } as const;
 type Role = keyof typeof R;
 const ALL = Object.keys(R) as Role[];
@@ -112,7 +121,17 @@ describe('status transitions by role', () => {
   }
 
   it('requires a reason where stated', () => {
-    const edges: [Machine, string, string][] = [[QUOTATION, 'SENT', 'REJECTED'], [JOB, 'RECEIVED', 'ON_HOLD'], [JOB, 'RECEIVED', 'CANCELLED'], [TEST, 'IN_PROGRESS', 'ON_HOLD'], [TEST, 'PLANNED', 'CANCELLED'], [TEST, 'RESULTS_SUBMITTED', 'IN_PROGRESS'], [REPORT, 'IN_REVIEW', 'DRAFT'], [REPORT, 'PENDING_APPROVAL', 'DRAFT'], [INVOICE, 'ISSUED', 'CANCELLED']];
+    const edges: [Machine, string, string][] = [
+      [QUOTATION, 'SENT', 'REJECTED'],
+      [JOB, 'RECEIVED', 'ON_HOLD'],
+      [JOB, 'RECEIVED', 'CANCELLED'],
+      [TEST, 'IN_PROGRESS', 'ON_HOLD'],
+      [TEST, 'PLANNED', 'CANCELLED'],
+      [TEST, 'RESULTS_SUBMITTED', 'IN_PROGRESS'],
+      [REPORT, 'IN_REVIEW', 'DRAFT'],
+      [REPORT, 'PENDING_APPROVAL', 'DRAFT'],
+      [INVOICE, 'ISSUED', 'CANCELLED'],
+    ];
     const every = { has: () => true };
     for (const [m, f, t] of edges) {
       expect(decideTransition(m, f, t, every, '')).toBe('reason');

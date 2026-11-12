@@ -42,26 +42,71 @@ function customerFields(j: { customer: { id: string; name: string; crn: string }
 }
 
 const jobSummary = (j: JobSummaryRow) => ({
-  id: j.id, jobNo: j.jobNo, ...customerFields(j), status: j.status, urgent: j.urgent, receivedAt: j.receivedAt, sampleCount: j._count.samples, quotationId: can('quotations.view') ? j.quotationId : null, holdReason: j.holdReason, cancelReason: j.cancelReason, version: j.version,
+  id: j.id,
+  jobNo: j.jobNo,
+  ...customerFields(j),
+  status: j.status,
+  urgent: j.urgent,
+  receivedAt: j.receivedAt,
+  sampleCount: j._count.samples,
+  quotationId: can('quotations.view') ? j.quotationId : null,
+  holdReason: j.holdReason,
+  cancelReason: j.cancelReason,
+  version: j.version,
 });
 
 const jobFull = (j: JobRow) => {
   const identity = can('customers.view');
   return {
     ...jobSummary(j),
-    noQuotationReason: j.noQuotationReason, letterRef: identity ? j.letterRef : null, letterDate: j.letterDate, materialSpec: j.materialSpec, poNumber: identity ? j.poNumber : null, poDate: identity ? j.poDate : null, receiptModeId: j.receiptModeId,
-    reportIssueDetails: identity ? j.reportIssueDetails : null, reportIssueAddress: identity ? j.reportIssueAddress : null, kindAttention: identity ? j.kindAttention : null, contactEmail: identity ? j.contactEmail : null, contactPhone: identity ? j.contactPhone : null,
-    sampleDrawnByLab: j.sampleDrawnByLab, statusBeforeHold: j.statusBeforeHold,
+    noQuotationReason: j.noQuotationReason,
+    letterRef: identity ? j.letterRef : null,
+    letterDate: j.letterDate,
+    materialSpec: j.materialSpec,
+    poNumber: identity ? j.poNumber : null,
+    poDate: identity ? j.poDate : null,
+    receiptModeId: j.receiptModeId,
+    reportIssueDetails: identity ? j.reportIssueDetails : null,
+    reportIssueAddress: identity ? j.reportIssueAddress : null,
+    kindAttention: identity ? j.kindAttention : null,
+    contactEmail: identity ? j.contactEmail : null,
+    contactPhone: identity ? j.contactPhone : null,
+    sampleDrawnByLab: j.sampleDrawnByLab,
+    statusBeforeHold: j.statusBeforeHold,
     deviations: j.deviations.map((d) => ({ id: d.id, sampleId: d.sampleId, typeId: d.typeId, typeLabel: d.typeLabel, remark: d.remark, createdAt: d.createdAt })),
     samples: j.samples.map((s) => ({
-      id: s.id, sampleNo: s.sampleNo, jobId: s.jobId, description: s.description, condition: s.condition, quantity: s.quantity, size: s.size, returnable: s.returnable, status: s.status, cancelReason: s.cancelReason,
-      retentionUntil: s.retentionUntil, returnStatus: s.returnStatus, returnedAt: s.returnedAt, disposedAt: s.disposedAt, specificationId: s.specificationId, dualSpecificationId: s.dualSpecificationId, version: s.version,
+      id: s.id,
+      sampleNo: s.sampleNo,
+      jobId: s.jobId,
+      description: s.description,
+      condition: s.condition,
+      quantity: s.quantity,
+      size: s.size,
+      returnable: s.returnable,
+      status: s.status,
+      cancelReason: s.cancelReason,
+      retentionUntil: s.retentionUntil,
+      returnStatus: s.returnStatus,
+      returnedAt: s.returnedAt,
+      disposedAt: s.disposedAt,
+      specificationId: s.specificationId,
+      dualSpecificationId: s.dualSpecificationId,
+      version: s.version,
       attributes: s.attributes.map((a) => ({ id: a.id, label: a.label, value: a.value })),
-      tests: s.tests.map((t) => ({ id: t.id, testId: t.testId, testCode: t.testCode, testName: t.testName, status: t.status, planned: !!t.plannedAt, dueDate: t.dueDate, assignedToName: t.assignedTo?.name ?? null, version: t.version })),
+      tests: s.tests.map((t) => ({
+        id: t.id,
+        testId: t.testId,
+        testCode: t.testCode,
+        testName: t.testName,
+        status: t.status,
+        planned: !!t.plannedAt,
+        dueDate: t.dueDate,
+        assignedToName: t.assignedTo?.name ?? null,
+        version: t.version,
+      })),
     })),
   };
 };
-
 
 /** Per sample: test id -> what the accepted quotation agreed for it. */
 export type QuotedRates = Map<string, { rate: string; quantity: number; amount: string; source: string }>;
@@ -93,7 +138,13 @@ export class JobsService implements OnModuleInit {
         },
         run: async (p) => {
           const j = await this.jobDocument(String(p.jobId));
-          return { buffer: await this.pdf.render(await html(j, p), { company: this.company.snapshot() }), filename: `${title} ${j.jobNo}.pdf`.replace(/[/\\]/g, '-'), mimeType: 'application/pdf', entity: 'Job', entityId: String(p.jobId) };
+          return {
+            buffer: await this.pdf.render(await html(j, p), { company: this.company.snapshot() }),
+            filename: `${title} ${j.jobNo}.pdf`.replace(/[/\\]/g, '-'),
+            mimeType: 'application/pdf',
+            entity: 'Job',
+            entityId: String(p.jobId),
+          };
         },
       });
     jobDoc('job-srf', 'SRF', (j) => srfHtml(j, this.company.snapshot()));
@@ -106,9 +157,20 @@ export class JobsService implements OnModuleInit {
     this.documents.register('sample-labels', {
       authorize: requirePermission('jobs.view'),
       run: async (p) => {
-        const job = await this.prisma.job.findUniqueOrThrow({ where: { id: String(p.jobId) }, include: { samples: { where: { status: { not: 'CANCELLED' }, ...(p.sampleId ? { id: String(p.sampleId) } : {}) }, orderBy: { sampleNo: 'asc' } } } });
+        const job = await this.prisma.job.findUniqueOrThrow({
+          where: { id: String(p.jobId) },
+          include: { samples: { where: { status: { not: 'CANCELLED' }, ...(p.sampleId ? { id: String(p.sampleId) } : {}) }, orderBy: { sampleNo: 'asc' } } },
+        });
         const labels = await Promise.all(
-          job.samples.map(async (s) => ({ sampleNo: s.sampleNo, jobNo: job.jobNo, description: s.description, urgent: job.urgent, returnable: s.returnable, receivedAt: job.receivedAt, qrDataUri: await QRCode.toDataURL(s.sampleNo, { margin: 0, width: 240, errorCorrectionLevel: 'M' }) })),
+          job.samples.map(async (s) => ({
+            sampleNo: s.sampleNo,
+            jobNo: job.jobNo,
+            description: s.description,
+            urgent: job.urgent,
+            returnable: s.returnable,
+            receivedAt: job.receivedAt,
+            qrDataUri: await QRCode.toDataURL(s.sampleNo, { margin: 0, width: 240, errorCorrectionLevel: 'M' }),
+          })),
         );
         const company = this.company.snapshot();
         return {
@@ -125,10 +187,12 @@ export class JobsService implements OnModuleInit {
       internal: true,
       authorize: requirePermission('jobs.create', 'jobs.edit'),
       run: async (p) => {
-        const images = await Promise.all((p.fileIds as string[]).map(async (id) => {
-          const f = await this.storage.read(id);
-          return { bytes: f.buffer, mimeType: f.mimeType };
-        }));
+        const images = await Promise.all(
+          (p.fileIds as string[]).map(async (id) => {
+            const f = await this.storage.read(id);
+            return { bytes: f.buffer, mimeType: f.mimeType };
+          }),
+        );
         return { buffer: await this.pdf.mergeImagesToPdf(images), filename: 'Customer letter.pdf', mimeType: 'application/pdf', entity: 'Job', entityId: String(p.jobId), category: 'letter' };
       },
     });
@@ -140,9 +204,33 @@ export class JobsService implements OnModuleInit {
     const receivedBy = j.receivedById ? await this.prisma.user.findUnique({ where: { id: j.receivedById } }) : null;
     const sampleNos = new Map(j.samples.map((s) => [s.id, s.sampleNo]));
     return {
-      jobNo: j.jobNo, receivedAt: j.receivedAt, urgent: j.urgent, letterRef: j.letterRef, letterDate: j.letterDate, materialSpec: j.materialSpec, poNumber: j.poNumber, poDate: j.poDate, receiptMode: receiptMode?.label ?? null,
-      reportIssueDetails: j.reportIssueDetails, reportIssueAddress: j.reportIssueAddress, kindAttention: j.kindAttention, contactEmail: j.contactEmail, contactPhone: j.contactPhone, customerName: j.customer.name, crn: j.customer.crn, receivedBy: receivedBy?.name ?? null,
-      samples: j.samples.map((s) => ({ sampleNo: s.sampleNo, description: s.description, condition: s.condition, quantity: s.quantity, size: s.size, returnable: s.returnable, attributes: s.attributes, tests: s.tests.filter((t) => t.status !== 'CANCELLED').map((t) => t.testName) })),
+      jobNo: j.jobNo,
+      receivedAt: j.receivedAt,
+      urgent: j.urgent,
+      letterRef: j.letterRef,
+      letterDate: j.letterDate,
+      materialSpec: j.materialSpec,
+      poNumber: j.poNumber,
+      poDate: j.poDate,
+      receiptMode: receiptMode?.label ?? null,
+      reportIssueDetails: j.reportIssueDetails,
+      reportIssueAddress: j.reportIssueAddress,
+      kindAttention: j.kindAttention,
+      contactEmail: j.contactEmail,
+      contactPhone: j.contactPhone,
+      customerName: j.customer.name,
+      crn: j.customer.crn,
+      receivedBy: receivedBy?.name ?? null,
+      samples: j.samples.map((s) => ({
+        sampleNo: s.sampleNo,
+        description: s.description,
+        condition: s.condition,
+        quantity: s.quantity,
+        size: s.size,
+        returnable: s.returnable,
+        attributes: s.attributes,
+        tests: s.tests.filter((t) => t.status !== 'CANCELLED').map((t) => t.testName),
+      })),
       deviations: j.deviations.map((d) => ({ sampleNo: d.sampleId ? (sampleNos.get(d.sampleId) ?? null) : null, typeLabel: d.typeLabel, remark: d.remark })),
     };
   }
@@ -173,14 +261,32 @@ export class JobsService implements OnModuleInit {
       ...(q.returnable === 'true' ? { returnable: true } : q.returnable === 'false' ? { returnable: false } : {}),
       ...(q.urgent === 'true' ? { job: { urgent: true } } : q.urgent === 'false' ? { job: { urgent: false } } : {}),
       ...(q.from || q.to ? { createdAt: { ...(q.from ? { gte: new Date(`${q.from}T00:00:00+05:30`) } : {}), ...(q.to ? { lte: new Date(`${q.to}T23:59:59.999+05:30`) } : {}) } } : {}),
-      ...(q.q ? { OR: [{ sampleNo: { contains: q.q, mode: 'insensitive' } }, { description: { contains: q.q, mode: 'insensitive' } }, { job: { jobNo: { contains: q.q, mode: 'insensitive' } } }] } : {}),
+      ...(q.q
+        ? { OR: [{ sampleNo: { contains: q.q, mode: 'insensitive' } }, { description: { contains: q.q, mode: 'insensitive' } }, { job: { jobNo: { contains: q.q, mode: 'insensitive' } } }] }
+        : {}),
     };
     const [rows, total] = await Promise.all([
-      this.prisma.sample.findMany({ where, include: { job: { select: { jobNo: true, urgent: true, receivedAt: true, customer: { select: { name: true } } } } }, orderBy: orderBy(q, ['sampleNo', 'createdAt', 'status'], 'createdAt'), ...skipTake(q) }),
+      this.prisma.sample.findMany({
+        where,
+        include: { job: { select: { jobNo: true, urgent: true, receivedAt: true, customer: { select: { name: true } } } } },
+        orderBy: orderBy(q, ['sampleNo', 'createdAt', 'status'], 'createdAt'),
+        ...skipTake(q),
+      }),
       this.prisma.sample.count({ where }),
     ]);
     return toPage(
-      rows.map((s) => ({ id: s.id, sampleNo: s.sampleNo, jobId: s.jobId, jobNo: s.job.jobNo, description: s.description, status: s.status, returnable: s.returnable, urgent: s.job.urgent, receivedAt: s.job.receivedAt, customerName: identity ? s.job.customer.name : null })),
+      rows.map((s) => ({
+        id: s.id,
+        sampleNo: s.sampleNo,
+        jobId: s.jobId,
+        jobNo: s.job.jobNo,
+        description: s.description,
+        status: s.status,
+        returnable: s.returnable,
+        urgent: s.job.urgent,
+        receivedAt: s.job.receivedAt,
+        customerName: identity ? s.job.customer.name : null,
+      })),
       total,
       q,
     );
@@ -207,8 +313,28 @@ export class JobsService implements OnModuleInit {
     const reports = await this.prisma.report.findMany({ where: { sample: { jobId } }, select: { id: true, reportNo: true } });
     for (const r of reports) labels.set(r.id, r.reportNo);
     const merged = [
-      ...events.map((e) => ({ id: e.id, entity: e.entity, entityId: e.entityId, label: labels.get(e.entityId) ?? null, fromStatus: e.fromStatus, toStatus: e.toStatus, reason: e.reason, byName: e.byName, at: e.at })),
-      ...stages.map((s) => ({ id: s.id, entity: 'Stage', entityId: s.sampleTestId, label: labels.get(s.sampleTestId) ?? null, fromStatus: null, toStatus: s.name, reason: null, byName: s.completedByName, at: s.completedAt! })),
+      ...events.map((e) => ({
+        id: e.id,
+        entity: e.entity,
+        entityId: e.entityId,
+        label: labels.get(e.entityId) ?? null,
+        fromStatus: e.fromStatus,
+        toStatus: e.toStatus,
+        reason: e.reason,
+        byName: e.byName,
+        at: e.at,
+      })),
+      ...stages.map((s) => ({
+        id: s.id,
+        entity: 'Stage',
+        entityId: s.sampleTestId,
+        label: labels.get(s.sampleTestId) ?? null,
+        fromStatus: null,
+        toStatus: s.name,
+        reason: null,
+        byName: s.completedByName,
+        at: s.completedAt!,
+      })),
     ];
     return merged.sort((a, b) => a.at.getTime() - b.at.getTime());
   }
@@ -225,7 +351,8 @@ export class JobsService implements OnModuleInit {
       if (!mode) throw badRequest('Unknown receipt mode', [{ field: 'receiptModeId', message: 'Unknown receipt mode' }]);
     }
     for (const d of dto.deviations ?? []) {
-      if (d.sampleIndex != null && dto.samples && d.sampleIndex >= dto.samples.length) throw badRequest('A deviation refers to a sample that does not exist', [{ field: 'deviations', message: 'Unknown sample' }]);
+      if (d.sampleIndex != null && dto.samples && d.sampleIndex >= dto.samples.length)
+        throw badRequest('A deviation refers to a sample that does not exist', [{ field: 'deviations', message: 'Unknown sample' }]);
     }
   }
 
@@ -241,8 +368,24 @@ export class JobsService implements OnModuleInit {
     const jobNo = await this.numbering.next(tx, 'JOB');
     const job = await tx.job.create({
       data: {
-        jobNo, customerId: dto.customerId, quotationId: dto.quotationId ?? null, noQuotationReason: dto.noQuotationReason ?? null, urgent: dto.urgent ?? false, letterRef: dto.letterRef, letterDate: dto.letterDate ? new Date(dto.letterDate) : null, materialSpec: dto.materialSpec, poNumber: dto.poNumber, poDate: dto.poDate ? new Date(dto.poDate) : null,
-        receiptModeId: dto.receiptModeId, reportIssueDetails: dto.reportIssueDetails, reportIssueAddress: dto.reportIssueAddress, kindAttention: dto.kindAttention, contactEmail: dto.contactEmail, contactPhone: dto.contactPhone, sampleDrawnByLab: dto.sampleDrawnByLab ?? false, receivedById: actorId(),
+        jobNo,
+        customerId: dto.customerId,
+        quotationId: dto.quotationId ?? null,
+        noQuotationReason: dto.noQuotationReason ?? null,
+        urgent: dto.urgent ?? false,
+        letterRef: dto.letterRef,
+        letterDate: dto.letterDate ? new Date(dto.letterDate) : null,
+        materialSpec: dto.materialSpec,
+        poNumber: dto.poNumber,
+        poDate: dto.poDate ? new Date(dto.poDate) : null,
+        receiptModeId: dto.receiptModeId,
+        reportIssueDetails: dto.reportIssueDetails,
+        reportIssueAddress: dto.reportIssueAddress,
+        kindAttention: dto.kindAttention,
+        contactEmail: dto.contactEmail,
+        contactPhone: dto.contactPhone,
+        sampleDrawnByLab: dto.sampleDrawnByLab ?? false,
+        receivedById: actorId(),
       },
     });
     await this.audit.status(tx, { entity: 'Job', entityId: job.id, from: null, to: 'RECEIVED', jobId: job.id, reason: dto.noQuotationReason });
@@ -251,7 +394,17 @@ export class JobsService implements OnModuleInit {
     for (const [index, s] of dto.samples.entries()) {
       const sampleNo = await this.numbering.next(tx, 'SAMPLE');
       const sample = await tx.sample.create({
-        data: { sampleNo, jobId: job.id, description: s.description, condition: s.condition, quantity: s.quantity, size: s.size, returnable: s.returnable ?? false, retentionUntil, attributes: s.attributes?.length ? { createMany: { data: s.attributes } } : undefined },
+        data: {
+          sampleNo,
+          jobId: job.id,
+          description: s.description,
+          condition: s.condition,
+          quantity: s.quantity,
+          size: s.size,
+          returnable: s.returnable ?? false,
+          retentionUntil,
+          attributes: s.attributes?.length ? { createMany: { data: s.attributes } } : undefined,
+        },
       });
       sampleIds.push(sample.id);
       await this.audit.status(tx, { entity: 'Sample', entityId: sample.id, from: null, to: 'RECEIVED', jobId: job.id });
@@ -260,7 +413,9 @@ export class JobsService implements OnModuleInit {
     for (const d of dto.deviations ?? []) {
       const type = await tx.lookupValue.findFirst({ where: { id: d.typeId, kind: 'DEVIATION_TYPE' } });
       if (!type) throw badRequest('Unknown deviation type', [{ field: 'deviations', message: 'Unknown deviation type' }]);
-      await tx.sampleDeviation.create({ data: { jobId: job.id, sampleId: d.sampleIndex != null ? sampleIds[d.sampleIndex] : null, typeId: type.id, typeLabel: type.label, remark: d.remark, createdById: actorId() } });
+      await tx.sampleDeviation.create({
+        data: { jobId: job.id, sampleId: d.sampleIndex != null ? sampleIds[d.sampleIndex] : null, typeId: type.id, typeLabel: type.label, remark: d.remark, createdById: actorId() },
+      });
     }
     await this.audit.record({ action: 'Job.create', entity: 'Job', entityId: job.id, after: { jobNo, samples: dto.samples.length, quotationId: dto.quotationId ?? null } }, tx);
     return job;
@@ -275,9 +430,17 @@ export class JobsService implements OnModuleInit {
       const looked = fromQuote ? null : await this.masters.lookupRate(testId, customerId, istToday(), tx);
       await tx.sampleTest.create({
         data: {
-          sampleId, testId, testCode: test.code, testName: test.name, methodName: methodLabel(test.method), departmentId: test.departmentId, urgent,
-          rate: fromQuote?.rate ?? looked?.rate ?? null, rateSource: fromQuote ? 'QUOTATION' : (looked?.source ?? null),
-          billQuantity: fromQuote?.quantity ?? 1, billAmount: fromQuote?.amount ?? null,
+          sampleId,
+          testId,
+          testCode: test.code,
+          testName: test.name,
+          methodName: methodLabel(test.method),
+          departmentId: test.departmentId,
+          urgent,
+          rate: fromQuote?.rate ?? looked?.rate ?? null,
+          rateSource: fromQuote ? 'QUOTATION' : (looked?.source ?? null),
+          billQuantity: fromQuote?.quantity ?? 1,
+          billAmount: fromQuote?.amount ?? null,
         },
       });
     }
@@ -329,10 +492,15 @@ export class JobsService implements OnModuleInit {
       if (before.status === 'CANCELLED' || before.status === 'COMPLETED') throw rule('LOCKED', 'This job can no longer be edited');
       await this.assertLookups(tx, { receiptModeId: dto.receiptModeId });
       const { version, letterDate, poDate, ...rest } = dto;
-      await updateVersioned(tx.job as never, id, version, { ...rest, ...(letterDate !== undefined ? { letterDate: letterDate ? new Date(letterDate) : null } : {}), ...(poDate !== undefined ? { poDate: poDate ? new Date(poDate) : null } : {}) });
+      await updateVersioned(tx.job as never, id, version, {
+        ...rest,
+        ...(letterDate !== undefined ? { letterDate: letterDate ? new Date(letterDate) : null } : {}),
+        ...(poDate !== undefined ? { poDate: poDate ? new Date(poDate) : null } : {}),
+      });
       await this.audit.record({ action: 'Job.update', entity: 'Job', entityId: id, before: { urgent: before.urgent, letterRef: before.letterRef, poNumber: before.poNumber }, after: dto }, tx);
       // An urgency change moves due dates on tests not yet locked, handled at planning.
-      if (dto.urgent !== undefined && dto.urgent !== before.urgent) await tx.sampleTest.updateMany({ where: { sample: { jobId: id }, status: { notIn: ['APPROVED', 'CANCELLED'] } }, data: { urgent: dto.urgent } });
+      if (dto.urgent !== undefined && dto.urgent !== before.urgent)
+        await tx.sampleTest.updateMany({ where: { sample: { jobId: id }, status: { notIn: ['APPROVED', 'CANCELLED'] } }, data: { urgent: dto.urgent } });
     });
     return this.get(id);
   }
@@ -404,7 +572,10 @@ export class JobsService implements OnModuleInit {
 
   async syncStatus(tx: Tx, jobId: string): Promise<void> {
     await this.lockJob(tx, jobId);
-    const job = await tx.job.findUniqueOrThrow({ where: { id: jobId }, include: { samples: { include: { tests: { where: { deletedAt: null }, select: { status: true, plannedAt: true } }, reports: { include: { revisions: { select: { status: true } } } } } } } });
+    const job = await tx.job.findUniqueOrThrow({
+      where: { id: jobId },
+      include: { samples: { include: { tests: { where: { deletedAt: null }, select: { status: true, plannedAt: true } }, reports: { include: { revisions: { select: { status: true } } } } } } },
+    });
     const rank = ['RECEIVED', 'PLANNED', 'IN_TESTING', 'REPORTING', 'COMPLETED'] as const;
     let lowest: number | null = null;
     for (const s of job.samples) {
@@ -446,9 +617,16 @@ export class JobsService implements OnModuleInit {
     const ids = [...new Set(raw as string[])];
     if (!ids.length) return [];
     const files = await this.prisma.fileObject.findMany({
-      where: { id: { in: ids }, deletedAt: null, entity: 'Sample', category: 'sample-image', mimeType: { startsWith: 'image/' }, entityId: { in: (await this.prisma.sample.findMany({ where: { jobId }, select: { id: true } })).map((s) => s.id) } },
+      where: {
+        id: { in: ids },
+        deletedAt: null,
+        entity: 'Sample',
+        category: 'sample-image',
+        mimeType: { startsWith: 'image/' },
+        entityId: { in: (await this.prisma.sample.findMany({ where: { jobId }, select: { id: true } })).map((s) => s.id) },
+      },
     });
-    if (files.length !== ids.length) throw badRequest('Only photos of this job\'s samples can go on its acknowledgement', [{ field: 'photoIds', message: 'Not a photo of this job' }]);
+    if (files.length !== ids.length) throw badRequest("Only photos of this job's samples can go on its acknowledgement", [{ field: 'photoIds', message: 'Not a photo of this job' }]);
     return ids.map((id) => files.find((f) => f.id === id)!);
   }
 
@@ -516,7 +694,8 @@ export class JobsService implements OnModuleInit {
     await this.loadJob(jobId);
     const files = await this.prisma.fileObject.findMany({ where: { id: { in: fileIds }, entity: 'Job', entityId: jobId, deletedAt: null } });
     if (files.length !== fileIds.length) throw badRequest('One of those pages does not belong to this job', [{ field: 'fileIds', message: 'Not on this job' }]);
-    if (files.some((f) => f.mimeType !== 'image/png' && f.mimeType !== 'image/jpeg')) throw badRequest('Only PNG and JPEG pages can be combined', [{ field: 'fileIds', message: 'Unsupported page type' }]);
+    if (files.some((f) => f.mimeType !== 'image/png' && f.mimeType !== 'image/jpeg'))
+      throw badRequest('Only PNG and JPEG pages can be combined', [{ field: 'fileIds', message: 'Unsupported page type' }]);
     return this.documents.enqueue('letter-combine', { jobId, fileIds });
   }
 }

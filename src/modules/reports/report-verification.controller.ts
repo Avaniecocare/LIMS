@@ -14,7 +14,8 @@ const CODE = /^[A-Za-z0-9_-]{16,64}$/;
 export class ReportVerificationController {
   constructor(private readonly reports: ReportsService) {}
 
-  @Get('verify/:code') @ApiOkResponse({ type: ReportVerificationDto })
+  @Get('verify/:code')
+  @ApiOkResponse({ type: ReportVerificationDto })
   verify(@Param('code') code: string): Promise<ReportVerificationDto> {
     if (!CODE.test(code)) throw notFound('Report');
     return this.reports.verify(code);

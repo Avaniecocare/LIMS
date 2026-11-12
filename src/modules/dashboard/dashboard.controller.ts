@@ -11,7 +11,8 @@ export class DashboardController {
   constructor(private readonly dashboard: DashboardService) {}
 
   /** Sections follow the caller's permissions; every user at least gets "My work". */
-  @Get() @ApiOkResponse({ type: DashboardDto })
+  @Get()
+  @ApiOkResponse({ type: DashboardDto })
   get(@Query() q: DashboardQuery) {
     return this.dashboard.build(q);
   }

@@ -49,7 +49,18 @@ describe('file library', () => {
     expect(forCustomer.data.map((x: { id: string }) => x.id)).toContain(f.id);
     expect(forCustomer.data[0].entityLabel).toContain('History Co');
     // System files (generated PDFs) can't be edited from the library.
-    const generated = await ctx.prisma.fileObject.create({ data: { storageKey: `generated/x/${Date.now()}`, originalName: 'Invoice.pdf', mimeType: 'application/pdf', sizeBytes: 1, sha256: 'x', category: 'generated', entity: 'Customer', entityId: customerId } });
+    const generated = await ctx.prisma.fileObject.create({
+      data: {
+        storageKey: `generated/x/${Date.now()}`,
+        originalName: 'Invoice.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 1,
+        sha256: 'x',
+        category: 'generated',
+        entity: 'Customer',
+        entityId: customerId,
+      },
+    });
     await docs.patch(`/library/files/${generated.id}`, { originalName: 'Renamed.pdf' }).expect(400);
     await docs.del(`/library/files/${generated.id}`).expect(400);
   });
@@ -82,9 +93,30 @@ describe('form auto-fill', () => {
     const service = ctx.app.get(LookupService);
     await ctx.app.get((await import('../../src/core/redis.service.js')).RedisService).client.del('pincode:v2:201306', 'pincode:v2:110001');
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      new Response(JSON.stringify([{ Status: 'Success', PostOffice: [{ Name: 'Bisrakh', District: 'Gautam Buddha Nagar', State: 'Uttar Pradesh' }, { Name: 'Greater Noida', District: 'Gautam Buddha Nagar', State: 'Uttar Pradesh' }] }]), { status: 200 }),
+      new Response(
+        JSON.stringify([
+          {
+            Status: 'Success',
+            PostOffice: [
+              { Name: 'Bisrakh', District: 'Gautam Buddha Nagar', State: 'Uttar Pradesh' },
+              { Name: 'Greater Noida', District: 'Gautam Buddha Nagar', State: 'Uttar Pradesh' },
+            ],
+          },
+        ]),
+        { status: 200 },
+      ),
     );
-    expect(await service.pincode('201306')).toEqual({ pincode: '201306', found: true, city: 'Gautam Buddha Nagar', district: 'Gautam Buddha Nagar', stateName: 'Uttar Pradesh', stateCode: '09', localities: ['Bisrakh', 'Greater Noida'], match: 'exact', nearbyPincode: null });
+    expect(await service.pincode('201306')).toEqual({
+      pincode: '201306',
+      found: true,
+      city: 'Gautam Buddha Nagar',
+      district: 'Gautam Buddha Nagar',
+      stateName: 'Uttar Pradesh',
+      stateCode: '09',
+      localities: ['Bisrakh', 'Greater Noida'],
+      match: 'exact',
+      nearbyPincode: null,
+    });
     // Service down: no neighbour calls, just the state from the PIN's first digits.
     fetchMock.mockRejectedValue(new Error('network down'));
     const calls = fetchMock.mock.calls.length;
@@ -107,7 +139,17 @@ describe('form auto-fill', () => {
       if (pin === '201314') return new Response(JSON.stringify([{ Status: 'Success', PostOffice: [{ Name: 'Chhaisa', District: 'Gautam Buddha Nagar', State: 'Uttar Pradesh' }] }]), { status: 200 });
       return none();
     });
-    expect(await service.pincode('201318')).toEqual({ pincode: '201318', found: true, city: 'Gautam Buddha Nagar', district: 'Gautam Buddha Nagar', stateName: 'Uttar Pradesh', stateCode: '09', localities: [], match: 'nearby', nearbyPincode: '201314' });
+    expect(await service.pincode('201318')).toEqual({
+      pincode: '201318',
+      found: true,
+      city: 'Gautam Buddha Nagar',
+      district: 'Gautam Buddha Nagar',
+      stateName: 'Uttar Pradesh',
+      stateCode: '09',
+      localities: [],
+      match: 'nearby',
+      nearbyPincode: '201314',
+    });
     // Closest first: 201319, 201317, 201320, 201316 before 201314.
     expect(asked.slice(0, 5)).toEqual(['201318', '201319', '201317', '201320', '201316']);
     // And with nothing listed nearby at all, the state still comes from the first digits.

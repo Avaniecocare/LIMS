@@ -47,7 +47,17 @@ export class EmailTemplateService {
       templates: EMAIL_TEMPLATE_KEYS.map((key) => {
         const def = EMAIL_TEMPLATES[key];
         const own = map[key];
-        return { key, label: def.label, description: def.description, variables: def.variables.map((v) => ({ name: v.name, description: v.description, example: v.example })), subject: own?.subject ?? def.subject, body: own?.body ?? def.body, defaultSubject: def.subject, defaultBody: def.body, customized: !!own };
+        return {
+          key,
+          label: def.label,
+          description: def.description,
+          variables: def.variables.map((v) => ({ name: v.name, description: v.description, example: v.example })),
+          subject: own?.subject ?? def.subject,
+          body: own?.body ?? def.body,
+          defaultSubject: def.subject,
+          defaultBody: def.body,
+          customized: !!own,
+        };
       }),
     };
   }

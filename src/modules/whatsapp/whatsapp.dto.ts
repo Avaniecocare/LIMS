@@ -3,7 +3,8 @@ import { ArrayMaxSize, Equals, IsArray, IsBoolean, IsIn, IsInt, IsObject, IsOpti
 
 export class WhatsappSendDto {
   @ApiProperty({ enum: ['report', 'invoice', 'acknowledgement', 'reminder'] })
-  @IsIn(['report', 'invoice', 'acknowledgement', 'reminder']) kind: 'report' | 'invoice' | 'acknowledgement' | 'reminder';
+  @IsIn(['report', 'invoice', 'acknowledgement', 'reminder'])
+  kind: 'report' | 'invoice' | 'acknowledgement' | 'reminder';
   /** the report, invoice or job */
   @IsUUID() entityId: string;
   /** a mobile number; Indian numbers may be written without +91 */
@@ -89,8 +90,16 @@ export class WhatsappTemplateInputDto {
 export class SaveWhatsappTemplatesDto {
   @IsInt() @Min(0) version: number;
   /** message key -> template name and language */
-  @ApiProperty({ type: 'object', additionalProperties: { type: 'object', properties: { name: { type: 'string' }, language: { type: 'string' }, values: { type: 'array', items: { type: 'string' } } }, required: ['name', 'language', 'values'] } })
-  @IsObject() templates: Record<string, WhatsappTemplateInputDto>;
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: {
+      type: 'object',
+      properties: { name: { type: 'string' }, language: { type: 'string' }, values: { type: 'array', items: { type: 'string' } } },
+      required: ['name', 'language', 'values'],
+    },
+  })
+  @IsObject()
+  templates: Record<string, WhatsappTemplateInputDto>;
 }
 
 export class WhatsappTestDto {

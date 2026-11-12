@@ -36,14 +36,34 @@ export class DispatchService implements OnModuleInit {
         const company = d.companySnapshot as unknown as CompanySnapshot;
         const customer = await customerSnapshot(this.prisma as never, d.job.customerId);
         const html = challanHtml({ ...d, jobNo: d.job.jobNo, customerName: d.job.customer.name, address: d.job.reportIssueAddress ?? customer.reportAddress, items: d.items as never, company });
-        return { buffer: await this.pdf.render(html, { company }), filename: `Dispatch Challan ${d.dispatchNo}.pdf`.replace(/[/\\]/g, '-'), mimeType: 'application/pdf', entity: 'Dispatch', entityId: d.id };
+        return {
+          buffer: await this.pdf.render(html, { company }),
+          filename: `Dispatch Challan ${d.dispatchNo}.pdf`.replace(/[/\\]/g, '-'),
+          mimeType: 'application/pdf',
+          entity: 'Dispatch',
+          entityId: d.id,
+        };
       },
     });
   }
 
   private dto(d: Row) {
     return {
-      id: d.id, dispatchNo: d.dispatchNo, jobId: d.jobId, jobNo: d.job.jobNo, customerName: can('customers.view') ? d.job.customer.name : null, dispatchDate: d.dispatchDate, modeId: d.modeId, modeLabel: d.modeLabel, courierName: d.courierName, carrierName: d.carrierName, docketNo: d.docketNo, carrierContact: d.carrierContact, remarks: d.remarks, items: d.items as never, createdAt: d.createdAt,
+      id: d.id,
+      dispatchNo: d.dispatchNo,
+      jobId: d.jobId,
+      jobNo: d.job.jobNo,
+      customerName: can('customers.view') ? d.job.customer.name : null,
+      dispatchDate: d.dispatchDate,
+      modeId: d.modeId,
+      modeLabel: d.modeLabel,
+      courierName: d.courierName,
+      carrierName: d.carrierName,
+      docketNo: d.docketNo,
+      carrierContact: d.carrierContact,
+      remarks: d.remarks,
+      items: d.items as never,
+      createdAt: d.createdAt,
     };
   }
 
@@ -52,10 +72,19 @@ export class DispatchService implements OnModuleInit {
       deletedAt: null,
       ...(q.jobId ? { jobId: q.jobId } : {}),
       ...(q.from || q.to ? { dispatchDate: { ...(q.from ? { gte: new Date(q.from) } : {}), ...(q.to ? { lte: new Date(q.to) } : {}) } } : {}),
-      ...(q.q ? { OR: [{ dispatchNo: { contains: q.q, mode: 'insensitive' } }, { docketNo: { contains: q.q, mode: 'insensitive' } }, { job: { jobNo: { contains: q.q, mode: 'insensitive' } } }] } : {}),
+      ...(q.q
+        ? { OR: [{ dispatchNo: { contains: q.q, mode: 'insensitive' } }, { docketNo: { contains: q.q, mode: 'insensitive' } }, { job: { jobNo: { contains: q.q, mode: 'insensitive' } } }] }
+        : {}),
     };
-    const [rows, total] = await Promise.all([this.prisma.dispatch.findMany({ where, include, orderBy: orderBy(q, ['dispatchNo', 'dispatchDate'], 'dispatchDate'), ...skipTake(q) }), this.prisma.dispatch.count({ where })]);
-    return toPage(rows.map((r) => this.dto(r)), total, q);
+    const [rows, total] = await Promise.all([
+      this.prisma.dispatch.findMany({ where, include, orderBy: orderBy(q, ['dispatchNo', 'dispatchDate'], 'dispatchDate'), ...skipTake(q) }),
+      this.prisma.dispatch.count({ where }),
+    ]);
+    return toPage(
+      rows.map((r) => this.dto(r)),
+      total,
+      q,
+    );
   }
 
   async get(id: string) {
@@ -97,7 +126,9 @@ export class DispatchService implements OnModuleInit {
           jobId: j.id,
           jobNo: j.jobNo,
           customerName: identity ? j.customer.name : null,
-          reports: j.samples.flatMap((s) => s.reports.filter((r) => r.revisions.length && !sentReports.has(r.id)).map((r) => ({ reportId: r.id, reportNo: r.reportNo, revisionNo: r.revisions[0].revisionNo, withheld }))),
+          reports: j.samples.flatMap((s) =>
+            s.reports.filter((r) => r.revisions.length && !sentReports.has(r.id)).map((r) => ({ reportId: r.id, reportNo: r.reportNo, revisionNo: r.revisions[0].revisionNo, withheld })),
+          ),
           returnableSamples: j.samples.filter((s) => s.returnable && !s.returnedAt && !sentSamples.has(s.id)).map((s) => ({ sampleId: s.id, sampleNo: s.sampleNo, description: s.description })),
         };
       })
@@ -114,12 +145,21 @@ export class DispatchService implements OnModuleInit {
       if (job.status === 'CANCELLED') throw rule('JOB_CANCELLED', 'This job has been cancelled');
       const mode = await tx.lookupValue.findFirst({ where: { id: dto.modeId, kind: 'DISPATCH_MODE', deletedAt: null } });
       if (!mode) throw badRequest('Unknown dispatch mode', [{ field: 'modeId', message: 'Unknown mode' }]);
-      if (mode.code === 'COURIER' && (!dto.courierName?.trim() || !dto.docketNo?.trim())) throw badRequest('Enter the courier and docket number', [...(!dto.courierName?.trim() ? [{ field: 'courierName', message: 'Required for courier' }] : []), ...(!dto.docketNo?.trim() ? [{ field: 'docketNo', message: 'Required for courier' }] : [])]);
-      if (mode.code === 'BY_HAND' && (!dto.carrierName?.trim() || !dto.carrierContact?.trim())) throw badRequest("Enter the person carrying it and their contact details", [...(!dto.carrierName?.trim() ? [{ field: 'carrierName', message: 'Required when sent by hand' }] : []), ...(!dto.carrierContact?.trim() ? [{ field: 'carrierContact', message: 'Required when sent by hand' }] : [])]);
+      if (mode.code === 'COURIER' && (!dto.courierName?.trim() || !dto.docketNo?.trim()))
+        throw badRequest('Enter the courier and docket number', [
+          ...(!dto.courierName?.trim() ? [{ field: 'courierName', message: 'Required for courier' }] : []),
+          ...(!dto.docketNo?.trim() ? [{ field: 'docketNo', message: 'Required for courier' }] : []),
+        ]);
+      if (mode.code === 'BY_HAND' && (!dto.carrierName?.trim() || !dto.carrierContact?.trim()))
+        throw badRequest('Enter the person carrying it and their contact details', [
+          ...(!dto.carrierName?.trim() ? [{ field: 'carrierName', message: 'Required when sent by hand' }] : []),
+          ...(!dto.carrierContact?.trim() ? [{ field: 'carrierContact', message: 'Required when sent by hand' }] : []),
+        ]);
       const items: { kind: string; id: string; reference: string; description: string }[] = [];
       if (dto.reportIds?.length) {
         const invoices = job.invoiceLines.map((l) => l.invoice).filter((i) => !['CANCELLED', 'DRAFT'].includes(i.status));
-        if (job.customer.withholdReportUntilPaid && (invoices.length === 0 || invoices.some((i) => i.status !== 'PAID'))) throw rule('WITHHELD', 'This customer has report release withheld until payment is received');
+        if (job.customer.withholdReportUntilPaid && (invoices.length === 0 || invoices.some((i) => i.status !== 'PAID')))
+          throw rule('WITHHELD', 'This customer has report release withheld until payment is received');
         const reports = await tx.report.findMany({ where: { id: { in: dto.reportIds }, sample: { jobId: dto.jobId } }, include: { sample: true, revisions: { where: { status: 'ISSUED' } } } });
         if (reports.length !== dto.reportIds.length) throw badRequest('A report is not on this job', [{ field: 'reportIds', message: 'Not on this job' }]);
         for (const r of reports) {
@@ -138,7 +178,22 @@ export class DispatchService implements OnModuleInit {
       }
       const dispatchNo = await this.numbering.next(tx, 'DISPATCH', new Date(dto.dispatchDate));
       const d = await tx.dispatch.create({
-        data: { dispatchNo, jobId: dto.jobId, dispatchDate: new Date(dto.dispatchDate), modeId: mode.id, modeLabel: mode.label, courierName: dto.courierName, carrierName: dto.carrierName, docketNo: dto.docketNo, carrierContact: dto.carrierContact, remarks: dto.remarks, items: items as Prisma.InputJsonValue, companySnapshot: this.company.snapshot() as unknown as Prisma.InputJsonValue, createdById: actorId(), isDemo: job.isDemo },
+        data: {
+          dispatchNo,
+          jobId: dto.jobId,
+          dispatchDate: new Date(dto.dispatchDate),
+          modeId: mode.id,
+          modeLabel: mode.label,
+          courierName: dto.courierName,
+          carrierName: dto.carrierName,
+          docketNo: dto.docketNo,
+          carrierContact: dto.carrierContact,
+          remarks: dto.remarks,
+          items: items as Prisma.InputJsonValue,
+          companySnapshot: this.company.snapshot() as unknown as Prisma.InputJsonValue,
+          createdById: actorId(),
+          isDemo: job.isDemo,
+        },
       });
       await this.audit.record({ action: 'Dispatch.create', entity: 'Dispatch', entityId: d.id, after: { dispatchNo, items } }, tx);
       await this.audit.status(tx, { entity: 'Dispatch', entityId: d.id, from: null, to: 'DISPATCHED', jobId: dto.jobId, meta: { dispatchNo } });
@@ -161,11 +216,31 @@ export class DispatchService implements OnModuleInit {
     };
     const identity = can('customers.view');
     const [rows, total] = await Promise.all([
-      this.prisma.sample.findMany({ where, include: { job: { select: { jobNo: true, customer: { select: { name: true } } } } }, orderBy: orderBy(q, ['sampleNo', 'retentionUntil', 'createdAt'], 'createdAt', 'asc'), ...skipTake(q) }),
+      this.prisma.sample.findMany({
+        where,
+        include: { job: { select: { jobNo: true, customer: { select: { name: true } } } } },
+        orderBy: orderBy(q, ['sampleNo', 'retentionUntil', 'createdAt'], 'createdAt', 'asc'),
+        ...skipTake(q),
+      }),
       this.prisma.sample.count({ where }),
     ]);
     return toPage(
-      rows.map((s) => ({ id: s.id, sampleNo: s.sampleNo, description: s.description, jobId: s.jobId, jobNo: s.job.jobNo, customerName: identity ? s.job.customer.name : null, returnable: s.returnable, returnStatus: s.returnStatus, returnedAt: s.returnedAt, retentionUntil: s.retentionUntil, disposedAt: s.disposedAt, status: s.status, version: s.version, dueForDisposal: !s.disposedAt && !s.returnedAt && !!s.retentionUntil && s.retentionUntil < today })),
+      rows.map((s) => ({
+        id: s.id,
+        sampleNo: s.sampleNo,
+        description: s.description,
+        jobId: s.jobId,
+        jobNo: s.job.jobNo,
+        customerName: identity ? s.job.customer.name : null,
+        returnable: s.returnable,
+        returnStatus: s.returnStatus,
+        returnedAt: s.returnedAt,
+        retentionUntil: s.retentionUntil,
+        disposedAt: s.disposedAt,
+        status: s.status,
+        version: s.version,
+        dueForDisposal: !s.disposedAt && !s.returnedAt && !!s.retentionUntil && s.retentionUntil < today,
+      })),
       total,
       q,
     );

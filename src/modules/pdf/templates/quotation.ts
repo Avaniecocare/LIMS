@@ -12,12 +12,30 @@ export interface QuotationPdf {
   paymentTerms: string | null;
   deliveryAddress: string | null;
   contactPerson: string | null;
-  subtotal: unknown; discountAmount: unknown; taxableAmount: unknown; gstRate: unknown; cgst: unknown; sgst: unknown; igst: unknown; roundOff: unknown; grandTotal: unknown;
+  subtotal: unknown;
+  discountAmount: unknown;
+  taxableAmount: unknown;
+  gstRate: unknown;
+  cgst: unknown;
+  sgst: unknown;
+  igst: unknown;
+  roundOff: unknown;
+  grandTotal: unknown;
   amountInWords: string;
   terms: string | null;
   customer: CustomerSnapshot;
   company: CompanySnapshot;
-  lines: { seq: number; sampleDescription: string; requiredQuantity: string | null; testName: string; methodName: string | null; quantity: number; rate: unknown; discountPct: unknown; amount: unknown }[];
+  lines: {
+    seq: number;
+    sampleDescription: string;
+    requiredQuantity: string | null;
+    testName: string;
+    methodName: string | null;
+    quantity: number;
+    rate: unknown;
+    discountPct: unknown;
+    amount: unknown;
+  }[];
 }
 
 export function quotationHtml(q: QuotationPdf): string {

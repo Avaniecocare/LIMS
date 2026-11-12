@@ -44,23 +44,74 @@ export class PlanningQuery extends PageQuery {
   @IsOptional() @IsUUID() assignedToId?: string;
 }
 
-export class SuggestedParameterDto { id: string; code: string; name: string; }
-export class SuggestedTestDto {
-  testId: string; testCode: string; testName: string; methodName: string | null; category: string; defaultTatDays: number; parameters: SuggestedParameterDto[];
+export class SuggestedParameterDto {
+  id: string;
+  code: string;
+  name: string;
 }
-export class PlanResultDto { planId: string; planNo: string; sampleTestIds: string[]; }
+export class SuggestedTestDto {
+  testId: string;
+  testCode: string;
+  testName: string;
+  methodName: string | null;
+  category: string;
+  defaultTatDays: number;
+  parameters: SuggestedParameterDto[];
+}
+export class PlanResultDto {
+  planId: string;
+  planNo: string;
+  sampleTestIds: string[];
+}
 
 export class PlanningRowDto {
-  id: string; sampleId: string; sampleNo: string; sampleDescription: string; jobId: string; jobNo: string; testId: string; testCode: string; testName: string; methodName: string | null; status: string; urgent: boolean;
-  planned: boolean; dueDate: Date | null; assignedToId: string | null; assignedToName: string | null; instrumentId: string | null; instrumentName: string | null; version: number;
+  id: string;
+  sampleId: string;
+  sampleNo: string;
+  sampleDescription: string;
+  jobId: string;
+  jobNo: string;
+  testId: string;
+  testCode: string;
+  testName: string;
+  methodName: string | null;
+  status: string;
+  urgent: boolean;
+  planned: boolean;
+  dueDate: Date | null;
+  assignedToId: string | null;
+  assignedToName: string | null;
+  instrumentId: string | null;
+  instrumentName: string | null;
+  version: number;
 }
-export class PlanningPageDto { data: PlanningRowDto[]; meta: PageMetaDto; }
+export class PlanningPageDto {
+  data: PlanningRowDto[];
+  meta: PageMetaDto;
+}
 
 export class WorkloadRowDto {
-  id: string; name: string; openTests: number; inProgress: number; overdue: number; urgent: number;
+  id: string;
+  name: string;
+  openTests: number;
+  inProgress: number;
+  overdue: number;
+  urgent: number;
 }
-export class WorkloadDto { technicians: WorkloadRowDto[]; instruments: WorkloadRowDto[]; }
-export class TechnicianDto { id: string; name: string; departmentId: string | null; }
+export class WorkloadDto {
+  technicians: WorkloadRowDto[];
+  instruments: WorkloadRowDto[];
+}
+export class TechnicianDto {
+  id: string;
+  name: string;
+  departmentId: string | null;
+}
 export class InstrumentOptionDto {
-  id: string; code: string; name: string; departmentId: string | null; calibrationDueAt: Date | null; calibrationOverdue: boolean;
+  id: string;
+  code: string;
+  name: string;
+  departmentId: string | null;
+  calibrationDueAt: Date | null;
+  calibrationOverdue: boolean;
 }

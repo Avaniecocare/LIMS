@@ -3,7 +3,14 @@ import { computeResults, overallOutcome, passAgainst, type LimitSnapshot, type P
 
 const lim = (min: string | null, max: string | null, role: 'primary' | 'dual' = 'primary'): LimitSnapshot => ({ spec: 'S', role, min, max, text: null });
 const num = (code: string, limits: LimitSnapshot[] = [], decimals = 2): ParamRow => ({ parameterId: code, code, kind: 'NUMERIC', decimals, limits });
-const calc = (code: string, expression: string, bindings: Record<string, string>, limits: LimitSnapshot[] = [], decimals = 2): ParamRow => ({ parameterId: code, code, kind: 'CALCULATED', decimals, limits, formula: { versionId: `v-${code}`, expression, bindings } });
+const calc = (code: string, expression: string, bindings: Record<string, string>, limits: LimitSnapshot[] = [], decimals = 2): ParamRow => ({
+  parameterId: code,
+  code,
+  kind: 'CALCULATED',
+  decimals,
+  limits,
+  formula: { versionId: `v-${code}`, expression, bindings },
+});
 const byId = (rows: ReturnType<typeof computeResults>) => Object.fromEntries(rows.map((r) => [r.parameterId, r]));
 
 describe('pass and fail', () => {
@@ -28,11 +35,7 @@ describe('pass and fail', () => {
 
 describe('calculated parameters', () => {
   it('chains in dependency order regardless of list position, using reported figures', () => {
-    const params = [
-      calc('UTS', 'L / A', { L: 'LOAD', A: 'AREA' }, [lim('470', '630')]),
-      calc('AREA', 'w * t', { w: 'W', t: 'T' }, [], 3),
-      num('W'), num('T'), num('LOAD', [], 0),
-    ];
+    const params = [calc('UTS', 'L / A', { L: 'LOAD', A: 'AREA' }, [lim('470', '630')]), calc('AREA', 'w * t', { w: 'W', t: 'T' }, [], 3), num('W'), num('T'), num('LOAD', [], 0)];
     const r = byId(computeResults(params, { W: '12.5', T: '10', LOAD: '62500' }));
     expect(r.AREA.numericValue).toBe('125.000');
     expect(r.UTS.numericValue).toBe('500.00');
@@ -70,7 +73,18 @@ describe('calculated parameters', () => {
 });
 
 describe('non-numeric results', () => {
-  const set: ParamRow = { parameterId: 'S', code: 'S', kind: 'RESULT_SET', decimals: 0, limits: [], options: [{ value: 'Complies', isPass: true }, { value: 'Does not comply', isPass: false }, { value: 'N/A', isPass: null }] };
+  const set: ParamRow = {
+    parameterId: 'S',
+    code: 'S',
+    kind: 'RESULT_SET',
+    decimals: 0,
+    limits: [],
+    options: [
+      { value: 'Complies', isPass: true },
+      { value: 'Does not comply', isPass: false },
+      { value: 'N/A', isPass: null },
+    ],
+  };
   it('takes pass/fail from the selected option', () => {
     expect(byId(computeResults([set], { S: 'Complies' })).S).toMatchObject({ textValue: 'Complies', passPrimary: true });
     expect(byId(computeResults([set], { S: 'Does not comply' })).S.passPrimary).toBe(false);

@@ -57,7 +57,10 @@ export class CancellationsService {
     const sampleRows = await this.prisma.sample.findMany({ where: { id: { in: sampleIds } }, select: { id: true, sampleNo: true } });
     const nos = new Map(sampleRows.map((s) => [s.id, s.sampleNo]));
     const reports = await this.prisma.report.findMany({ where: { sampleId: { in: sampleIds } }, include: { revisions: { orderBy: { revisionNo: 'desc' } } } });
-    const lines = await this.prisma.invoiceLine.findMany({ where: { sampleTestId: { in: tests.map((t) => t.id) }, invoice: { status: { not: 'CANCELLED' } } }, include: { invoice: { select: { id: true, invoiceNo: true, status: true } } } });
+    const lines = await this.prisma.invoiceLine.findMany({
+      where: { sampleTestId: { in: tests.map((t) => t.id) }, invoice: { status: { not: 'CANCELLED' } } },
+      include: { invoice: { select: { id: true, invoiceNo: true, status: true } } },
+    });
     const blockers: string[] = [];
     const issued = reports.filter((r) => r.revisions.some((v) => ['APPROVED', 'ISSUED'].includes(v.status)));
     if (dto.type === 'test') {
@@ -75,7 +78,9 @@ export class CancellationsService {
       tests: tests.map((t) => ({ id: t.id, sampleNo: nos.get(t.sampleId) ?? '', testName: t.testName, status: t.status })),
       reports: reports.map((r) => ({ id: r.id, reportNo: r.reportNo, status: r.revisions[0].status })),
       draftInvoiceLines: can('invoices.view') ? lines.filter((l) => l.invoice.status === 'DRAFT').map((l) => ({ invoiceId: l.invoice.id, description: l.description })) : [],
-      issuedInvoiceLines: can('invoices.view') ? lines.filter((l) => l.invoice.status !== 'DRAFT').map((l) => ({ invoiceId: l.invoice.id, invoiceNo: l.invoice.invoiceNo, description: l.description })) : [],
+      issuedInvoiceLines: can('invoices.view')
+        ? lines.filter((l) => l.invoice.status !== 'DRAFT').map((l) => ({ invoiceId: l.invoice.id, invoiceNo: l.invoice.invoiceNo, description: l.description }))
+        : [],
     };
   }
 
@@ -94,11 +99,17 @@ export class CancellationsService {
       if (dto.type === 'job') {
         const job = await tx.job.findUniqueOrThrow({ where: { id: dto.id } });
         assertTransition(JOB, job.status, 'CANCELLED', dto.reason);
-        const { count } = await tx.job.updateMany({ where: { id: dto.id, version: dto.version }, data: { status: 'CANCELLED', cancelReason: dto.reason, holdReason: null, statusBeforeHold: null, version: { increment: 1 } } });
+        const { count } = await tx.job.updateMany({
+          where: { id: dto.id, version: dto.version },
+          data: { status: 'CANCELLED', cancelReason: dto.reason, holdReason: null, statusBeforeHold: null, version: { increment: 1 } },
+        });
         if (count !== 1) throw conflict();
         await this.audit.status(tx, { entity: 'Job', entityId: dto.id, from: job.status, to: 'CANCELLED', reason: dto.reason, jobId });
       } else if (dto.type === 'sample') {
-        const { count } = await tx.sample.updateMany({ where: { id: dto.id, version: dto.version, status: { not: 'CANCELLED' } }, data: { status: 'CANCELLED', cancelReason: dto.reason, version: { increment: 1 } } });
+        const { count } = await tx.sample.updateMany({
+          where: { id: dto.id, version: dto.version, status: { not: 'CANCELLED' } },
+          data: { status: 'CANCELLED', cancelReason: dto.reason, version: { increment: 1 } },
+        });
         if (count !== 1) throw conflict();
         await this.audit.status(tx, { entity: 'Sample', entityId: dto.id, from: samples[0].status, to: 'CANCELLED', reason: dto.reason, jobId });
       }
@@ -116,8 +127,20 @@ export class CancellationsService {
         }
         await this.audit.status(tx, { entity: 'SampleTest', entityId: t.id, from: t.status, to: 'CANCELLED', reason: dto.reason, jobId });
       }
-      await this.invoices.removeFromDrafts(tx, tests.map((t) => t.id));
-      await this.audit.record({ action: 'Cancellation', entity: dto.type === 'job' ? 'Job' : dto.type === 'sample' ? 'Sample' : 'SampleTest', entityId: dto.id, after: { by: currentUser()?.name, tests: tests.length }, reason: dto.reason }, tx);
+      await this.invoices.removeFromDrafts(
+        tx,
+        tests.map((t) => t.id),
+      );
+      await this.audit.record(
+        {
+          action: 'Cancellation',
+          entity: dto.type === 'job' ? 'Job' : dto.type === 'sample' ? 'Sample' : 'SampleTest',
+          entityId: dto.id,
+          after: { by: currentUser()?.name, tests: tests.length },
+          reason: dto.reason,
+        },
+        tx,
+      );
       if (dto.type !== 'job') await this.jobs.syncStatus(tx, jobId);
       // Cancelling a sample's last open test, with the rest approved, makes it ready for its report.
       if (dto.type === 'test') {

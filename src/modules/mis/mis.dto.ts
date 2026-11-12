@@ -13,10 +13,23 @@ export class MisQuery extends PageQuery {
   @IsOptional() @IsString() @MaxLength(200) stage?: string;
 }
 
-export class MisColumnDto { key: string; label: string; type: string; }
-export class MisCatalogItemDto { key: string; no: number; title: string; group: string; filters: string[]; columns: MisColumnDto[]; }
+export class MisColumnDto {
+  key: string;
+  label: string;
+  type: string;
+}
+export class MisCatalogItemDto {
+  key: string;
+  no: number;
+  title: string;
+  group: string;
+  filters: string[];
+  columns: MisColumnDto[];
+}
 export class MisResultDto {
-  key: string; title: string; columns: MisColumnDto[];
+  key: string;
+  title: string;
+  columns: MisColumnDto[];
   /** each row is keyed by column key */
   data: Record<string, unknown>[];
   meta: PageMetaDto;

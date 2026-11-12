@@ -7,12 +7,7 @@ import { Decimal } from 'decimal.js';
 
 export class FormulaError extends Error {}
 
-type Node =
-  | { t: 'num'; v: string }
-  | { t: 'var'; name: string }
-  | { t: 'neg'; a: Node }
-  | { t: 'bin'; op: '+' | '-' | '*' | '/' | '^'; a: Node; b: Node }
-  | { t: 'call'; name: string; args: Node[] };
+type Node = { t: 'num'; v: string } | { t: 'var'; name: string } | { t: 'neg'; a: Node } | { t: 'bin'; op: '+' | '-' | '*' | '/' | '^'; a: Node; b: Node } | { t: 'call'; name: string; args: Node[] };
 
 type Token = { k: 'num' | 'id' | 'op'; v: string; at: number };
 

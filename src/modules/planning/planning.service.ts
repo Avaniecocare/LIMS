@@ -24,8 +24,25 @@ const rowInclude = {
 type Row = Prisma.SampleTestGetPayload<{ include: typeof rowInclude }>;
 
 const toRow = (t: Row) => ({
-  id: t.id, sampleId: t.sampleId, sampleNo: t.sample.sampleNo, sampleDescription: t.sample.description, jobId: t.sample.jobId, jobNo: t.sample.job.jobNo, testId: t.testId, testCode: t.testCode, testName: t.testName, methodName: t.methodName, status: t.status, urgent: t.urgent,
-  planned: !!t.plannedAt, dueDate: t.dueDate, assignedToId: t.assignedToId, assignedToName: t.assignedTo?.name ?? null, instrumentId: t.instrumentId, instrumentName: t.instrument?.name ?? null, version: t.version,
+  id: t.id,
+  sampleId: t.sampleId,
+  sampleNo: t.sample.sampleNo,
+  sampleDescription: t.sample.description,
+  jobId: t.sample.jobId,
+  jobNo: t.sample.job.jobNo,
+  testId: t.testId,
+  testCode: t.testCode,
+  testName: t.testName,
+  methodName: t.methodName,
+  status: t.status,
+  urgent: t.urgent,
+  planned: !!t.plannedAt,
+  dueDate: t.dueDate,
+  assignedToId: t.assignedToId,
+  assignedToName: t.assignedTo?.name ?? null,
+  instrumentId: t.instrumentId,
+  instrumentName: t.instrument?.name ?? null,
+  version: t.version,
 });
 
 /** A method and parameter must both be in scope and unexpired on the given date. */
@@ -61,14 +78,32 @@ export class PlanningService implements OnModuleInit {
       where: { id: jobId },
       include: {
         customer: { select: { name: true } },
-        samples: { include: { tests: { where: { deletedAt: null, status: { not: 'CANCELLED' }, plannedAt: { not: null } }, include: { assignedTo: { select: { name: true } }, instrument: { select: { name: true } }, results: { orderBy: { sortOrder: 'asc' } }, stages: { orderBy: { seq: 'asc' } } } } } },
+        samples: {
+          include: {
+            tests: {
+              where: { deletedAt: null, status: { not: 'CANCELLED' }, plannedAt: { not: null } },
+              include: { assignedTo: { select: { name: true } }, instrument: { select: { name: true } }, results: { orderBy: { sortOrder: 'asc' } }, stages: { orderBy: { seq: 'asc' } } },
+            },
+          },
+        },
       },
     });
     const impartial = await this.settings.get('controls.impartiality');
     const tests = job.samples.flatMap((s) =>
       s.tests.map((t) => ({
-        testName: t.testName, methodName: t.methodName, sampleNo: s.sampleNo, sampleDescription: s.description, dueDate: t.dueDate, urgent: t.urgent, assignee: t.assignedTo?.name ?? null, instrument: t.instrument?.name ?? null, analysisMode: t.analysisMode, officeInstructions: t.officeInstructions, technicalData: t.technicalData,
-        parameters: t.results.map((r) => r.name), stages: t.stages.map((x) => x.name),
+        testName: t.testName,
+        methodName: t.methodName,
+        sampleNo: s.sampleNo,
+        sampleDescription: s.description,
+        dueDate: t.dueDate,
+        urgent: t.urgent,
+        assignee: t.assignedTo?.name ?? null,
+        instrument: t.instrument?.name ?? null,
+        analysisMode: t.analysisMode,
+        officeInstructions: t.officeInstructions,
+        technicalData: t.technicalData,
+        parameters: t.results.map((r) => r.name),
+        stages: t.stages.map((x) => x.name),
       })),
     );
     const company = this.company.snapshot();
@@ -95,9 +130,18 @@ export class PlanningService implements OnModuleInit {
         if (i.parameterId) params.set(i.testId, (params.get(i.testId) ?? new Set()).add(i.parameterId));
       }
     }
-    const tests = await this.prisma.testMaster.findMany({ where: { id: { in: [...testIds] }, deletedAt: null, isActive: true }, include: { method: true, parameters: { where: { deletedAt: null, isActive: true }, orderBy: { sortOrder: 'asc' } } }, orderBy: { name: 'asc' } });
+    const tests = await this.prisma.testMaster.findMany({
+      where: { id: { in: [...testIds] }, deletedAt: null, isActive: true },
+      include: { method: true, parameters: { where: { deletedAt: null, isActive: true }, orderBy: { sortOrder: 'asc' } } },
+      orderBy: { name: 'asc' },
+    });
     return tests.map((t) => ({
-      testId: t.id, testCode: t.code, testName: t.name, methodName: methodLabel(t.method), category: t.category, defaultTatDays: t.defaultTatDays,
+      testId: t.id,
+      testCode: t.code,
+      testName: t.name,
+      methodName: methodLabel(t.method),
+      category: t.category,
+      defaultTatDays: t.defaultTatDays,
       parameters: t.parameters.map((p) => ({ id: p.id, code: p.code, name: p.name })),
     }));
   }
@@ -119,12 +163,26 @@ export class PlanningService implements OnModuleInit {
         .map((id, i) => {
           const spec = specs.find((s) => s.id === id)!;
           const l = spec.limits.find((x) => x.parameterId === p.id);
-          return l ? { spec: spec.code, role: i === 0 ? 'primary' : 'dual', min: l.minValue === null ? null : String(l.minValue), max: l.maxValue === null ? null : String(l.maxValue), text: l.textLimit } : null;
+          return l
+            ? { spec: spec.code, role: i === 0 ? 'primary' : 'dual', min: l.minValue === null ? null : String(l.minValue), max: l.maxValue === null ? null : String(l.maxValue), text: l.textLimit }
+            : null;
         })
         .filter(Boolean);
       await tx.parameterResult.upsert({
         where: { sampleTestId_parameterId: { sampleTestId, parameterId: p.id } },
-        create: { sampleTestId, parameterId: p.id, code: p.code, name: p.name, kind: p.kind, unit: p.unit?.symbol ?? null, decimals: p.decimals, sortOrder: p.sortOrder, showOnReport: p.showOnReport, accredited: methodAccredited && isAccredited(p.accredited, p.accreditedUntil, today), limits: limits as Prisma.InputJsonValue },
+        create: {
+          sampleTestId,
+          parameterId: p.id,
+          code: p.code,
+          name: p.name,
+          kind: p.kind,
+          unit: p.unit?.symbol ?? null,
+          decimals: p.decimals,
+          sortOrder: p.sortOrder,
+          showOnReport: p.showOnReport,
+          accredited: methodAccredited && isAccredited(p.accredited, p.accreditedUntil, today),
+          limits: limits as Prisma.InputJsonValue,
+        },
         update: { limits: limits as Prisma.InputJsonValue, showOnReport: p.showOnReport },
       });
     }
@@ -140,7 +198,8 @@ export class PlanningService implements OnModuleInit {
       const job = samples[0].job;
       if (['ON_HOLD', 'CANCELLED', 'COMPLETED'].includes(job.status)) throw rule('JOB_NOT_PLANNABLE', `This job is ${job.status.toLowerCase().replace('_', ' ')} and cannot be planned`);
       if (samples.some((s) => s.status === 'CANCELLED')) throw rule('SAMPLE_CANCELLED', 'A cancelled sample cannot be planned');
-      if (dto.dualSpecificationId && dto.dualSpecificationId === dto.specificationId) throw badRequest('Choose two different grades for dual grade', [{ field: 'dualSpecificationId', message: 'Must differ from the first grade' }]);
+      if (dto.dualSpecificationId && dto.dualSpecificationId === dto.specificationId)
+        throw badRequest('Choose two different grades for dual grade', [{ field: 'dualSpecificationId', message: 'Must differ from the first grade' }]);
       const planNo = await this.numbering.next(tx, 'PLAN');
       const plan = await tx.plan.create({ data: { planNo, jobId: job.id, notes: dto.notes, createdById: actorId() } });
       const ids: string[] = [];
@@ -150,7 +209,8 @@ export class PlanningService implements OnModuleInit {
         for (const t of dto.tests) {
           const master = await tx.testMaster.findFirst({ where: { id: t.testId, deletedAt: null }, include: { method: true } });
           if (!master) throw badRequest('A selected test no longer exists', [{ field: 'tests', message: 'Unknown test' }]);
-          if (t.analysisMode && master.category !== 'CHEMICAL') throw badRequest(`Spectro or Wet applies to chemical tests only (${master.name})`, [{ field: 'tests', message: 'Analysis mode is for chemical tests' }]);
+          if (t.analysisMode && master.category !== 'CHEMICAL')
+            throw badRequest(`Spectro or Wet applies to chemical tests only (${master.name})`, [{ field: 'tests', message: 'Analysis mode is for chemical tests' }]);
           let row = await tx.sampleTest.findFirst({ where: { sampleId: sample.id, testId: t.testId, deletedAt: null, status: { not: 'CANCELLED' } } });
           if (row?.plannedAt) throw rule('ALREADY_PLANNED', `${master.name} is already planned on ${sample.sampleNo}`);
           if (!row) {
@@ -161,7 +221,20 @@ export class PlanningService implements OnModuleInit {
           const dueDate = await this.dueDate(tx, master, job.urgent, today);
           await tx.sampleTest.update({
             where: { id: row.id },
-            data: { planId: plan.id, plannedAt: new Date(), analysisMode: t.analysisMode ?? null, officeInstructions: t.officeInstructions ?? null, technicalData: t.technicalData ?? null, specificationId: dto.specificationId ?? null, dualSpecificationId: dto.dualSpecificationId ?? null, dueDate, urgent: job.urgent, instrumentId: t.instrumentId ?? null, currentStage: stages[0], version: { increment: 1 } },
+            data: {
+              planId: plan.id,
+              plannedAt: new Date(),
+              analysisMode: t.analysisMode ?? null,
+              officeInstructions: t.officeInstructions ?? null,
+              technicalData: t.technicalData ?? null,
+              specificationId: dto.specificationId ?? null,
+              dualSpecificationId: dto.dualSpecificationId ?? null,
+              dueDate,
+              urgent: job.urgent,
+              instrumentId: t.instrumentId ?? null,
+              currentStage: stages[0],
+              version: { increment: 1 },
+            },
           });
           await tx.sampleTestStage.createMany({ data: stages.map((name, seq) => ({ sampleTestId: row!.id, seq, name })) });
           const methodOk = master.method ? isAccredited(master.method.accredited, master.method.accreditedUntil, today) : false;
@@ -236,7 +309,15 @@ export class PlanningService implements OnModuleInit {
       ...(view === 'unplanned' ? { plannedAt: null } : view === 'unassigned' ? { plannedAt: { not: null }, status: 'PLANNED' } : { status: { in: ['ASSIGNED', 'IN_PROGRESS', 'ON_HOLD'] } }),
       ...(q.departmentId ? { departmentId: q.departmentId } : {}),
       ...(q.assignedToId ? { assignedToId: q.assignedToId } : {}),
-      ...(q.q ? { OR: [{ testName: { contains: q.q, mode: 'insensitive' } }, { sample: { sampleNo: { contains: q.q, mode: 'insensitive' } } }, { sample: { job: { jobNo: { contains: q.q, mode: 'insensitive' } } } }] } : {}),
+      ...(q.q
+        ? {
+            OR: [
+              { testName: { contains: q.q, mode: 'insensitive' } },
+              { sample: { sampleNo: { contains: q.q, mode: 'insensitive' } } },
+              { sample: { job: { jobNo: { contains: q.q, mode: 'insensitive' } } } },
+            ],
+          }
+        : {}),
     };
     const [rows, total] = await Promise.all([
       this.prisma.sampleTest.findMany({ where, include: rowInclude, orderBy: [{ urgent: 'desc' }, orderBy(q, ['dueDate', 'createdAt', 'testName'], 'createdAt', 'asc')], ...skipTake(q) }),
@@ -288,6 +369,13 @@ export class PlanningService implements OnModuleInit {
   async instruments() {
     const rows = await this.prisma.instrument.findMany({ where: { isActive: true, deletedAt: null }, orderBy: { name: 'asc' } });
     const today = istToday();
-    return rows.map((r) => ({ id: r.id, code: r.code, name: r.name, departmentId: r.departmentId, calibrationDueAt: r.calibrationDueAt, calibrationOverdue: !!r.calibrationDueAt && r.calibrationDueAt < today }));
+    return rows.map((r) => ({
+      id: r.id,
+      code: r.code,
+      name: r.name,
+      departmentId: r.departmentId,
+      calibrationDueAt: r.calibrationDueAt,
+      calibrationOverdue: !!r.calibrationDueAt && r.calibrationDueAt < today,
+    }));
   }
 }

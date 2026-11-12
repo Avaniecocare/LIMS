@@ -12,12 +12,16 @@ export class CancellationsController {
   constructor(private readonly cancellations: CancellationsService) {}
 
   /** The downstream effect, shown before confirming. */
-  @Post('preview') @HttpCode(200) @ApiOkResponse({ type: CancelImpactDto })
+  @Post('preview')
+  @HttpCode(200)
+  @ApiOkResponse({ type: CancelImpactDto })
   preview(@Body() dto: CancelPreviewDto) {
     return this.cancellations.preview(dto);
   }
 
-  @Post() @HttpCode(200) @ApiOkResponse({ type: OkDto })
+  @Post()
+  @HttpCode(200)
+  @ApiOkResponse({ type: OkDto })
   cancel(@Body() dto: CancelDto) {
     return this.cancellations.cancel(dto);
   }

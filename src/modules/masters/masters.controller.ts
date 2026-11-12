@@ -46,38 +46,55 @@ function masterController(key: string): Type<unknown> {
   class C {
     constructor(readonly masters: MastersService) {}
 
-    @Get() @Perm(def.view) @ApiOkResponse({ type: types.page })
+    @Get()
+    @Perm(def.view)
+    @ApiOkResponse({ type: types.page })
     list(@Query() q: D.MasterQuery) {
       return this.masters.list(key, q);
     }
 
-    @Get(':id') @Perm(def.view) @ApiOkResponse({ type: types.dto })
+    @Get(':id')
+    @Perm(def.view)
+    @ApiOkResponse({ type: types.dto })
     get(@Param('id', ParseUUIDPipe) id: string) {
       return this.masters.get(key, id);
     }
 
-    @Post() @Perm(def.edit) @ApiBody({ type: types.input }) @ApiOkResponse({ type: types.dto })
+    @Post()
+    @Perm(def.edit)
+    @ApiBody({ type: types.input })
+    @ApiOkResponse({ type: types.dto })
     create(@Body(pipe(types.input)) body: object) {
       return this.masters.create(key, body);
     }
 
-    @Patch(':id') @Perm(def.edit) @ApiBody({ type: types.input }) @ApiOkResponse({ type: types.dto })
+    @Patch(':id')
+    @Perm(def.edit)
+    @ApiBody({ type: types.input })
+    @ApiOkResponse({ type: types.dto })
     update(@Param('id', ParseUUIDPipe) id: string, @Body(pipe(types.input)) body: object) {
       return this.masters.update(key, id, body);
     }
 
-    @Delete(':id') @Perm(def.edit) @ApiOkResponse({ type: OkDto })
+    @Delete(':id')
+    @Perm(def.edit)
+    @ApiOkResponse({ type: OkDto })
     async remove(@Param('id', ParseUUIDPipe) id: string) {
       await this.masters.remove(key, id);
       return { ok: true };
     }
 
-    @Get(':id/history') @Perm(def.view) @ApiOkResponse({ type: [D.HistoryEntryDto] })
+    @Get(':id/history')
+    @Perm(def.view)
+    @ApiOkResponse({ type: [D.HistoryEntryDto] })
     history(@Param('id', ParseUUIDPipe) id: string) {
       return this.masters.history(key, id);
     }
 
-    @Post('import') @HttpCode(200) @Perm(def.edit) @ApiConsumes('multipart/form-data')
+    @Post('import')
+    @HttpCode(200)
+    @Perm(def.edit)
+    @ApiConsumes('multipart/form-data')
     @ApiBody({ schema: { type: 'object', required: ['file'], properties: { file: { type: 'string', format: 'binary' } } } })
     @ApiOkResponse({ type: D.ImportResultDto })
     async importFile(@Req() req: FastifyRequest) {
@@ -98,18 +115,26 @@ export class MasterToolsController {
   constructor(private readonly masters: MastersService) {}
 
   /** Test console for the formula master; also validates the expression. */
-  @Post('formula-console') @HttpCode(200) @Perm('masters.view') @ApiOkResponse({ type: D.FormulaTestResultDto })
+  @Post('formula-console')
+  @HttpCode(200)
+  @Perm('masters.view')
+  @ApiOkResponse({ type: D.FormulaTestResultDto })
   formulaConsole(@Body() dto: D.FormulaTestInput) {
     return this.masters.testFormula(dto);
   }
 
-  @Post('convert') @HttpCode(200) @Perm('masters.view', 'tests.work') @ApiOkResponse({ type: D.ConvertResultDto })
+  @Post('convert')
+  @HttpCode(200)
+  @Perm('masters.view', 'tests.work')
+  @ApiOkResponse({ type: D.ConvertResultDto })
   convert(@Body() dto: D.ConvertInput) {
     return this.masters.convert(dto);
   }
 
   /** Rate priority check: customer rate, then standard rate. */
-  @Get('rate-lookup') @Perm('rates.view') @ApiOkResponse({ type: D.RateLookupDto })
+  @Get('rate-lookup')
+  @Perm('rates.view')
+  @ApiOkResponse({ type: D.RateLookupDto })
   rateLookup(@Query() q: D.RateLookupQuery) {
     return this.masters.lookupRate(q.testId, q.customerId, q.on ? new Date(q.on) : undefined);
   }

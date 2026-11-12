@@ -32,7 +32,16 @@ type TestSeed = {
   dept: string;
   method?: string;
   rate: string;
-  params: { code: string; name: string; kind?: 'NUMERIC' | 'TEXT' | 'RESULT_SET' | 'CALCULATED'; unit?: string; decimals?: number; formula?: string; bindings?: Record<string, string>; resultSet?: string }[];
+  params: {
+    code: string;
+    name: string;
+    kind?: 'NUMERIC' | 'TEXT' | 'RESULT_SET' | 'CALCULATED';
+    unit?: string;
+    decimals?: number;
+    formula?: string;
+    bindings?: Record<string, string>;
+    resultSet?: string;
+  }[];
 };
 
 const METHODS: [string, string, string][] = [
@@ -48,12 +57,36 @@ const METHODS: [string, string, string][] = [
 ];
 
 const TESTS: TestSeed[] = [
-  { code: 'APP', name: 'Appearance (Visual)', category: 'PHYSICAL', dept: 'CHEM', method: 'VISUAL', rate: '550', params: [{ code: 'APPEAR', name: 'Appearance', kind: 'RESULT_SET', resultSet: 'APPEARANCE' }] },
+  {
+    code: 'APP',
+    name: 'Appearance (Visual)',
+    category: 'PHYSICAL',
+    dept: 'CHEM',
+    method: 'VISUAL',
+    rate: '550',
+    params: [{ code: 'APPEAR', name: 'Appearance', kind: 'RESULT_SET', resultSet: 'APPEARANCE' }],
+  },
   { code: 'DEN', name: 'Density', category: 'PHYSICAL', dept: 'CHEM', method: 'IS1448-16', rate: '550', params: [{ code: 'DENSITY', name: 'Density at 15°C', unit: 'GCM3', decimals: 4 }] },
   { code: 'FP', name: 'Flash Point (COC)', category: 'PHYSICAL', dept: 'CHEM', method: 'IS1448-69', rate: '1100', params: [{ code: 'FLASH', name: 'Flash point', unit: 'CEL', decimals: 1 }] },
-  { code: 'KV40', name: 'Kinematic Viscosity at 40°C', category: 'PHYSICAL', dept: 'CHEM', method: 'IS1448-25', rate: '550', params: [{ code: 'KV', name: 'Kinematic viscosity at 40°C', unit: 'CST', decimals: 2 }] },
+  {
+    code: 'KV40',
+    name: 'Kinematic Viscosity at 40°C',
+    category: 'PHYSICAL',
+    dept: 'CHEM',
+    method: 'IS1448-25',
+    rate: '550',
+    params: [{ code: 'KV', name: 'Kinematic viscosity at 40°C', unit: 'CST', decimals: 2 }],
+  },
   { code: 'GCMS', name: 'Qualitative Analysis (GC-MSD)', category: 'CHEMICAL', dept: 'CHEM', method: 'GCMSD', rate: '10450', params: [{ code: 'QUAL', name: 'Qualitative result', kind: 'TEXT' }] },
-  { code: 'MOIST', name: 'Moisture content', category: 'CHEMICAL', dept: 'CHEM', method: 'ISO15512', rate: '850', params: [{ code: 'WATER', name: 'Moisture, % by mass', unit: 'PCT_MASS', decimals: 3 }] },
+  {
+    code: 'MOIST',
+    name: 'Moisture content',
+    category: 'CHEMICAL',
+    dept: 'CHEM',
+    method: 'ISO15512',
+    rate: '850',
+    params: [{ code: 'WATER', name: 'Moisture, % by mass', unit: 'PCT_MASS', decimals: 3 }],
+  },
   {
     code: 'CHEM-LAS',
     name: 'Chemical analysis, low alloy steel',
@@ -62,8 +95,14 @@ const TESTS: TestSeed[] = [
     method: 'ASTM-E415',
     rate: '1800',
     params: [
-      { code: 'C', name: 'Carbon', unit: 'PCT', decimals: 3 }, { code: 'Mn', name: 'Manganese', unit: 'PCT', decimals: 3 }, { code: 'Cr', name: 'Chromium', unit: 'PCT', decimals: 3 }, { code: 'Mo', name: 'Molybdenum', unit: 'PCT', decimals: 3 },
-      { code: 'V', name: 'Vanadium', unit: 'PCT', decimals: 3 }, { code: 'Ni', name: 'Nickel', unit: 'PCT', decimals: 3 }, { code: 'Cu', name: 'Copper', unit: 'PCT', decimals: 3 }, { code: 'N', name: 'Nitrogen', unit: 'PCT', decimals: 3 },
+      { code: 'C', name: 'Carbon', unit: 'PCT', decimals: 3 },
+      { code: 'Mn', name: 'Manganese', unit: 'PCT', decimals: 3 },
+      { code: 'Cr', name: 'Chromium', unit: 'PCT', decimals: 3 },
+      { code: 'Mo', name: 'Molybdenum', unit: 'PCT', decimals: 3 },
+      { code: 'V', name: 'Vanadium', unit: 'PCT', decimals: 3 },
+      { code: 'Ni', name: 'Nickel', unit: 'PCT', decimals: 3 },
+      { code: 'Cu', name: 'Copper', unit: 'PCT', decimals: 3 },
+      { code: 'N', name: 'Nitrogen', unit: 'PCT', decimals: 3 },
       { code: 'CE', name: 'Carbon equivalent (IIW)', kind: 'CALCULATED', decimals: 3, formula: 'CE_IIW', bindings: { C: 'C', Mn: 'Mn', Cr: 'Cr', Mo: 'Mo', V: 'V', Ni: 'Ni', Cu: 'Cu' } },
       { code: 'PREN', name: 'PREN', kind: 'CALCULATED', decimals: 2, formula: 'PREN', bindings: { Cr: 'Cr', Mo: 'Mo', N: 'N' } },
       { code: 'OTHERS', name: 'Sum of analysed elements', unit: 'PCT', decimals: 3 },
@@ -78,10 +117,14 @@ const TESTS: TestSeed[] = [
     method: 'ASTM-E8',
     rate: '1500',
     params: [
-      { code: 'WIDTH', name: 'Width', unit: 'MM', decimals: 2 }, { code: 'THICK', name: 'Thickness', unit: 'MM', decimals: 2 },
+      { code: 'WIDTH', name: 'Width', unit: 'MM', decimals: 2 },
+      { code: 'THICK', name: 'Thickness', unit: 'MM', decimals: 2 },
       { code: 'A0', name: 'Original area', kind: 'CALCULATED', unit: 'MM2', decimals: 3, formula: 'AREA_RECT', bindings: { width: 'WIDTH', thickness: 'THICK' } },
-      { code: 'Af', name: 'Final area', unit: 'MM2', decimals: 3 }, { code: 'LOAD', name: 'Maximum load', unit: 'N', decimals: 0 }, { code: 'PROOFLOAD', name: 'Load at proof', unit: 'N', decimals: 0 },
-      { code: 'L0', name: 'Original gauge length', unit: 'MM', decimals: 2 }, { code: 'Lf', name: 'Final gauge length', unit: 'MM', decimals: 2 },
+      { code: 'Af', name: 'Final area', unit: 'MM2', decimals: 3 },
+      { code: 'LOAD', name: 'Maximum load', unit: 'N', decimals: 0 },
+      { code: 'PROOFLOAD', name: 'Load at proof', unit: 'N', decimals: 0 },
+      { code: 'L0', name: 'Original gauge length', unit: 'MM', decimals: 2 },
+      { code: 'Lf', name: 'Final gauge length', unit: 'MM', decimals: 2 },
       { code: 'UTS', name: 'Ultimate tensile strength', kind: 'CALCULATED', unit: 'MPA', decimals: 2, formula: 'UTS', bindings: { max_load: 'LOAD', original_area: 'A0' } },
       { code: 'PROOF', name: '0.2% proof stress', kind: 'CALCULATED', unit: 'MPA', decimals: 2, formula: 'PROOF', bindings: { load_at_proof: 'PROOFLOAD', original_area: 'A0' } },
       { code: 'ROA', name: 'Reduction of area', kind: 'CALCULATED', unit: 'PCT', decimals: 2, formula: 'ROA', bindings: { A0: 'A0', Af: 'Af' } },
@@ -96,7 +139,9 @@ const TESTS: TestSeed[] = [
     method: 'ASTM-E23',
     rate: '900',
     params: [
-      { code: 'a', name: 'Impact energy 1', unit: 'J', decimals: 1 }, { code: 'b', name: 'Impact energy 2', unit: 'J', decimals: 1 }, { code: 'c', name: 'Impact energy 3', unit: 'J', decimals: 1 },
+      { code: 'a', name: 'Impact energy 1', unit: 'J', decimals: 1 },
+      { code: 'b', name: 'Impact energy 2', unit: 'J', decimals: 1 },
+      { code: 'c', name: 'Impact energy 3', unit: 'J', decimals: 1 },
       { code: 'AVG', name: 'Average impact energy', kind: 'CALCULATED', unit: 'J', decimals: 1, formula: 'AVERAGE3', bindings: { a: 'a', b: 'b', c: 'c' } },
     ],
   },
@@ -126,7 +171,10 @@ export async function seedDemo(prisma: PrismaClient): Promise<void> {
       for (const name of Object.keys(DEFAULT_ROLES)) if (!roles.has(name)) throw new Error(`Role ${name} is missing; start the API once first`);
 
       const depts = new Map<string, string>();
-      for (const [code, name] of [['CHEM', 'Chemical'], ['MET', 'Metallurgy']] as const) {
+      for (const [code, name] of [
+        ['CHEM', 'Chemical'],
+        ['MET', 'Metallurgy'],
+      ] as const) {
         depts.set(code, (await tx.department.create({ data: { code, name, isDemo: true } })).id);
       }
       for (const [username, name, role, designation] of USERS) {
@@ -155,7 +203,16 @@ export async function seedDemo(prisma: PrismaClient): Promise<void> {
       const testIds = new Map<string, string>();
       for (const t of TESTS) {
         const test = await tx.testMaster.create({
-          data: { code: t.code, name: t.name, category: t.category, departmentId: depts.get(t.dept), methodId: t.method ? methods.get(t.method) : undefined, defaultTatDays: 5, urgentTatDays: 2, isDemo: true },
+          data: {
+            code: t.code,
+            name: t.name,
+            category: t.category,
+            departmentId: depts.get(t.dept),
+            methodId: t.method ? methods.get(t.method) : undefined,
+            defaultTatDays: 5,
+            urgentTatDays: 2,
+            isDemo: true,
+          },
         });
         testIds.set(t.code, test.id);
         await tx.standardRate.create({ data: { testId: test.id, rate: t.rate, effectiveFrom: start, isDemo: true } });
@@ -213,11 +270,51 @@ export async function seedDemo(prisma: PrismaClient): Promise<void> {
 
       await tx.instrument.createMany({
         data: [
-          { code: 'SPEC-01', name: 'Optical emission spectrometer (demo)', serialNo: 'DEMO-001', departmentId: depts.get('MET'), lastCalibratedAt: addDays(today(), -100), calibrationDueAt: addDays(today(), 265), isDemo: true },
-          { code: 'UTM-01', name: 'Universal testing machine (demo)', serialNo: 'DEMO-002', departmentId: depts.get('MET'), lastCalibratedAt: addDays(today(), -350), calibrationDueAt: addDays(today(), 15), isDemo: true },
-          { code: 'IMP-01', name: 'Impact tester (demo)', serialNo: 'DEMO-003', departmentId: depts.get('MET'), lastCalibratedAt: addDays(today(), -400), calibrationDueAt: addDays(today(), -35), isDemo: true },
-          { code: 'GC-01', name: 'GC-MSD (demo)', serialNo: 'DEMO-004', departmentId: depts.get('CHEM'), lastCalibratedAt: addDays(today(), -50), calibrationDueAt: addDays(today(), 315), isDemo: true },
-          { code: 'VISC-01', name: 'Viscometer bath (demo)', serialNo: 'DEMO-005', departmentId: depts.get('CHEM'), lastCalibratedAt: addDays(today(), -50), calibrationDueAt: addDays(today(), 315), isDemo: true },
+          {
+            code: 'SPEC-01',
+            name: 'Optical emission spectrometer (demo)',
+            serialNo: 'DEMO-001',
+            departmentId: depts.get('MET'),
+            lastCalibratedAt: addDays(today(), -100),
+            calibrationDueAt: addDays(today(), 265),
+            isDemo: true,
+          },
+          {
+            code: 'UTM-01',
+            name: 'Universal testing machine (demo)',
+            serialNo: 'DEMO-002',
+            departmentId: depts.get('MET'),
+            lastCalibratedAt: addDays(today(), -350),
+            calibrationDueAt: addDays(today(), 15),
+            isDemo: true,
+          },
+          {
+            code: 'IMP-01',
+            name: 'Impact tester (demo)',
+            serialNo: 'DEMO-003',
+            departmentId: depts.get('MET'),
+            lastCalibratedAt: addDays(today(), -400),
+            calibrationDueAt: addDays(today(), -35),
+            isDemo: true,
+          },
+          {
+            code: 'GC-01',
+            name: 'GC-MSD (demo)',
+            serialNo: 'DEMO-004',
+            departmentId: depts.get('CHEM'),
+            lastCalibratedAt: addDays(today(), -50),
+            calibrationDueAt: addDays(today(), 315),
+            isDemo: true,
+          },
+          {
+            code: 'VISC-01',
+            name: 'Viscometer bath (demo)',
+            serialNo: 'DEMO-005',
+            departmentId: depts.get('CHEM'),
+            lastCalibratedAt: addDays(today(), -50),
+            calibrationDueAt: addDays(today(), 315),
+            isDemo: true,
+          },
         ],
       });
       await tx.remarkTemplate.createMany({

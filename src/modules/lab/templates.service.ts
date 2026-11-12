@@ -5,7 +5,6 @@ import { PrismaService } from '../../core/prisma.service.js';
 import { MastersService } from '../masters/masters.service.js';
 import { CATALOGUE as catalogue } from './templates/catalogue.js';
 
-
 export interface ApplyResult {
   created: Record<string, number>;
   skipped: number;
@@ -68,17 +67,37 @@ export class TemplatesService {
 
     const unitCodes = new Set(tests.flatMap((t) => t.parameters.map((p) => p.unit)));
     const units = await ensure('units', used(catalogue.units, unitCodes), await this.prisma.unit.findMany({ select: { id: true, code: true } }), (u) => u);
-    const departments = await ensure('departments', catalogue.departments.filter((d) => depts.has(d.code)), await this.prisma.department.findMany({ select: { id: true, code: true } }), (d) => d);
+    const departments = await ensure(
+      'departments',
+      catalogue.departments.filter((d) => depts.has(d.code)),
+      await this.prisma.department.findMany({ select: { id: true, code: true } }),
+      (d) => d,
+    );
     const setCodes = new Set(tests.flatMap((t) => t.parameters.map((p) => p.resultSet)));
     const sets = await ensure('result-sets', used(catalogue.resultSets, setCodes), await this.prisma.resultSet.findMany({ select: { id: true, code: true } }), (s) => s);
     const methodCodes = new Set(tests.map((t) => t.method));
-    const methods = await ensure('test-methods', used(catalogue.methods, methodCodes), await this.prisma.testMethod.findMany({ select: { id: true, code: true } }), (m) => ({ code: m.code, name: m.name, ...(m.standardRef ? { standardRef: m.standardRef } : {}), accredited: false }));
+    const methods = await ensure('test-methods', used(catalogue.methods, methodCodes), await this.prisma.testMethod.findMany({ select: { id: true, code: true } }), (m) => ({
+      code: m.code,
+      name: m.name,
+      ...(m.standardRef ? { standardRef: m.standardRef } : {}),
+      accredited: false,
+    }));
     const formulas = new Map((await this.prisma.formula.findMany({ where: { isActive: true }, select: { id: true, code: true } })).map((f) => [f.code, f.id]));
 
     // Tests, and the parameters of the tests created now (an existing test keeps its own parameters).
     const existingTests = await this.prisma.testMaster.findMany({ select: { id: true, code: true } });
     const before = new Set(existingTests.map((t) => t.code));
-    const testIds = await ensure('tests', tests, existingTests, (t) => ({ code: t.code, name: t.name, category: t.category, departmentId: departments.get(t.department), methodId: t.method ? methods.get(t.method) : null, defaultTatDays: t.defaultTatDays, urgentTatDays: t.urgentTatDays, accredited: false, stages: t.stages }));
+    const testIds = await ensure('tests', tests, existingTests, (t) => ({
+      code: t.code,
+      name: t.name,
+      category: t.category,
+      departmentId: departments.get(t.department),
+      methodId: t.method ? methods.get(t.method) : null,
+      defaultTatDays: t.defaultTatDays,
+      urgentTatDays: t.urgentTatDays,
+      accredited: false,
+      stages: t.stages,
+    }));
     for (const t of tests.filter((x) => !before.has(x.code))) {
       for (const [i, p] of t.parameters.entries()) {
         if (p.formula && !formulas.has(p.formula)) throw badRequest(`The standard formula ${p.formula} is missing`, [{ field: 'templates', message: 'Formula missing' }]);
@@ -111,8 +130,19 @@ export class TemplatesService {
       limits: s.limits.filter((l) => paramId.has(`${l.test}.${l.param}`)).map((l) => ({ parameterId: paramId.get(`${l.test}.${l.param}`), minValue: l.min, maxValue: l.max, textLimit: l.text })),
     }));
     const groups = catalogue.groups.filter((g) => g.tests.every((c) => testCodes.has(c)));
-    await ensure('test-groups', groups, await this.prisma.testGroup.findMany({ select: { id: true, code: true } }), (g) => ({ code: g.code, name: g.name, kind: 'TEST', items: g.tests.map((c) => ({ testId: testIds.get(c) })) }));
-    if (chosen.length) await ensure('remark-templates', catalogue.remarkTemplates, await this.prisma.remarkTemplate.findMany({ select: { id: true, code: true } }), (r) => ({ code: r.code, text: r.text, outcome: r.outcome, testId: null }));
+    await ensure('test-groups', groups, await this.prisma.testGroup.findMany({ select: { id: true, code: true } }), (g) => ({
+      code: g.code,
+      name: g.name,
+      kind: 'TEST',
+      items: g.tests.map((c) => ({ testId: testIds.get(c) })),
+    }));
+    if (chosen.length)
+      await ensure('remark-templates', catalogue.remarkTemplates, await this.prisma.remarkTemplate.findMany({ select: { id: true, code: true } }), (r) => ({
+        code: r.code,
+        text: r.text,
+        outcome: r.outcome,
+        testId: null,
+      }));
 
     await this.audit.record({ action: 'lab.template.applied', entity: 'Setting', entityId: 'templates', after: { templates: ids, created, skipped } });
     return { created, skipped };

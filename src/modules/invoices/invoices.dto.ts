@@ -99,29 +99,140 @@ export class PaymentQuery extends PageQuery {
 }
 
 export class InvoiceLineDto {
-  id: string; seq: number; jobId: string | null; sampleTestId: string | null; description: string; sacCode: string; quantity: number; rate: string; rateSource: string | null; amount: string;
+  id: string;
+  seq: number;
+  jobId: string | null;
+  sampleTestId: string | null;
+  description: string;
+  sacCode: string;
+  quantity: number;
+  rate: string;
+  rateSource: string | null;
+  amount: string;
 }
 export class InvoiceSummaryDto {
-  id: string; invoiceNo: string | null; customerId: string; customerName: string; crn: string; status: InvoiceStatus; invoiceDate: Date | null; dueDate: Date | null; grandTotal: string; paidAmount: string; creditedAmount: string; balance: string; overdue: boolean; daysOverdue: number; ageingBucket: string | null; isInterState: boolean; version: number;
+  id: string;
+  invoiceNo: string | null;
+  customerId: string;
+  customerName: string;
+  crn: string;
+  status: InvoiceStatus;
+  invoiceDate: Date | null;
+  dueDate: Date | null;
+  grandTotal: string;
+  paidAmount: string;
+  creditedAmount: string;
+  balance: string;
+  overdue: boolean;
+  daysOverdue: number;
+  ageingBucket: string | null;
+  isInterState: boolean;
+  version: number;
 }
-export class AllocationDto { id: string; paymentId: string; paymentNo: string; paidOn: Date; mode: PaymentMode; reference: string | null; amount: string; }
-export class CreditNoteDto { id: string; creditNoteNo: string; issuedOn: Date; reason: string; taxableAmount: string; cgst: string; sgst: string; igst: string; roundOff: string; total: string; amountInWords: string; }
-export class ReminderDto { id: string; kind: string; at: Date; emailLogId: string | null; }
+export class AllocationDto {
+  id: string;
+  paymentId: string;
+  paymentNo: string;
+  paidOn: Date;
+  mode: PaymentMode;
+  reference: string | null;
+  amount: string;
+}
+export class CreditNoteDto {
+  id: string;
+  creditNoteNo: string;
+  issuedOn: Date;
+  reason: string;
+  taxableAmount: string;
+  cgst: string;
+  sgst: string;
+  igst: string;
+  roundOff: string;
+  total: string;
+  amountInWords: string;
+}
+export class ReminderDto {
+  id: string;
+  kind: string;
+  at: Date;
+  emailLogId: string | null;
+}
 export class InvoiceDto extends InvoiceSummaryDto {
-  placeOfSupply: string; placeOfSupplyCode: string; subtotal: string; discountAmount: string; taxableAmount: string; gstRate: string; cgst: string; sgst: string; igst: string; roundOff: string; amountInWords: string; cancelReason: string | null; notes: string | null; issuedAt: Date | null;
-  lines: InvoiceLineDto[]; allocations: AllocationDto[]; creditNotes: CreditNoteDto[]; reminders: ReminderDto[];
+  placeOfSupply: string;
+  placeOfSupplyCode: string;
+  subtotal: string;
+  discountAmount: string;
+  taxableAmount: string;
+  gstRate: string;
+  cgst: string;
+  sgst: string;
+  igst: string;
+  roundOff: string;
+  amountInWords: string;
+  cancelReason: string | null;
+  notes: string | null;
+  issuedAt: Date | null;
+  lines: InvoiceLineDto[];
+  allocations: AllocationDto[];
+  creditNotes: CreditNoteDto[];
+  reminders: ReminderDto[];
 }
-export class InvoicePageDto { data: InvoiceSummaryDto[]; meta: PageMetaDto; }
+export class InvoicePageDto {
+  data: InvoiceSummaryDto[];
+  meta: PageMetaDto;
+}
 
 export class ReadyJobDto {
-  jobId: string; jobNo: string; customerId: string; customerName: string; crn: string; reportNos: string[]; testCount: number; amount: string; missingRates: number; receivedAt: Date;
+  jobId: string;
+  jobNo: string;
+  customerId: string;
+  customerName: string;
+  crn: string;
+  reportNos: string[];
+  testCount: number;
+  amount: string;
+  missingRates: number;
+  receivedAt: Date;
 }
-export class ReadyPageDto { data: ReadyJobDto[]; meta: PageMetaDto; }
-export class AgeingTotalsDto { bucket: string; amount: string; count: number; }
-export class CustomerOutstandingDto { customerId: string; customerName: string; crn: string; outstanding: string; overdue: string; invoiceCount: number; }
-export class DueSummaryDto { ageing: AgeingTotalsDto[]; customers: CustomerOutstandingDto[]; total: string; }
+export class ReadyPageDto {
+  data: ReadyJobDto[];
+  meta: PageMetaDto;
+}
+export class AgeingTotalsDto {
+  bucket: string;
+  amount: string;
+  count: number;
+}
+export class CustomerOutstandingDto {
+  customerId: string;
+  customerName: string;
+  crn: string;
+  outstanding: string;
+  overdue: string;
+  invoiceCount: number;
+}
+export class DueSummaryDto {
+  ageing: AgeingTotalsDto[];
+  customers: CustomerOutstandingDto[];
+  total: string;
+}
 
 export class PaymentDto {
-  id: string; paymentNo: string; customerId: string; customerName: string; paidOn: Date; mode: PaymentMode; reference: string | null; amount: string; unapplied: string; isAdvance: boolean; notes: string | null; reversed: boolean; allocations: { invoiceId: string; invoiceNo: string | null; amount: string }[];
+  id: string;
+  paymentNo: string;
+  customerId: string;
+  customerName: string;
+  paidOn: Date;
+  mode: PaymentMode;
+  reference: string | null;
+  amount: string;
+  unapplied: string;
+  isAdvance: boolean;
+  notes: string | null;
+  reversed: boolean;
+  allocations: { invoiceId: string; invoiceNo: string | null; amount: string }[];
 }
-export class PaymentPageDto { data: PaymentDto[]; meta: PageMetaDto; }
+export class PaymentPageDto {
+  data: PaymentDto[];
+  meta: PageMetaDto;
+}

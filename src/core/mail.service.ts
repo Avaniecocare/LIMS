@@ -9,14 +9,7 @@ import { StorageService } from './storage.service.js';
 
 /** Provider-neutral adapter: everything goes through this one interface. */
 export interface MailAdapter {
-  send(message: {
-    from: string;
-    to: string;
-    cc?: string;
-    subject: string;
-    html: string;
-    attachments: { filename: string; content: Buffer; contentType: string }[];
-  }): Promise<void>;
+  send(message: { from: string; to: string; cc?: string; subject: string; html: string; attachments: { filename: string; content: Buffer; contentType: string }[] }): Promise<void>;
 }
 
 export class SmtpMailAdapter implements MailAdapter {
@@ -78,7 +71,14 @@ export class MailService {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border-radius:6px;overflow:hidden">
 <tr><td style="background:${c.branding.primaryColor};color:#fff;padding:16px 24px;font-size:18px;font-weight:bold">${esc(c.companyName)}</td></tr>
 <tr><td style="padding:24px;font-size:14px;line-height:1.6">${bodyHtml}</td></tr>
-<tr><td style="padding:16px 24px;background:#f9fafb;font-size:12px;color:#6b7280">${esc(c.legalName)}${c.labAddress ? `<br>${esc(c.labAddress)}` : ''}${[c.phone, c.email].filter(Boolean).length ? `<br>${[c.phone, c.email].filter(Boolean).map(esc).join(' · ')}` : ''}${c.supportEmail || c.supportPhone ? `<br>Support: ${[c.supportEmail, c.supportPhone].filter((x): x is string => !!x).map(esc).join(' · ')}` : ''}${c.privacyContactEmail ? `<br>Privacy and grievances: ${esc(c.privacyContactName ? `${c.privacyContactName}, ` : '')}${esc(c.privacyContactEmail)}` : ''}${c.termsUrl || c.privacyUrl ? `<br>${[c.termsUrl ? `<a href="${esc(c.termsUrl)}" style="color:#6b7280">Terms</a>` : '', c.privacyUrl ? `<a href="${esc(c.privacyUrl)}" style="color:#6b7280">Privacy</a>` : ''].filter(Boolean).join(' · ')}` : ''}</td></tr>
+<tr><td style="padding:16px 24px;background:#f9fafb;font-size:12px;color:#6b7280">${esc(c.legalName)}${c.labAddress ? `<br>${esc(c.labAddress)}` : ''}${[c.phone, c.email].filter(Boolean).length ? `<br>${[c.phone, c.email].filter(Boolean).map(esc).join(' · ')}` : ''}${
+      c.supportEmail || c.supportPhone
+        ? `<br>Support: ${[c.supportEmail, c.supportPhone]
+            .filter((x): x is string => !!x)
+            .map(esc)
+            .join(' · ')}`
+        : ''
+    }${c.privacyContactEmail ? `<br>Privacy and grievances: ${esc(c.privacyContactName ? `${c.privacyContactName}, ` : '')}${esc(c.privacyContactEmail)}` : ''}${c.termsUrl || c.privacyUrl ? `<br>${[c.termsUrl ? `<a href="${esc(c.termsUrl)}" style="color:#6b7280">Terms</a>` : '', c.privacyUrl ? `<a href="${esc(c.privacyUrl)}" style="color:#6b7280">Privacy</a>` : ''].filter(Boolean).join(' · ')}` : ''}</td></tr>
 </table></td></tr></table></body></html>`;
   }
 

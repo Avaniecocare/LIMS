@@ -28,17 +28,64 @@ type Full = Prisma.QuotationGetPayload<{ include: typeof fullInclude }>;
 const str = (d: unknown) => String(d);
 
 const summary = (q: Summary) => ({
-  id: q.id, quotationNo: q.quotationNo, customerId: q.customerId, customerName: q.customer.name, crn: q.customer.crn, orderId: q.orderId, status: q.status, currentVersionNo: q.currentVersionNo,
-  validUntil: q.validUntil, grandTotal: str(q.grandTotal), rejectReason: q.rejectReason, sentAt: q.sentAt, acceptedAt: q.acceptedAt, createdAt: q.createdAt, version: q.version, jobId: q.jobs[0]?.id ?? null,
+  id: q.id,
+  quotationNo: q.quotationNo,
+  customerId: q.customerId,
+  customerName: q.customer.name,
+  crn: q.customer.crn,
+  orderId: q.orderId,
+  status: q.status,
+  currentVersionNo: q.currentVersionNo,
+  validUntil: q.validUntil,
+  grandTotal: str(q.grandTotal),
+  rejectReason: q.rejectReason,
+  sentAt: q.sentAt,
+  acceptedAt: q.acceptedAt,
+  createdAt: q.createdAt,
+  version: q.version,
+  jobId: q.jobs[0]?.id ?? null,
 });
 
 const full = (q: Full) => ({
   ...summary(q),
   versions: q.versions.map((v) => ({
-    id: v.id, versionNo: v.versionNo, documentTitle: v.documentTitle, validUntil: v.validUntil, estimatedDays: v.estimatedDays, paymentTerms: v.paymentTerms, deliveryAddress: v.deliveryAddress, contactPerson: v.contactPerson, revisionNote: v.revisionNote,
-    discountPct: str(v.discountPct), subtotal: str(v.subtotal), discountAmount: str(v.discountAmount), taxableAmount: str(v.taxableAmount), gstRate: str(v.gstRate), cgst: str(v.cgst), sgst: str(v.sgst), igst: str(v.igst), roundOff: str(v.roundOff), grandTotal: str(v.grandTotal),
-    amountInWords: v.amountInWords, createdAt: v.createdAt,
-    lines: v.lines.map((l) => ({ id: l.id, seq: l.seq, sampleDescription: l.sampleDescription, requiredQuantity: l.requiredQuantity, testId: l.testId, testCode: l.testCode, testName: l.testName, methodName: l.methodName, quantity: l.quantity, rate: str(l.rate), rateSource: l.rateSource, overrideReason: l.overrideReason, discountPct: str(l.discountPct), amount: str(l.amount) })),
+    id: v.id,
+    versionNo: v.versionNo,
+    documentTitle: v.documentTitle,
+    validUntil: v.validUntil,
+    estimatedDays: v.estimatedDays,
+    paymentTerms: v.paymentTerms,
+    deliveryAddress: v.deliveryAddress,
+    contactPerson: v.contactPerson,
+    revisionNote: v.revisionNote,
+    discountPct: str(v.discountPct),
+    subtotal: str(v.subtotal),
+    discountAmount: str(v.discountAmount),
+    taxableAmount: str(v.taxableAmount),
+    gstRate: str(v.gstRate),
+    cgst: str(v.cgst),
+    sgst: str(v.sgst),
+    igst: str(v.igst),
+    roundOff: str(v.roundOff),
+    grandTotal: str(v.grandTotal),
+    amountInWords: v.amountInWords,
+    createdAt: v.createdAt,
+    lines: v.lines.map((l) => ({
+      id: l.id,
+      seq: l.seq,
+      sampleDescription: l.sampleDescription,
+      requiredQuantity: l.requiredQuantity,
+      testId: l.testId,
+      testCode: l.testCode,
+      testName: l.testName,
+      methodName: l.methodName,
+      quantity: l.quantity,
+      rate: str(l.rate),
+      rateSource: l.rateSource,
+      overrideReason: l.overrideReason,
+      discountPct: str(l.discountPct),
+      amount: str(l.amount),
+    })),
   })),
 });
 
@@ -47,10 +94,17 @@ export async function customerSnapshot(tx: Tx, customerId: string): Promise<Cust
   const fmt = (a?: (typeof c.addresses)[number]) => (a ? [a.line1, a.line2, `${a.city}${a.pincode ? ` ${a.pincode}` : ''}`, a.stateName].filter(Boolean).join('\n') : null);
   const contact = c.contacts.find((x) => x.isPrimary) ?? c.contacts[0];
   return {
-    crn: c.crn, name: c.name, gstin: c.gstin, pan: c.pan, stateName: c.stateName, stateCode: c.stateCode,
+    crn: c.crn,
+    name: c.name,
+    gstin: c.gstin,
+    pan: c.pan,
+    stateName: c.stateName,
+    stateCode: c.stateCode,
     billingAddress: fmt(c.addresses.find((a) => a.kind === 'BILLING') ?? c.addresses[0]),
     reportAddress: fmt(c.addresses.find((a) => a.kind === 'REPORT') ?? c.addresses.find((a) => a.kind === 'BILLING') ?? c.addresses[0]),
-    contactName: contact?.name ?? null, contactEmail: contact?.email ?? null, contactPhone: contact?.phone ?? null,
+    contactName: contact?.name ?? null,
+    contactEmail: contact?.email ?? null,
+    contactPhone: contact?.phone ?? null,
   };
 }
 
@@ -110,7 +164,15 @@ export class QuotationsService implements OnModuleInit {
       orderBy: { acceptedAt: 'asc' },
       take: 200,
     });
-    return rows.map((q) => ({ id: q.id, quotationNo: q.quotationNo, customerId: q.customerId, customerName: q.customer.name, acceptedAt: q.acceptedAt, samples: [...new Set(q.versions[0].lines.map((l) => l.sampleDescription))], testCount: q.versions[0].lines.length }));
+    return rows.map((q) => ({
+      id: q.id,
+      quotationNo: q.quotationNo,
+      customerId: q.customerId,
+      customerName: q.customer.name,
+      acceptedAt: q.acceptedAt,
+      samples: [...new Set(q.versions[0].lines.map((l) => l.sampleDescription))],
+      testCount: q.versions[0].lines.length,
+    }));
   }
 
   async list(q: QuotationQuery) {
@@ -190,7 +252,12 @@ export class QuotationsService implements OnModuleInit {
   private async versionData(tx: Tx, dto: SaveQuotationDto) {
     const lines = await this.buildLines(tx, dto.customerId, dto.lines);
     const discountPct = dto.discountPct ?? '0';
-    const t = await this.totals(tx, dto.customerId, lines.map((l) => l.amount), discountPct);
+    const t = await this.totals(
+      tx,
+      dto.customerId,
+      lines.map((l) => l.amount),
+      discountPct,
+    );
     const defaultTitle = await this.settings.get('quotation.defaultTitle', tx);
     const defaultTerms = await this.settings.get('quotation.defaultPaymentTerms', tx);
     const days = await this.settings.get('quotation.defaultValidityDays', tx);
@@ -276,8 +343,26 @@ export class QuotationsService implements OnModuleInit {
       if (count !== 1) throw conflict();
       await tx.quotationVersion.create({
         data: {
-          quotationId: id, versionNo, documentTitle: prev.documentTitle, validUntil: prev.validUntil, estimatedDays: prev.estimatedDays, paymentTerms: prev.paymentTerms, deliveryAddress: prev.deliveryAddress, contactPerson: prev.contactPerson,
-          revisionNote: reason, discountPct: prev.discountPct, subtotal: prev.subtotal, discountAmount: prev.discountAmount, taxableAmount: prev.taxableAmount, gstRate: prev.gstRate, cgst: prev.cgst, sgst: prev.sgst, igst: prev.igst, roundOff: prev.roundOff, grandTotal: prev.grandTotal, amountInWords: prev.amountInWords,
+          quotationId: id,
+          versionNo,
+          documentTitle: prev.documentTitle,
+          validUntil: prev.validUntil,
+          estimatedDays: prev.estimatedDays,
+          paymentTerms: prev.paymentTerms,
+          deliveryAddress: prev.deliveryAddress,
+          contactPerson: prev.contactPerson,
+          revisionNote: reason,
+          discountPct: prev.discountPct,
+          subtotal: prev.subtotal,
+          discountAmount: prev.discountAmount,
+          taxableAmount: prev.taxableAmount,
+          gstRate: prev.gstRate,
+          cgst: prev.cgst,
+          sgst: prev.sgst,
+          igst: prev.igst,
+          roundOff: prev.roundOff,
+          grandTotal: prev.grandTotal,
+          amountInWords: prev.amountInWords,
           createdById: actorId(),
           lines: { createMany: { data: prev.lines.map(({ id: _i, versionId: _v, ...l }) => l) } },
         },
@@ -359,7 +444,11 @@ export class QuotationsService implements OnModuleInit {
         const terms = await tx.termsVersion.findFirst({ where: { kind: 'QUOTATION' }, orderBy: { versionNo: 'desc' } });
         await tx.quotationVersion.update({
           where: { id: v.id },
-          data: { customerSnapshot: (await customerSnapshot(tx, q.customerId)) as unknown as Prisma.InputJsonValue, companySnapshot: this.company.snapshot() as unknown as Prisma.InputJsonValue, termsSnapshot: terms?.body ?? null },
+          data: {
+            customerSnapshot: (await customerSnapshot(tx, q.customerId)) as unknown as Prisma.InputJsonValue,
+            companySnapshot: this.company.snapshot() as unknown as Prisma.InputJsonValue,
+            termsSnapshot: terms?.body ?? null,
+          },
         });
       }
       if (q.orderId) await tx.order.updateMany({ where: { id: q.orderId }, data: { stage: 'WON' } });
@@ -423,4 +512,3 @@ export class QuotationsService implements OnModuleInit {
     return this.renderHtml(versionId);
   }
 }
-

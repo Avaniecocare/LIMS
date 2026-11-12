@@ -11,12 +11,14 @@ export class DocumentsController {
   constructor(private readonly documents: DocumentsService) {}
 
   /** Queue a PDF or Excel export; poll until status is DONE. */
-  @Post() @ApiOkResponse({ type: DocumentJobDto })
+  @Post()
+  @ApiOkResponse({ type: DocumentJobDto })
   create(@Body() dto: CreateDocumentDto) {
     return this.documents.enqueueFromClient(dto.kind, dto.params ?? {});
   }
 
-  @Get(':id') @ApiOkResponse({ type: DocumentJobDto })
+  @Get(':id')
+  @ApiOkResponse({ type: DocumentJobDto })
   get(@Param('id', ParseUUIDPipe) id: string) {
     return this.documents.describe(id);
   }

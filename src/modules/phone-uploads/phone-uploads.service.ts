@@ -85,7 +85,17 @@ export class PhoneUploadsService {
     const label = await this.labelFor(target.entity, entityId, dto.note);
     const token = randomBytes(32).toString('base64url');
     const link = await this.prisma.phoneUploadLink.create({
-      data: { ...(dto.purpose === 'booking' ? { id: entityId } : {}), tokenHash: hash(token), entity: target.entity, entityId, category: target.category, label, createdById: actorId()!, expiresAt: new Date(Date.now() + PHONE_LINK_MINUTES * 60_000), maxUploads: MAX_UPLOADS },
+      data: {
+        ...(dto.purpose === 'booking' ? { id: entityId } : {}),
+        tokenHash: hash(token),
+        entity: target.entity,
+        entityId,
+        category: target.category,
+        label,
+        createdById: actorId()!,
+        expiresAt: new Date(Date.now() + PHONE_LINK_MINUTES * 60_000),
+        maxUploads: MAX_UPLOADS,
+      },
     });
     await this.audit.record({ action: 'phoneUpload.linkCreated', entity: target.entity, entityId, after: { linkId: link.id, purpose: dto.purpose, expiresAt: link.expiresAt } });
     const url = `${this.infra.frontendOrigin.replace(/\/+$/, '')}/phone/${token}`;
@@ -150,19 +160,36 @@ export class PhoneUploadsService {
     });
     if (!maker) throw new AppError('LINK_EXPIRED', 410, 'This link has expired or been used up. Ask for a new QR code on the computer.');
     const roles = maker.roles.filter((r) => r.role.isActive && !r.role.deletedAt);
-    const user: CurrentUser = { id: maker.id, name: maker.name, email: maker.email, designation: maker.designation, roles: roles.map((r) => r.role.name), permissions: new Set(roles.flatMap((r) => r.role.permissions.map((p) => p.permissionCode))), sessionId: `phone-link:${link.id}`, csrfToken: '' };
+    const user: CurrentUser = {
+      id: maker.id,
+      name: maker.name,
+      email: maker.email,
+      designation: maker.designation,
+      roles: roles.map((r) => r.role.name),
+      permissions: new Set(roles.flatMap((r) => r.role.permissions.map((p) => p.permissionCode))),
+      sessionId: `phone-link:${link.id}`,
+      csrfToken: '',
+    };
     const ctx = getContext();
     if (!ctx) throw forbidden();
     ctx.user = user;
     if (!file.mimetype.startsWith('image/')) throw badRequest('Only photos can be sent from a phone', [{ field: 'file', message: 'Not a photo' }]);
     if (link.entity === 'Report') await this.labelFor('Report', link.entityId); // still a draft
-    const stored = await this.files.upload({ buffer: file.buffer, originalName: file.filename || 'phone-photo.jpg', mimeType: file.mimetype, category: link.category, entity: link.entity, entityId: link.entityId });
+    const stored = await this.files.upload({
+      buffer: file.buffer,
+      originalName: file.filename || 'phone-photo.jpg',
+      mimeType: file.mimetype,
+      category: link.category,
+      entity: link.entity,
+      entityId: link.entityId,
+    });
     if (!stored.mimeType.startsWith('image/')) {
       await this.files.remove(stored.id, 'Not a photo (sent from a phone)');
       throw badRequest('Only photos can be sent from a phone', [{ field: 'file', message: 'Not a photo' }]);
     }
     // Counted atomically, so two phones racing can't pass the limit.
-    const updated = await this.prisma.$executeRaw`UPDATE "PhoneUploadLink" SET "fileIds" = array_append("fileIds", ${stored.id}) WHERE "id" = ${link.id} AND "revokedAt" IS NULL AND cardinality("fileIds") < "maxUploads"`;
+    const updated = await this.prisma
+      .$executeRaw`UPDATE "PhoneUploadLink" SET "fileIds" = array_append("fileIds", ${stored.id}) WHERE "id" = ${link.id} AND "revokedAt" IS NULL AND cardinality("fileIds") < "maxUploads"`;
     if (updated !== 1) {
       await this.files.remove(stored.id, 'Phone link limit reached');
       throw new AppError('LINK_EXPIRED', 410, 'This link has expired or been used up. Ask for a new QR code on the computer.');

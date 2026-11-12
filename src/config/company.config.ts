@@ -285,7 +285,18 @@ export function legacyCompanyFromEnv(env: NodeJS.ProcessEnv = process.env): Lega
   if (problems.length) throw new CompanyConfigError(problems);
   return {
     profile,
-    branding: { appName, primaryColor: primary, accentColor: accent, surfaceColor: surface, navColor: nav, logoFileId: null, faviconFileId: null, loginImageFileId: null, loginTagline: null, poweredBy: true },
+    branding: {
+      appName,
+      primaryColor: primary,
+      accentColor: accent,
+      surfaceColor: surface,
+      navColor: nav,
+      logoFileId: null,
+      faviconFileId: null,
+      loginImageFileId: null,
+      loginTagline: null,
+      poweredBy: true,
+    },
     appName,
     logoPath: logo ? resolvePath(logo) : null,
     faviconPath: favicon ? resolvePath(favicon) : null,

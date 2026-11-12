@@ -94,7 +94,11 @@ export class DocumentsService {
     if (recent === 1) await this.redis.client.expire(rateKey, 60);
     if (recent > 30) throw new AppError('RATE_LIMITED', 429, 'Too many documents requested in the last minute. Wait a moment and try again.');
     const reserved = Object.keys(params).filter((k) => SERVER_ONLY_PARAMS.includes(k) || k.startsWith('_'));
-    if (reserved.length) throw badRequest('These options cannot be set on a document request', reserved.map((k) => ({ field: `params.${k}`, message: 'Not allowed' })));
+    if (reserved.length)
+      throw badRequest(
+        'These options cannot be set on a document request',
+        reserved.map((k) => ({ field: `params.${k}`, message: 'Not allowed' })),
+      );
     if (handler.sensitive) {
       await handler.authorize(params);
       requireRecentAuth();
@@ -156,14 +160,19 @@ export class DocumentsService {
     } catch (e) {
       await this.prisma.documentJob.update({
         where: { id: job.id },
-        data: { status: 'FAILED', finishedAt: new Date(), // Business errors are meant for users. Infrastructure errors go to the logs, not the screen.
-        error: e instanceof AppError ? e.message.slice(0, 500) : 'The document could not be produced. Please try again.' },
+        data: {
+          status: 'FAILED',
+          finishedAt: new Date(), // Business errors are meant for users. Infrastructure errors go to the logs, not the screen.
+          error: e instanceof AppError ? e.message.slice(0, 500) : 'The document could not be produced. Please try again.',
+        },
       });
       throw e;
     }
   }
 }
 
-export const requirePermission = (...codes: string[]) => () => {
-  if (!codes.some((c) => can(c))) throw forbidden();
-};
+export const requirePermission =
+  (...codes: string[]) =>
+  () => {
+    if (!codes.some((c) => can(c))) throw forbidden();
+  };

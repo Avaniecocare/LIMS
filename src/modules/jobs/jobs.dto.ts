@@ -109,38 +109,125 @@ export class SendAckDto {
 }
 
 export class DeviationDto {
-  id: string; sampleId: string | null; typeId: string; typeLabel: string; remark: string | null; createdAt: Date;
+  id: string;
+  sampleId: string | null;
+  typeId: string;
+  typeLabel: string;
+  remark: string | null;
+  createdAt: Date;
 }
 export class SampleTestBriefDto {
-  id: string; testId: string; testCode: string; testName: string; status: string;
+  id: string;
+  testId: string;
+  testCode: string;
+  testName: string;
+  status: string;
   /** false until the planner has taken it up; status alone reads PLANNED before that */
-  planned: boolean; dueDate: Date | null; assignedToName: string | null; version: number;
+  planned: boolean;
+  dueDate: Date | null;
+  assignedToName: string | null;
+  version: number;
 }
 export class SampleDto {
-  id: string; sampleNo: string; jobId: string; description: string; condition: string | null; quantity: string | null; size: string | null; returnable: boolean; status: SampleStatus; cancelReason: string | null;
-  retentionUntil: Date | null; returnStatus: string | null; returnedAt: Date | null; disposedAt: Date | null; specificationId: string | null; dualSpecificationId: string | null; version: number;
-  attributes: { id: string; label: string; value: string }[]; tests: SampleTestBriefDto[];
+  id: string;
+  sampleNo: string;
+  jobId: string;
+  description: string;
+  condition: string | null;
+  quantity: string | null;
+  size: string | null;
+  returnable: boolean;
+  status: SampleStatus;
+  cancelReason: string | null;
+  retentionUntil: Date | null;
+  returnStatus: string | null;
+  returnedAt: Date | null;
+  disposedAt: Date | null;
+  specificationId: string | null;
+  dualSpecificationId: string | null;
+  version: number;
+  attributes: { id: string; label: string; value: string }[];
+  tests: SampleTestBriefDto[];
 }
 export class JobSummaryDto {
-  id: string; jobNo: string; customerId: string | null; customerName: string | null; crn: string | null; status: JobStatus; urgent: boolean; receivedAt: Date; sampleCount: number; quotationId: string | null; holdReason: string | null; cancelReason: string | null; version: number;
+  id: string;
+  jobNo: string;
+  customerId: string | null;
+  customerName: string | null;
+  crn: string | null;
+  status: JobStatus;
+  urgent: boolean;
+  receivedAt: Date;
+  sampleCount: number;
+  quotationId: string | null;
+  holdReason: string | null;
+  cancelReason: string | null;
+  version: number;
 }
 export class JobDto extends JobSummaryDto {
-  noQuotationReason: string | null; letterRef: string | null; letterDate: Date | null; materialSpec: string | null; poNumber: string | null; poDate: Date | null; receiptModeId: string | null; reportIssueDetails: string | null; reportIssueAddress: string | null;
-  kindAttention: string | null; contactEmail: string | null; contactPhone: string | null; sampleDrawnByLab: boolean; statusBeforeHold: JobStatus | null; samples: SampleDto[]; deviations: DeviationDto[];
+  noQuotationReason: string | null;
+  letterRef: string | null;
+  letterDate: Date | null;
+  materialSpec: string | null;
+  poNumber: string | null;
+  poDate: Date | null;
+  receiptModeId: string | null;
+  reportIssueDetails: string | null;
+  reportIssueAddress: string | null;
+  kindAttention: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  sampleDrawnByLab: boolean;
+  statusBeforeHold: JobStatus | null;
+  samples: SampleDto[];
+  deviations: DeviationDto[];
 }
-export class JobPageDto { data: JobSummaryDto[]; meta: PageMetaDto; }
+export class JobPageDto {
+  data: JobSummaryDto[];
+  meta: PageMetaDto;
+}
 export class SampleListItemDto {
-  id: string; sampleNo: string; jobId: string; jobNo: string; description: string; status: SampleStatus; returnable: boolean; urgent: boolean; receivedAt: Date; customerName: string | null;
+  id: string;
+  sampleNo: string;
+  jobId: string;
+  jobNo: string;
+  description: string;
+  status: SampleStatus;
+  returnable: boolean;
+  urgent: boolean;
+  receivedAt: Date;
+  customerName: string | null;
 }
-export class SamplePageDto { data: SampleListItemDto[]; meta: PageMetaDto; }
+export class SamplePageDto {
+  data: SampleListItemDto[];
+  meta: PageMetaDto;
+}
 export class TimelineEventDto {
-  id: string; entity: string; entityId: string; label: string | null; fromStatus: string | null; toStatus: string; reason: string | null; byName: string | null; at: Date;
+  id: string;
+  entity: string;
+  entityId: string;
+  label: string | null;
+  fromStatus: string | null;
+  toStatus: string;
+  reason: string | null;
+  byName: string | null;
+  at: Date;
 }
 export class AuditHistoryDto {
-  id: string; at: Date; userName: string | null; action: string; before: unknown; after: unknown; reason: string | null;
+  id: string;
+  at: Date;
+  userName: string | null;
+  action: string;
+  before: unknown;
+  after: unknown;
+  reason: string | null;
 }
 export class SearchResultDto {
-  type: string; id: string; title: string; subtitle: string | null; link: string;
+  type: string;
+  id: string;
+  title: string;
+  subtitle: string | null;
+  link: string;
 }
 export class ScanResultDto {
   /** where the app should go after a barcode or QR scan; null if nothing matched */

@@ -77,4 +77,3 @@ export function buildOpenApi(app: NestFastifyApplication) {
   const config = new DocumentBuilder().setTitle('LIMS API').setVersion('1').addCookieAuth('lims_sid').build();
   return SwaggerModule.createDocument(app, config);
 }
-

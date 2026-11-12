@@ -70,7 +70,10 @@ export class DashboardService {
         { key: 'tat-compliance', label: 'TAT compliance', value: compliance, display: `${compliance}%`, link: reportLink('complete-test-detail', { from: f.from, to: f.to }) },
       ],
       samplesByStatus: byStatus.map((g) => ({ label: g.status, value: g._count, link: reportLink('sample-status', { status: g.status }) })),
-      testsByStage: stages.filter((s) => s.currentStage).sort((x, y) => y._count - x._count).map((s) => ({ label: s.currentStage!, value: s._count, link: reportLink('result-pending', { stage: s.currentStage! }) })),
+      testsByStage: stages
+        .filter((s) => s.currentStage)
+        .sort((x, y) => y._count - x._count)
+        .map((s) => ({ label: s.currentStage!, value: s._count, link: reportLink('result-pending', { stage: s.currentStage! }) })),
     };
   }
 
@@ -92,7 +95,10 @@ export class DashboardService {
         { key: 'rejection-rate', label: 'Test rejection rate', value: rate, display: `${rate}%`, link: reportLink('technician-analysis', { from: f.from, to: f.to }) },
         { key: 'revisions-issued', label: 'Revisions issued', value: revisions, display: null, link: reportLink('revisions-issued', { from: f.from, to: f.to }) },
       ],
-      rejectionReasons: [...reasons.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([reason, count]) => ({ reason, count })),
+      rejectionReasons: [...reasons.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([reason, count]) => ({ reason, count })),
     };
   }
 
@@ -159,7 +165,12 @@ export class DashboardService {
     };
     if (can('tests.work')) {
       add('my-open', 'Tests assigned to me', await this.db.sampleTest.count({ where: { deletedAt: null, assignedToId: me, status: { in: ['ASSIGNED', 'IN_PROGRESS'] } } }), '/my-tests');
-      add('my-overdue', 'My tests past due', await this.db.sampleTest.count({ where: { deletedAt: null, assignedToId: me, status: { in: ['ASSIGNED', 'IN_PROGRESS'] }, dueDate: { lt: today } } }), '/my-tests');
+      add(
+        'my-overdue',
+        'My tests past due',
+        await this.db.sampleTest.count({ where: { deletedAt: null, assignedToId: me, status: { in: ['ASSIGNED', 'IN_PROGRESS'] }, dueDate: { lt: today } } }),
+        '/my-tests',
+      );
       add('my-sent-back', 'Sent back to me', await this.db.sampleTest.count({ where: { deletedAt: null, assignedToId: me, status: 'IN_PROGRESS', rejectionReason: { not: null } } }), '/my-tests');
     }
     if (can('tests.approve')) add('approve-tests', 'Results to approve', await this.db.sampleTest.count({ where: { deletedAt: null, status: 'RESULTS_SUBMITTED' } }), '/approvals?tab=results');
@@ -172,7 +183,13 @@ export class DashboardService {
     }
     if (can('quotations.edit')) add('draft-quotations', 'Draft quotations', await this.db.quotation.count({ where: { deletedAt: null, status: 'DRAFT' } }), '/quotations?status=DRAFT');
     if (can('invoices.edit')) add('ready-invoice', 'Jobs ready to invoice', (await this.invoices.readyQueue({ page: 1, pageSize: 1 })).meta.total, '/invoices?tab=ready');
-    if (can('invoices.view')) add('overdue-invoices', 'Overdue invoices', await this.db.invoice.count({ where: { deletedAt: null, status: { in: ['ISSUED', 'PARTIALLY_PAID'] }, dueDate: { lt: today } } }), '/due-invoices?overdue=true');
+    if (can('invoices.view'))
+      add(
+        'overdue-invoices',
+        'Overdue invoices',
+        await this.db.invoice.count({ where: { deletedAt: null, status: { in: ['ISSUED', 'PARTIALLY_PAID'] }, dueDate: { lt: today } } }),
+        '/due-invoices?overdue=true',
+      );
     return items;
   }
 }

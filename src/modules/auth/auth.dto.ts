@@ -1,52 +1,65 @@
 import { IsEmail, IsOptional, IsString, Length, MaxLength } from 'class-validator';
 
 export class LoginDto {
-  @IsEmail() @MaxLength(254)
+  @IsEmail()
+  @MaxLength(254)
   email: string;
 
-  @IsString() @MaxLength(200)
+  @IsString()
+  @MaxLength(200)
   password: string;
 }
 
 export class LoginTotpDto {
-  @IsString() @MaxLength(200)
+  @IsString()
+  @MaxLength(200)
   challenge: string;
 
-  @IsString() @Length(6, 6)
+  @IsString()
+  @Length(6, 6)
   code: string;
 }
 
 export class ChangePasswordDto {
-  @IsString() @MaxLength(200)
+  @IsString()
+  @MaxLength(200)
   currentPassword: string;
 
-  @IsString() @MaxLength(200)
+  @IsString()
+  @MaxLength(200)
   newPassword: string;
 }
 
 export class ForgotPasswordDto {
-  @IsEmail() @MaxLength(254)
+  @IsEmail()
+  @MaxLength(254)
   email: string;
 }
 
 export class ResetPasswordDto {
-  @IsString() @MaxLength(200)
+  @IsString()
+  @MaxLength(200)
   token: string;
 
-  @IsString() @MaxLength(200)
+  @IsString()
+  @MaxLength(200)
   newPassword: string;
 }
 
 export class TotpEnableDto {
-  @IsString() @Length(6, 6)
+  @IsString()
+  @Length(6, 6)
   code: string;
 }
 
 export class TotpDisableDto {
-  @IsString() @MaxLength(200)
+  @IsString()
+  @MaxLength(200)
   password: string;
 
-  @IsOptional() @IsString() @Length(6, 6)
+  @IsOptional()
+  @IsString()
+  @Length(6, 6)
   code?: string;
 }
 
@@ -82,7 +95,8 @@ export class OkDto {
 }
 
 export class ConfirmPasswordDto {
-  @IsString() @MaxLength(200)
+  @IsString()
+  @MaxLength(200)
   password: string;
 }
 
@@ -103,4 +117,6 @@ export class SignInEventDto {
   ip: string | null;
 }
 
-export class RevokedDto { revoked: number; }
+export class RevokedDto {
+  revoked: number;
+}

@@ -11,29 +11,36 @@ import { NotificationsService } from './notifications.service.js';
 export class NotificationsController {
   constructor(private readonly notifications: NotificationsService) {}
 
-  @Get() @ApiOkResponse({ type: NotificationPageDto })
+  @Get()
+  @ApiOkResponse({ type: NotificationPageDto })
   list(@Query() q: NotificationQuery) {
     return this.notifications.list(q);
   }
 
-  @Post('read-all') @HttpCode(200) @ApiOkResponse({ type: OkDto })
+  @Post('read-all')
+  @HttpCode(200)
+  @ApiOkResponse({ type: OkDto })
   async readAll() {
     await this.notifications.markAllRead();
     return { ok: true };
   }
 
-  @Post(':id/read') @HttpCode(200) @ApiOkResponse({ type: OkDto })
+  @Post(':id/read')
+  @HttpCode(200)
+  @ApiOkResponse({ type: OkDto })
   async read(@Param('id', ParseUUIDPipe) id: string) {
     await this.notifications.markRead(id);
     return { ok: true };
   }
 
-  @Get('preferences') @ApiOkResponse({ type: [PreferenceDto] })
+  @Get('preferences')
+  @ApiOkResponse({ type: [PreferenceDto] })
   preferences() {
     return this.notifications.preferences();
   }
 
-  @Put('preferences') @ApiOkResponse({ type: [PreferenceDto] })
+  @Put('preferences')
+  @ApiOkResponse({ type: [PreferenceDto] })
   update(@Body() dto: UpdatePreferencesDto) {
     return this.notifications.updatePreferences(dto.preferences);
   }

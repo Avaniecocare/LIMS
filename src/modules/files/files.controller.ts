@@ -9,7 +9,9 @@ import { FilesService } from './files.service.js';
 
 /** Reads a single-file multipart body into memory; the size limit is enforced by the plugin. */
 export async function readUpload(req: FastifyRequest) {
-  const part = await (req as unknown as { file: () => Promise<{ toBuffer(): Promise<Buffer>; filename: string; mimetype: string; fields: Record<string, { value?: string } | undefined> } | undefined> }).file();
+  const part = await (
+    req as unknown as { file: () => Promise<{ toBuffer(): Promise<Buffer>; filename: string; mimetype: string; fields: Record<string, { value?: string } | undefined> } | undefined> }
+  ).file();
   if (!part) throw badRequest('No file was sent', [{ field: 'file', message: 'Required' }]);
   const field = (name: string) => part.fields[name]?.value;
   return { buffer: await part.toBuffer(), filename: part.filename, mimetype: part.mimetype, field };
@@ -23,7 +25,21 @@ export class FilesController {
 
   @Post()
   @ApiConsumes('multipart/form-data')
-  @ApiBody({ schema: { type: 'object', required: ['file', 'entity', 'entityId', 'category'], properties: { file: { type: 'string', format: 'binary' }, entity: { type: 'string' }, entityId: { type: 'string' }, category: { type: 'string' }, caption: { type: 'string' }, printWidthMm: { type: 'integer' }, printHeightMm: { type: 'integer' } } } })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file', 'entity', 'entityId', 'category'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        entity: { type: 'string' },
+        entityId: { type: 'string' },
+        category: { type: 'string' },
+        caption: { type: 'string' },
+        printWidthMm: { type: 'integer' },
+        printHeightMm: { type: 'integer' },
+      },
+    },
+  })
   @ApiOkResponse({ type: FileDto })
   async upload(@Req() req: FastifyRequest) {
     const f = await readUpload(req);
@@ -47,17 +63,20 @@ export class FilesController {
     });
   }
 
-  @Get() @ApiOkResponse({ type: [FileDto] })
+  @Get()
+  @ApiOkResponse({ type: [FileDto] })
   list(@Query('entity') entity: string, @Query('entityId') entityId: string, @Query('category') category?: string) {
     return this.files.list(entity, entityId, category);
   }
 
-  @Get(':id/url') @ApiOkResponse({ type: SignedUrlDto })
+  @Get(':id/url')
+  @ApiOkResponse({ type: SignedUrlDto })
   url(@Param('id', ParseUUIDPipe) id: string) {
     return this.files.url(id);
   }
 
-  @Delete(':id') @ApiOkResponse({ type: OkDto })
+  @Delete(':id')
+  @ApiOkResponse({ type: OkDto })
   async remove(@Param('id', ParseUUIDPipe) id: string, @Query('reason') reason?: string) {
     await this.files.remove(id, reason);
     return { ok: true };

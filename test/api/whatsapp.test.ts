@@ -24,7 +24,17 @@ beforeAll(async () => {
   await resetDb(ctx);
   const { loadBaseline } = await import('../../src/modules/rbac/baseline.js');
   await ctx.prisma.$transaction(loadBaseline);
-  for (const [e, r] of Object.entries({ admin: ROLE_NAMES.admin, reception: ROLE_NAMES.reception, planner: ROLE_NAMES.planner, tech: ROLE_NAMES.tech, hod: ROLE_NAMES.hod, reviewer: ROLE_NAMES.reviewer, signatory: ROLE_NAMES.signatory, accounts: ROLE_NAMES.accounts })) await createUser(ctx, `${e}@w.example`, [r], `${e} person`);
+  for (const [e, r] of Object.entries({
+    admin: ROLE_NAMES.admin,
+    reception: ROLE_NAMES.reception,
+    planner: ROLE_NAMES.planner,
+    tech: ROLE_NAMES.tech,
+    hod: ROLE_NAMES.hod,
+    reviewer: ROLE_NAMES.reviewer,
+    signatory: ROLE_NAMES.signatory,
+    accounts: ROLE_NAMES.accounts,
+  }))
+    await createUser(ctx, `${e}@w.example`, [r], `${e} person`);
   const c = async (n: string) => login(ctx, `${n}@w.example`);
   admin = await c('admin');
   reception = await c('reception');
@@ -131,7 +141,19 @@ describe('sending', () => {
   });
 
   it('records a failure with its reason and lets the queue retry', async () => {
-    const row = await ctx.prisma.whatsappMessage.create({ data: { toNumber: '919876543210', kind: 'report', template: 'x', language: 'en', params: [], documentFileId: '00000000-0000-0000-0000-000000000000', documentName: 'gone.pdf', entity: 'Report', entityId: reportId } });
+    const row = await ctx.prisma.whatsappMessage.create({
+      data: {
+        toNumber: '919876543210',
+        kind: 'report',
+        template: 'x',
+        language: 'en',
+        params: [],
+        documentFileId: '00000000-0000-0000-0000-000000000000',
+        documentName: 'gone.pdf',
+        entity: 'Report',
+        entityId: reportId,
+      },
+    });
     const original = (wa as unknown as { infra: { whatsapp: { transport: string } } }).infra.whatsapp.transport;
     (wa as unknown as { infra: { whatsapp: { transport: string } } }).infra.whatsapp.transport = 'cloud';
     try {
@@ -149,9 +171,17 @@ describe('wording order and receipts', () => {
   let reportId: string;
   const signed = (body: object, secret = 'test-app-secret') => {
     const raw = JSON.stringify(body);
-    return ctx.http().post('/api/v1/webhooks/whatsapp').set('Content-Type', 'application/json').set('X-Hub-Signature-256', `sha256=${createHmac('sha256', secret).update(raw).digest('hex')}`).send(raw);
+    return ctx
+      .http()
+      .post('/api/v1/webhooks/whatsapp')
+      .set('Content-Type', 'application/json')
+      .set('X-Hub-Signature-256', `sha256=${createHmac('sha256', secret).update(raw).digest('hex')}`)
+      .send(raw);
   };
-  const status = (id: string, s: string, extra: object = {}) => ({ object: 'whatsapp_business_account', entry: [{ id: 'WABA', changes: [{ field: 'messages', value: { messaging_product: 'whatsapp', statuses: [{ id, status: s, timestamp: '1794489600', recipient_id: '919876543210', ...extra }] } }] }] });
+  const status = (id: string, s: string, extra: object = {}) => ({
+    object: 'whatsapp_business_account',
+    entry: [{ id: 'WABA', changes: [{ field: 'messages', value: { messaging_product: 'whatsapp', statuses: [{ id, status: s, timestamp: '1794489600', recipient_id: '919876543210', ...extra }] } }] }],
+  });
 
   beforeAll(async () => {
     reportId = (await ctx.prisma.report.findFirstOrThrow({ where: { revisions: { some: { status: 'ISSUED' } } } })).id;
@@ -159,7 +189,9 @@ describe('wording order and receipts', () => {
 
   it('sends the values the lab chose, in its order', async () => {
     const s = (await admin.get('/admin/lab/whatsapp').expect(200)).body;
-    await admin.put('/admin/lab/whatsapp/templates', { version: s.version, templates: { report: { name: 'lab_report', language: 'en', values: ['reportNo', 'sampleNo', 'customerName', 'contactName'] } } }).expect(200);
+    await admin
+      .put('/admin/lab/whatsapp/templates', { version: s.version, templates: { report: { name: 'lab_report', language: 'en', values: ['reportNo', 'sampleNo', 'customerName', 'contactName'] } } })
+      .expect(200);
     await team.signatory.post('/whatsapp/send', { kind: 'report', entityId: reportId, to: '9876543210', contactName: 'Priya', consent: true }).expect(200);
     const before = wa.sent.length;
     await drain();
@@ -168,7 +200,9 @@ describe('wording order and receipts', () => {
     expect(m.template).toBe('lab_report');
     expect(m.params).toEqual([report.reportNo, report.sample.sampleNo, fx.intra.name.trim(), 'Priya']);
     const now = (await admin.get('/admin/lab/whatsapp').expect(200)).body;
-    await admin.put('/admin/lab/whatsapp/templates', { version: now.version, templates: { report: { name: 'lims_test_report', language: 'en', values: ['contactName', 'reportNo', 'labName'] } } }).expect(200);
+    await admin
+      .put('/admin/lab/whatsapp/templates', { version: now.version, templates: { report: { name: 'lims_test_report', language: 'en', values: ['contactName', 'reportNo', 'labName'] } } })
+      .expect(200);
   });
 
   it('Meta proves the webhook with the verify token', async () => {
@@ -217,7 +251,11 @@ describe('administration', () => {
     await admin.put('/admin/lab/whatsapp/templates', { version: s.version, templates: { nonsense: { name: 'x', language: 'en', values } } }).expect(400);
     await admin.put('/admin/lab/whatsapp/templates', { version: s.version, templates: { report: { name: 'x', language: 'en', values: ['contactName', 'invoiceNo'] } } }).expect(400); // not a report value
     await admin.put('/admin/lab/whatsapp/templates', { version: s.version, templates: { report: { name: 'x', language: 'en', values: ['reportNo', 'reportNo'] } } }).expect(400);
-    const saved = (await admin.put('/admin/lab/whatsapp/templates', { version: s.version, templates: { report: { name: 'lab_report_v2', language: 'en_US', values: ['reportNo', 'sampleNo', 'contactName'] } } }).expect(200)).body;
+    const saved = (
+      await admin
+        .put('/admin/lab/whatsapp/templates', { version: s.version, templates: { report: { name: 'lab_report_v2', language: 'en_US', values: ['reportNo', 'sampleNo', 'contactName'] } } })
+        .expect(200)
+    ).body;
     expect(saved.templates[0]).toMatchObject({ name: 'lab_report_v2', language: 'en_US', values: ['reportNo', 'sampleNo', 'contactName'] });
     await admin.put('/admin/lab/whatsapp/templates', { version: s.version, templates: { report: { name: 'stale', language: 'en', values } } }).expect(409);
   });

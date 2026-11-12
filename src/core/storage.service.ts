@@ -110,9 +110,7 @@ export class StorageService {
   async store(input: StoreInput, tx?: Tx) {
     await this.ensureBucket();
     const storageKey = `${input.category}/${new Date().getFullYear()}/${randomUUID()}`;
-    await this.s3.send(
-      new PutObjectCommand({ Bucket: this.cfg.s3.bucket, Key: storageKey, Body: input.buffer, ContentType: input.mimeType }),
-    );
+    await this.s3.send(new PutObjectCommand({ Bucket: this.cfg.s3.bucket, Key: storageKey, Body: input.buffer, ContentType: input.mimeType }));
     return (tx ?? this.prisma).fileObject.create({
       data: {
         storageKey,

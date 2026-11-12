@@ -1,10 +1,12 @@
 import { IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreateDocumentDto {
-  @IsString() @MaxLength(60)
+  @IsString()
+  @MaxLength(60)
   kind: string;
 
-  @IsOptional() @IsObject()
+  @IsOptional()
+  @IsObject()
   params?: Record<string, unknown>;
 }
 

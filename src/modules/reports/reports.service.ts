@@ -24,7 +24,23 @@ import { SchedulerService } from '../scheduler/scheduler.service.js';
 import { TestingService } from '../testing/testing.service.js';
 import type { ReportCorrectDto, ReportIssueDto, ReportQuery, ReportRejectDto, ReportVerificationDto } from './reports.dto.js';
 
-const sampleInclude = { sample: { select: { id: true, sampleNo: true, jobId: true, description: true, job: { select: { jobNo: true, contactEmail: true, customer: { select: { id: true, name: true, withholdReportUntilPaid: true, contacts: { where: { deletedAt: null, isPrimary: true }, select: { email: true } } } } } } } } } as const;
+const sampleInclude = {
+  sample: {
+    select: {
+      id: true,
+      sampleNo: true,
+      jobId: true,
+      description: true,
+      job: {
+        select: {
+          jobNo: true,
+          contactEmail: true,
+          customer: { select: { id: true, name: true, withholdReportUntilPaid: true, contacts: { where: { deletedAt: null, isPrimary: true }, select: { email: true } } } },
+        },
+      },
+    },
+  },
+} as const;
 const fullInclude = { ...sampleInclude, revisions: { orderBy: { revisionNo: 'desc' }, include: { rejections: { orderBy: { at: 'desc' } }, signature: true } } } as const;
 type Full = Prisma.ReportGetPayload<{ include: typeof fullInclude }>;
 type Revision = Full['revisions'][number];
@@ -90,7 +106,10 @@ export class ReportsService implements OnModuleInit {
     const cust = s.job.customer;
     const contact = cust.contacts.find((c) => c.isPrimary) ?? cust.contacts[0];
     const addr = cust.addresses.find((a) => a.kind === 'REPORT') ?? cust.addresses.find((a) => a.kind === 'BILLING') ?? cust.addresses[0];
-    const files = await tx.fileObject.findMany({ where: { entity: 'SampleTest', entityId: { in: s.tests.map((t) => t.id) }, category: 'result-image', deletedAt: null }, orderBy: { createdAt: 'asc' } });
+    const files = await tx.fileObject.findMany({
+      where: { entity: 'SampleTest', entityId: { in: s.tests.map((t) => t.id) }, category: 'result-image', deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+    });
     const specIds = [s.specificationId, s.dualSpecificationId].filter(Boolean) as string[];
     const specs = await tx.specification.findMany({ where: { id: { in: specIds } } });
     const starts = s.tests.map((t) => t.startedAt).filter((d): d is Date => !!d);
@@ -127,15 +146,17 @@ export class ReportsService implements OnModuleInit {
         remarks: t.remarks,
         observations: t.observations,
         // Working values (dimensions, loads, individual readings) stay on the test record, off the report.
-        parameters: t.results.filter((r) => r.showOnReport).map((r) => ({
-          name: r.name,
-          value: r.numericValue !== null ? `${r.qualifier ? `${r.qualifier} ` : ''}${new Prisma.Decimal(r.numericValue).toFixed(r.decimals)}` : r.textValue,
-          unit: r.unit,
-          limits: (r.limits as ReportContent['tests'][number]['parameters'][number]['limits'] | null) ?? [],
-          passPrimary: r.passPrimary,
-          passDual: r.passDual,
-          accredited: r.accredited,
-        })),
+        parameters: t.results
+          .filter((r) => r.showOnReport)
+          .map((r) => ({
+            name: r.name,
+            value: r.numericValue !== null ? `${r.qualifier ? `${r.qualifier} ` : ''}${new Prisma.Decimal(r.numericValue).toFixed(r.decimals)}` : r.textValue,
+            unit: r.unit,
+            limits: (r.limits as ReportContent['tests'][number]['parameters'][number]['limits'] | null) ?? [],
+            passPrimary: r.passPrimary,
+            passDual: r.passDual,
+            accredited: r.accredited,
+          })),
         images: files.filter((f) => f.entityId === t.id).map((f) => ({ fileId: f.id, widthMm: f.printWidthMm ?? 80, heightMm: f.printHeightMm ?? 60, caption: f.caption })),
       })),
       reportRemarks: edits.reportRemarks ?? null,
@@ -166,7 +187,14 @@ export class ReportsService implements OnModuleInit {
       const reportNo = await this.numbering.next(tx, 'REPORT');
       const content = await this.buildContent(tx, sampleId);
       const report = await tx.report.create({
-        data: { reportNo, sampleId, isDemo, revisions: { create: { revisionNo: 0, content: content as unknown as Prisma.InputJsonValue, companySnapshot: this.company.snapshot() as unknown as Prisma.InputJsonValue, createdById: actorId() } } },
+        data: {
+          reportNo,
+          sampleId,
+          isDemo,
+          revisions: {
+            create: { revisionNo: 0, content: content as unknown as Prisma.InputJsonValue, companySnapshot: this.company.snapshot() as unknown as Prisma.InputJsonValue, createdById: actorId() },
+          },
+        },
       });
       await this.audit.status(tx, { entity: 'Report', entityId: report.id, from: null, to: 'DRAFT', jobId: sample.jobId });
       await this.notify?.(tx, { type: 'REPORT_READY_FOR_REVIEW', reportId: report.id });
@@ -175,7 +203,13 @@ export class ReportsService implements OnModuleInit {
     const latest = existing.revisions[0];
     if (latest.status === 'DRAFT') {
       const old = latest.content as unknown as ReportContent;
-      const content = await this.buildContent(tx, sampleId, { reportRemarks: old.reportRemarks, sampleDescription: old.sampleDescription, customerReference: old.customerReference, customer: old.customer, samplePhotos: old.samplePhotos });
+      const content = await this.buildContent(tx, sampleId, {
+        reportRemarks: old.reportRemarks,
+        sampleDescription: old.sampleDescription,
+        customerReference: old.customerReference,
+        customer: old.customer,
+        samplePhotos: old.samplePhotos,
+      });
       await tx.reportRevision.update({ where: { id: latest.id }, data: { content: content as unknown as Prisma.InputJsonValue, version: { increment: 1 } } });
       await this.audit.record({ action: 'Report.refreshed', entity: 'Report', entityId: existing.id, after: { revisionNo: latest.revisionNo } }, tx);
     }
@@ -246,7 +280,9 @@ export class ReportsService implements OnModuleInit {
       terms,
       reviewedByName: rev.reviewedByName,
       draft: !frozen,
-      signature: rev.signature ? { name: rev.signature.name, designation: rev.signature.designation, signedAt: rev.signature.signedAt, contentSha256: rev.signature.contentSha256, imageDataUri } : null,
+      signature: rev.signature
+        ? { name: rev.signature.name, designation: rev.signature.designation, signedAt: rev.signature.signedAt, contentSha256: rev.signature.contentSha256, imageDataUri }
+        : null,
       verification,
     };
   }
@@ -261,7 +297,10 @@ export class ReportsService implements OnModuleInit {
    * approval. No addresses, contacts, prices or company tax and bank details.
    */
   async verify(code: string): Promise<ReportVerificationDto> {
-    const rev = await this.prisma.reportRevision.findUnique({ where: { verificationCode: code }, include: { report: { include: { revisions: { select: { revisionNo: true, status: true } } } }, signature: true } });
+    const rev = await this.prisma.reportRevision.findUnique({
+      where: { verificationCode: code },
+      include: { report: { include: { revisions: { select: { revisionNo: true, status: true } } } }, signature: true },
+    });
     if (!rev || !['APPROVED', 'ISSUED', 'SUPERSEDED'].includes(rev.status)) throw notFound('Report');
     const content = rev.content as unknown as ReportContent;
     const company = rev.companySnapshot as unknown as CompanySnapshot;
@@ -315,16 +354,44 @@ export class ReportsService implements OnModuleInit {
       ...(q.status ? { latestStatus: q.status } : {}),
       ...(q.jobId ? { sample: { jobId: q.jobId } } : {}),
       ...(q.customerId ? { sample: { ...(q.jobId ? { jobId: q.jobId } : {}), job: { customerId: q.customerId } } } : {}),
-      ...(q.q ? { OR: [{ reportNo: { contains: q.q, mode: 'insensitive' } }, { sample: { sampleNo: { contains: q.q, mode: 'insensitive' } } }, ...(identity ? [{ sample: { job: { customer: { name: { contains: q.q, mode: 'insensitive' as const } } } } }] : [])] } : {}),
+      ...(q.q
+        ? {
+            OR: [
+              { reportNo: { contains: q.q, mode: 'insensitive' } },
+              { sample: { sampleNo: { contains: q.q, mode: 'insensitive' } } },
+              ...(identity ? [{ sample: { job: { customer: { name: { contains: q.q, mode: 'insensitive' as const } } } } }] : []),
+            ],
+          }
+        : {}),
     };
     const [rows, total] = await Promise.all([
-      this.prisma.report.findMany({ where, include: { ...sampleInclude, revisions: { orderBy: { revisionNo: 'desc' }, take: 1 } }, orderBy: orderBy(q, ['reportNo', 'createdAt'], 'createdAt'), ...skipTake(q) }),
+      this.prisma.report.findMany({
+        where,
+        include: { ...sampleInclude, revisions: { orderBy: { revisionNo: 'desc' }, take: 1 } },
+        orderBy: orderBy(q, ['reportNo', 'createdAt'], 'createdAt'),
+        ...skipTake(q),
+      }),
       this.prisma.report.count({ where }),
     ]);
     return toPage(
       rows.map((r) => {
         const v = r.revisions[0];
-        return { id: r.id, reportNo: r.reportNo, revisionId: v.id, revisionNo: v.revisionNo, status: v.status, sampleId: r.sample.id, sampleNo: r.sample.sampleNo, jobId: r.sample.jobId, jobNo: r.sample.job.jobNo, customerName: identity ? r.sample.job.customer.name : null, ulrNumber: v.ulrNumber, createdAt: r.createdAt, issuedAt: v.issuedAt, version: v.version };
+        return {
+          id: r.id,
+          reportNo: r.reportNo,
+          revisionId: v.id,
+          revisionNo: v.revisionNo,
+          status: v.status,
+          sampleId: r.sample.id,
+          sampleNo: r.sample.sampleNo,
+          jobId: r.sample.jobId,
+          jobNo: r.sample.job.jobNo,
+          customerName: identity ? r.sample.job.customer.name : null,
+          ulrNumber: v.ulrNumber,
+          createdAt: r.createdAt,
+          issuedAt: v.issuedAt,
+          version: v.version,
+        };
       }),
       total,
       q,
@@ -341,11 +408,20 @@ export class ReportsService implements OnModuleInit {
     const r = await this.load(id);
     const identity = can('customers.view');
     const me = actorId();
-    const tests = await this.prisma.sampleTest.findMany({ where: { sampleId: r.sample.id, deletedAt: null, status: { not: 'CANCELLED' } }, select: { id: true, testName: true, status: true }, orderBy: { createdAt: 'asc' } });
+    const tests = await this.prisma.sampleTest.findMany({
+      where: { sampleId: r.sample.id, deletedAt: null, status: { not: 'CANCELLED' } },
+      select: { id: true, testName: true, status: true },
+      orderBy: { createdAt: 'asc' },
+    });
     const current = r.revisions[0];
     const content = current.content as unknown as ReportContent;
     return {
-      id: r.id, reportNo: r.reportNo, sampleId: r.sample.id, sampleNo: r.sample.sampleNo, jobId: r.sample.jobId, jobNo: r.sample.job.jobNo,
+      id: r.id,
+      reportNo: r.reportNo,
+      sampleId: r.sample.id,
+      sampleNo: r.sample.sampleNo,
+      jobId: r.sample.jobId,
+      jobNo: r.sample.job.jobNo,
       customerName: identity ? r.sample.job.customer.name : null,
       customerEmail: identity ? (r.sample.job.contactEmail ?? r.sample.job.customer.contacts[0]?.email ?? null) : null,
       currentRevisionNo: r.currentRevisionNo,
@@ -354,15 +430,30 @@ export class ReportsService implements OnModuleInit {
       canReview: can('reports.review') && current.status !== 'APPROVED',
       canApprove: can('reports.approve') && (current.reviewedById !== me || (await this.settings.get('controls.allowSameReviewerSignatory'))),
       withheld: await this.withheld(this.prisma, r),
-      reportRemarks: content.reportRemarks, sampleDescription: content.sampleDescription, customerReference: content.customerReference, kindAttention: content.customer.kindAttention,
+      reportRemarks: content.reportRemarks,
+      sampleDescription: content.sampleDescription,
+      customerReference: content.customerReference,
+      kindAttention: content.customer.kindAttention,
       samplePhotos: (content.samplePhotos ?? []).map(({ fileId, caption, widthMm, heightMm }) => ({ fileId, caption, widthMm, heightMm })),
     };
   }
 
   private revisionDto(v: Revision) {
     return {
-      id: v.id, revisionNo: v.revisionNo, status: v.status, revisionReason: v.revisionReason, ulrNumber: v.ulrNumber, reviewedByName: v.reviewedByName, reviewedAt: v.reviewedAt, approvedByName: v.approvedByName, approvedAt: v.approvedAt, issuedAt: v.issuedAt, supersededAt: v.supersededAt,
-      pdfReady: !!v.pdfFileId, pdfSha256: v.pdfSha256, version: v.version,
+      id: v.id,
+      revisionNo: v.revisionNo,
+      status: v.status,
+      revisionReason: v.revisionReason,
+      ulrNumber: v.ulrNumber,
+      reviewedByName: v.reviewedByName,
+      reviewedAt: v.reviewedAt,
+      approvedByName: v.approvedByName,
+      approvedAt: v.approvedAt,
+      issuedAt: v.issuedAt,
+      supersededAt: v.supersededAt,
+      pdfReady: !!v.pdfFileId,
+      pdfSha256: v.pdfSha256,
+      version: v.version,
       rejections: v.rejections.map((x) => ({ id: x.id, stage: x.stage, action: x.action, reason: x.reason, byName: x.byName, at: x.at, sampleTestIds: x.sampleTestIds as string[] | null })),
       signature: v.signature ? { name: v.signature.name, designation: v.signature.designation, signedAt: v.signature.signedAt, contentSha256: v.signature.contentSha256 } : null,
     };
@@ -411,7 +502,17 @@ export class ReportsService implements OnModuleInit {
       const rev = this.current(r);
       assertTransition(REPORT, rev.status, 'DRAFT', dto.reason);
       if (dto.action === 'RETEST' && !dto.sampleTestIds?.length) throw badRequest('Choose the tests to send back', [{ field: 'sampleTestIds', message: 'Choose at least one test' }]);
-      await tx.reportRejection.create({ data: { revisionId: rev.id, stage: rev.status, action: dto.action, reason: dto.reason, sampleTestIds: dto.action === 'RETEST' ? dto.sampleTestIds : undefined, byId: actorId(), byName: currentUser()!.name } });
+      await tx.reportRejection.create({
+        data: {
+          revisionId: rev.id,
+          stage: rev.status,
+          action: dto.action,
+          reason: dto.reason,
+          sampleTestIds: dto.action === 'RETEST' ? dto.sampleTestIds : undefined,
+          byId: actorId(),
+          byName: currentUser()!.name,
+        },
+      });
       await this.move(tx, rev, dto.version, 'DRAFT', { reviewedById: null, reviewedByName: null, reviewedAt: null });
       await this.audit.status(tx, { entity: 'Report', entityId: id, from: rev.status, to: 'DRAFT', reason: dto.reason, jobId: r.sample.jobId, meta: { action: dto.action } });
       if (dto.action === 'RETEST') {
@@ -419,7 +520,10 @@ export class ReportsService implements OnModuleInit {
           const t = await tx.sampleTest.findFirst({ where: { id: testId, sampleId: r.sample.id, deletedAt: null } });
           if (!t) throw badRequest('That test is not on this report', [{ field: 'sampleTestIds', message: 'Not on this report' }]);
           assertTransition(TEST, t.status, 'IN_PROGRESS', dto.reason);
-          await tx.sampleTest.update({ where: { id: t.id }, data: { status: 'IN_PROGRESS', rejectionReason: dto.reason, approvedAt: null, approvedById: null, submittedAt: null, version: { increment: 1 } } });
+          await tx.sampleTest.update({
+            where: { id: t.id },
+            data: { status: 'IN_PROGRESS', rejectionReason: dto.reason, approvedAt: null, approvedById: null, submittedAt: null, version: { increment: 1 } },
+          });
           await this.audit.status(tx, { entity: 'SampleTest', entityId: t.id, from: t.status, to: 'IN_PROGRESS', reason: dto.reason, jobId: r.sample.jobId, meta: { reportRetest: true } });
         }
         await this.jobs.syncStatus(tx, r.sample.jobId);
@@ -448,7 +552,16 @@ export class ReportsService implements OnModuleInit {
       };
       const { count } = await tx.reportRevision.updateMany({ where: { id: rev.id, version: dto.version }, data: { content: content as unknown as Prisma.InputJsonValue, version: { increment: 1 } } });
       if (count !== 1) throw conflict();
-      await this.audit.record({ action: 'Report.corrected', entity: 'Report', entityId: id, before: { reportRemarks: before.reportRemarks, sampleDescription: before.sampleDescription, samplePhotos: before.samplePhotos?.map((p) => p.fileId) }, after: dto }, tx);
+      await this.audit.record(
+        {
+          action: 'Report.corrected',
+          entity: 'Report',
+          entityId: id,
+          before: { reportRemarks: before.reportRemarks, sampleDescription: before.sampleDescription, samplePhotos: before.samplePhotos?.map((p) => p.fileId) },
+          after: dto,
+        },
+        tx,
+      );
     });
     return this.get(id);
   }
@@ -461,7 +574,14 @@ export class ReportsService implements OnModuleInit {
     const ids = chosen.map((p) => p.fileId);
     if (new Set(ids).size !== ids.length) throw badRequest('A photograph is listed twice', [{ field: 'samplePhotos', message: 'Listed twice' }]);
     const files = await tx.fileObject.findMany({
-      where: { id: { in: ids }, deletedAt: null, OR: [{ entity: 'Sample', entityId: sampleId, category: 'sample-image' }, { entity: 'Report', entityId: reportId, category: 'report-photo' }] },
+      where: {
+        id: { in: ids },
+        deletedAt: null,
+        OR: [
+          { entity: 'Sample', entityId: sampleId, category: 'sample-image' },
+          { entity: 'Report', entityId: reportId, category: 'report-photo' },
+        ],
+      },
       select: { id: true, mimeType: true },
     });
     const ok = new Set(files.filter((f) => f.mimeType.startsWith('image/')).map((f) => f.id));
@@ -504,7 +624,9 @@ export class ReportsService implements OnModuleInit {
         termsSnapshot: terms?.body ?? null,
         verificationCode: rev.verificationCode ?? newVerificationCode(),
       });
-      await tx.reportSignature.create({ data: { revisionId: rev.id, userId: me.id, name: user.name, designation: user.designation, signatureFileId: user.signatureFileId, ip: getContext()?.ip, contentSha256 } });
+      await tx.reportSignature.create({
+        data: { revisionId: rev.id, userId: me.id, name: user.name, designation: user.designation, signatureFileId: user.signatureFileId, ip: getContext()?.ip, contentSha256 },
+      });
       await this.audit.status(tx, { entity: 'Report', entityId: id, from: rev.status, to: 'APPROVED', jobId: r.sample.jobId, meta: { contentSha256, ulrNumber } });
       return rev.id;
     });
@@ -523,7 +645,9 @@ export class ReportsService implements OnModuleInit {
     const r = await this.load(id);
     const rev = this.current(r);
     if (rev.status !== 'APPROVED' || rev.pdfFileId) throw rule('PDF_NOT_MISSING', 'Only an approved report that has no final PDF yet can be regenerated');
-    const running = await this.prisma.documentJob.findFirst({ where: { kind: REPORT_PDF, status: { in: ['QUEUED', 'RUNNING'] }, createdAt: { gt: new Date(Date.now() - 2 * 60_000) }, params: { path: ['revisionId'], equals: rev.id } } });
+    const running = await this.prisma.documentJob.findFirst({
+      where: { kind: REPORT_PDF, status: { in: ['QUEUED', 'RUNNING'] }, createdAt: { gt: new Date(Date.now() - 2 * 60_000) }, params: { path: ['revisionId'], equals: rev.id } },
+    });
     if (!running) await this.queueFinalPdf(rev.id, actorId() ?? null);
     await this.audit.record({ action: 'Report.pdfRegenerated', entity: 'Report', entityId: id, after: { revisionNo: rev.revisionNo } });
     return this.get(id);
@@ -555,7 +679,15 @@ export class ReportsService implements OnModuleInit {
       if (rev.replacesRevisionId) {
         assertSystemTransition(REPORT, 'ISSUED', 'SUPERSEDED');
         await tx.reportRevision.update({ where: { id: rev.replacesRevisionId }, data: { status: 'SUPERSEDED', supersededAt: new Date(), version: { increment: 1 } } });
-        await this.audit.status(tx, { entity: 'Report', entityId: id, from: 'ISSUED', to: 'SUPERSEDED', jobId: r.sample.jobId, reason: rev.revisionReason, meta: { replacedRevisionId: rev.replacesRevisionId } });
+        await this.audit.status(tx, {
+          entity: 'Report',
+          entityId: id,
+          from: 'ISSUED',
+          to: 'SUPERSEDED',
+          jobId: r.sample.jobId,
+          reason: rev.revisionReason,
+          meta: { replacedRevisionId: rev.replacesRevisionId },
+        });
       }
       await this.jobs.syncStatus(tx, r.sample.jobId);
       return { revisionId: rev.id };
@@ -602,9 +734,24 @@ export class ReportsService implements OnModuleInit {
       const rev = this.current(r);
       if (rev.status !== 'ISSUED') throw rule('NOT_ISSUED', 'Only an issued report can be revised');
       const old = rev.content as unknown as ReportContent;
-      const content = await this.buildContent(tx, r.sample.id, { reportRemarks: old.reportRemarks, sampleDescription: old.sampleDescription, customerReference: old.customerReference, customer: old.customer, samplePhotos: old.samplePhotos });
+      const content = await this.buildContent(tx, r.sample.id, {
+        reportRemarks: old.reportRemarks,
+        sampleDescription: old.sampleDescription,
+        customerReference: old.customerReference,
+        customer: old.customer,
+        samplePhotos: old.samplePhotos,
+      });
       const next = await tx.reportRevision.create({
-        data: { reportId: id, revisionNo: rev.revisionNo + 1, revisionReason: reason, replacesRevisionId: rev.id, ulrNumber: rev.ulrNumber, content: content as unknown as Prisma.InputJsonValue, companySnapshot: this.company.snapshot() as unknown as Prisma.InputJsonValue, createdById: actorId() },
+        data: {
+          reportId: id,
+          revisionNo: rev.revisionNo + 1,
+          revisionReason: reason,
+          replacesRevisionId: rev.id,
+          ulrNumber: rev.ulrNumber,
+          content: content as unknown as Prisma.InputJsonValue,
+          companySnapshot: this.company.snapshot() as unknown as Prisma.InputJsonValue,
+          createdById: actorId(),
+        },
       });
       await tx.report.update({ where: { id }, data: { latestStatus: 'DRAFT' } });
       await this.audit.status(tx, { entity: 'Report', entityId: id, from: 'ISSUED', to: 'DRAFT', reason, jobId: r.sample.jobId, meta: { revisionNo: next.revisionNo } });
@@ -622,7 +769,8 @@ export class ReportsService implements OnModuleInit {
   }
 
   history(id: string) {
-    return this.prisma.auditLog.findMany({ where: { entity: 'Report', entityId: id }, orderBy: { at: 'desc' }, take: 200 }).then((rows) => rows.map((r) => ({ id: r.id.toString(), at: r.at, userName: r.userName, action: r.action, before: r.before, after: r.after, reason: r.reason })));
+    return this.prisma.auditLog
+      .findMany({ where: { entity: 'Report', entityId: id }, orderBy: { at: 'desc' }, take: 200 })
+      .then((rows) => rows.map((r) => ({ id: r.id.toString(), at: r.at, userName: r.userName, action: r.action, before: r.before, after: r.after, reason: r.reason })));
   }
 }
-

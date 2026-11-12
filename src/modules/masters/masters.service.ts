@@ -61,10 +61,7 @@ export class MastersService implements OnModuleInit {
     const def = this.def(key);
     const where = this.where(def, q);
     const d = def.delegate(this.prisma);
-    const [rows, total] = await Promise.all([
-      d.findMany({ where, include: def.include, orderBy: orderBy(q, def.sort as string[], def.defaultSort, 'asc'), ...skipTake(q) }),
-      d.count({ where }),
-    ]);
+    const [rows, total] = await Promise.all([d.findMany({ where, include: def.include, orderBy: orderBy(q, def.sort as string[], def.defaultSort, 'asc'), ...skipTake(q) }), d.count({ where })]);
     return toPage(rows.map(def.dto), total, q);
   }
 

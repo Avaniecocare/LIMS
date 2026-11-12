@@ -14,55 +14,90 @@ import { LibraryService } from './library.service.js';
 export class LibraryController {
   constructor(private readonly library: LibraryService) {}
 
-  @Get('folders') @Perm('files.view') @ApiOkResponse({ type: [FolderDto] })
+  @Get('folders')
+  @Perm('files.view')
+  @ApiOkResponse({ type: [FolderDto] })
   folders() {
     return this.library.folders();
   }
 
-  @Post('folders') @Perm('files.manage') @ApiOkResponse({ type: FolderDto })
+  @Post('folders')
+  @Perm('files.manage')
+  @ApiOkResponse({ type: FolderDto })
   createFolder(@Body() dto: FolderInput) {
     return this.library.createFolder(dto);
   }
 
-  @Patch('folders/:id') @Perm('files.manage') @ApiOkResponse({ type: FolderDto })
+  @Patch('folders/:id')
+  @Perm('files.manage')
+  @ApiOkResponse({ type: FolderDto })
   updateFolder(@Param('id', ParseUUIDPipe) id: string, @Body() dto: FolderUpdateInput) {
     return this.library.updateFolder(id, dto);
   }
 
-  @Delete('folders/:id') @Perm('files.manage') @ApiOkResponse({ type: OkDto })
+  @Delete('folders/:id')
+  @Perm('files.manage')
+  @ApiOkResponse({ type: OkDto })
   async removeFolder(@Param('id', ParseUUIDPipe) id: string) {
     await this.library.removeFolder(id);
     return { ok: true };
   }
 
-  @Get('files') @Perm('files.view') @ApiOkResponse({ type: LibraryFilePageDto })
+  @Get('files')
+  @Perm('files.view')
+  @ApiOkResponse({ type: LibraryFilePageDto })
   list(@Query() q: LibraryQuery) {
     return this.library.list(q);
   }
 
-  @Post('files') @Perm('files.manage')
+  @Post('files')
+  @Perm('files.manage')
   @ApiConsumes('multipart/form-data')
-  @ApiBody({ schema: { type: 'object', required: ['file'], properties: { file: { type: 'string', format: 'binary' }, folderId: { type: 'string' }, description: { type: 'string' }, entity: { type: 'string', enum: ['Customer', 'Job'] }, entityId: { type: 'string' } } } })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        folderId: { type: 'string' },
+        description: { type: 'string' },
+        entity: { type: 'string', enum: ['Customer', 'Job'] },
+        entityId: { type: 'string' },
+      },
+    },
+  })
   @ApiOkResponse({ type: FileDto })
   async upload(@Req() req: FastifyRequest) {
     const f = await readUpload(req);
-    return this.library.upload({ buffer: f.buffer, originalName: f.filename, folderId: f.field('folderId') || null, description: f.field('description')?.slice(0, 1000) ?? null, entity: f.field('entity') || null, entityId: f.field('entityId') || null });
+    return this.library.upload({
+      buffer: f.buffer,
+      originalName: f.filename,
+      folderId: f.field('folderId') || null,
+      description: f.field('description')?.slice(0, 1000) ?? null,
+      entity: f.field('entity') || null,
+      entityId: f.field('entityId') || null,
+    });
   }
 
-  @Patch('files/:id') @Perm('files.manage') @ApiOkResponse({ type: FileDto })
+  @Patch('files/:id')
+  @Perm('files.manage')
+  @ApiOkResponse({ type: FileDto })
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: LibraryFileUpdate) {
     return this.library.update(id, dto);
   }
 
-  @Delete('files/:id') @Perm('files.manage') @ApiOkResponse({ type: OkDto })
+  @Delete('files/:id')
+  @Perm('files.manage')
+  @ApiOkResponse({ type: OkDto })
   async remove(@Param('id', ParseUUIDPipe) id: string, @Query('reason') reason?: string) {
     await this.library.remove(id, reason?.slice(0, 500));
     return { ok: true };
   }
 
-  @Get('files/:id/url') @Perm('files.view') @ApiOkResponse({ type: SignedUrlDto })
+  @Get('files/:id/url')
+  @Perm('files.view')
+  @ApiOkResponse({ type: SignedUrlDto })
   url(@Param('id', ParseUUIDPipe) id: string) {
     return this.library.url(id);
   }
 }
-

@@ -23,7 +23,8 @@ export class WhatsappWebhookController {
     @Inject(INFRA_CONFIG) private readonly infra: InfraConfig,
   ) {}
 
-  @Public() @Get()
+  @Public()
+  @Get()
   verify(@Res({ passthrough: true }) reply: FastifyReply, @Query('hub.mode') mode?: string, @Query('hub.verify_token') token?: string, @Query('hub.challenge') challenge?: string) {
     const expected = this.infra.whatsapp?.verifyToken;
     if (!expected || mode !== 'subscribe' || !token || !same(token, expected) || !challenge) throw refused();
@@ -32,7 +33,9 @@ export class WhatsappWebhookController {
     return challenge.slice(0, 200);
   }
 
-  @Public() @Post() @HttpCode(200)
+  @Public()
+  @Post()
+  @HttpCode(200)
   async receive(@Req() req: FastifyRequest & { rawBody?: Buffer }) {
     const secret = this.infra.whatsapp?.appSecret;
     const header = req.headers['x-hub-signature-256'];

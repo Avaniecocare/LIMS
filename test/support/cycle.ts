@@ -2,7 +2,10 @@ import { DocumentsService } from '../../src/modules/documents/documents.service.
 import { PASSWORD, type Client, type Ctx } from './harness.js';
 import { plannedTests, workTest, type Team } from './workflow.js';
 
-export interface FullTeam extends Team { reviewer: Client; signatory: Client }
+export interface FullTeam extends Team {
+  reviewer: Client;
+  signatory: Client;
+}
 
 /** Takes a job from booking to an issued report. */
 export async function issuedJob(ctx: Ctx, team: FullTeam, customerId: string, testIds: string[], values: Record<string, string> = {}) {

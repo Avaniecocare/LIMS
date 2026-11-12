@@ -28,14 +28,34 @@ export class LibraryFileUpdate {
   @IsOptional() @IsUUID() entityId?: string | null;
 }
 
-export class FolderDto { id: string; name: string; parentId: string | null; fileCount: number; version: number; }
+export class FolderDto {
+  id: string;
+  name: string;
+  parentId: string | null;
+  fileCount: number;
+  version: number;
+}
 
 export class LibraryFileDto {
-  id: string; originalName: string; mimeType: string; sizeBytes: number; category: string; entity: string | null; entityId: string | null;
+  id: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  category: string;
+  entity: string | null;
+  entityId: string | null;
   /** e.g. "Job LAB/JOB/26-27/00001" or "Example Industries (CRN-00001)" */
-  entityLabel: string | null; folderId: string | null; folderName: string | null; description: string | null; createdAt: Date; createdByName: string | null;
+  entityLabel: string | null;
+  folderId: string | null;
+  folderName: string | null;
+  description: string | null;
+  createdAt: Date;
+  createdByName: string | null;
   /** library files the caller may rename, move or remove */
   canEdit: boolean;
 }
 
-export class LibraryFilePageDto { data: LibraryFileDto[]; meta: PageMetaDto; }
+export class LibraryFilePageDto {
+  data: LibraryFileDto[];
+  meta: PageMetaDto;
+}

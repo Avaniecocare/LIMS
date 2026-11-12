@@ -15,7 +15,17 @@ let fx: Awaited<ReturnType<typeof billingFixture>>;
 beforeAll(async () => {
   ctx = await bootApp();
   await resetDb(ctx);
-  for (const [e, r] of Object.entries({ admin: ROLE_NAMES.admin, reception: ROLE_NAMES.reception, planner: ROLE_NAMES.planner, tech: ROLE_NAMES.tech, hod: ROLE_NAMES.hod, reviewer: ROLE_NAMES.reviewer, signatory: ROLE_NAMES.signatory, sales: ROLE_NAMES.sales })) await createUser(ctx, `${e}@r.example`, [r], `${e} person`);
+  for (const [e, r] of Object.entries({
+    admin: ROLE_NAMES.admin,
+    reception: ROLE_NAMES.reception,
+    planner: ROLE_NAMES.planner,
+    tech: ROLE_NAMES.tech,
+    hod: ROLE_NAMES.hod,
+    reviewer: ROLE_NAMES.reviewer,
+    signatory: ROLE_NAMES.signatory,
+    sales: ROLE_NAMES.sales,
+  }))
+    await createUser(ctx, `${e}@r.example`, [r], `${e} person`);
   admin = await login(ctx, 'admin@r.example');
   reception = await login(ctx, 'reception@r.example');
   planner = await login(ctx, 'planner@r.example');
@@ -160,13 +170,14 @@ describe('report workflow', () => {
     await reviewer.patch(`/reports/${row.id}/draft`, { version: rev(r).version, reportRemarks: 'Sneaky' }).expect(422); // not a draft now
   });
 
-  it('sample photographs: chosen on the draft, printed in order, kept through refreshes, and only this sample\'s', async () => {
+  it("sample photographs: chosen on the draft, printed in order, kept through refreshes, and only this sample's", async () => {
     const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
     const { job, row } = await approvedReport();
     const other = await approvedReport();
     const sampleId = (await reviewer.get(`/reports/${row.id}`).expect(200)).body.sampleId;
     // One taken at booking, one added by the reviewer on the report, one belonging to a different sample.
-    const atBooking = (await reception.post('/files').field('entity', 'Sample').field('entityId', sampleId).field('category', 'sample-image').attach('file', PNG, 'as received.png').expect(201)).body.id;
+    const atBooking = (await reception.post('/files').field('entity', 'Sample').field('entityId', sampleId).field('category', 'sample-image').attach('file', PNG, 'as received.png').expect(201)).body
+      .id;
     const onReport = (await reviewer.post('/files').field('entity', 'Report').field('entityId', row.id).field('category', 'report-photo').attach('file', PNG, 'after test.png').expect(201)).body.id;
     const otherSampleId = (await reviewer.get(`/reports/${other.row.id}`).expect(200)).body.sampleId;
     const otherSample = (await reception.post('/files').field('entity', 'Sample').field('entityId', otherSampleId).field('category', 'sample-image').attach('file', PNG, 'x.png').expect(201)).body.id;
@@ -177,7 +188,17 @@ describe('report workflow', () => {
     const bad = await reviewer.patch(`/reports/${row.id}/draft`, { version: rev(r).version, samplePhotos: [{ fileId: otherSample, widthMm: 80, heightMm: 60 }] }).expect(400);
     expect(bad.body.error.message).toContain('this sample');
     await reviewer.patch(`/reports/${row.id}/draft`, { version: rev(r).version, samplePhotos: [{ fileId: atBooking, widthMm: 10, heightMm: 60 }] }).expect(400);
-    r = (await reviewer.patch(`/reports/${row.id}/draft`, { version: rev(r).version, samplePhotos: [{ fileId: onReport, caption: 'Fracture face', widthMm: 120, heightMm: 90 }, { fileId: atBooking, caption: ' As received ', widthMm: 80, heightMm: 60 }] }).expect(200)).body;
+    r = (
+      await reviewer
+        .patch(`/reports/${row.id}/draft`, {
+          version: rev(r).version,
+          samplePhotos: [
+            { fileId: onReport, caption: 'Fracture face', widthMm: 120, heightMm: 90 },
+            { fileId: atBooking, caption: ' As received ', widthMm: 80, heightMm: 60 },
+          ],
+        })
+        .expect(200)
+    ).body;
     expect(r.samplePhotos).toEqual([
       { fileId: onReport, caption: 'Fracture face', widthMm: 120, heightMm: 90 },
       { fileId: atBooking, caption: 'As received', widthMm: 80, heightMm: 60 },
@@ -195,7 +216,11 @@ describe('report workflow', () => {
   });
 
   it('signatory rejection for re-test reopens named tests, blocks resubmission, refreshes the draft', async () => {
-    const { job, row, sampleTestIds: [testId] } = await approvedReport();
+    const {
+      job,
+      row,
+      sampleTestIds: [testId],
+    } = await approvedReport();
     let r = (await reviewer.get(`/reports/${row.id}`).expect(200)).body;
     r = (await reviewer.post(`/reports/${row.id}/submit`, { version: rev(r).version }).expect(200)).body;
     r = (await reviewer.post(`/reports/${row.id}/pass-review`, { version: rev(r).version }).expect(200)).body;
@@ -229,10 +254,16 @@ describe('locking and revisions', () => {
     await signatory.post(`/reports/${row.id}/revise`, { reason: '' }).expect(400);
     await reviewer.post(`/reports/${row.id}/revise`, { reason: 'x' }).expect(403);
     r = (await signatory.post(`/reports/${row.id}/revise`, { reason: 'Customer name misspelt' }).expect(200)).body;
-    expect(r.revisions.map((x: { revisionNo: number; status: string }) => [x.revisionNo, x.status])).toEqual([[1, 'DRAFT'], [0, 'ISSUED']]);
+    expect(r.revisions.map((x: { revisionNo: number; status: string }) => [x.revisionNo, x.status])).toEqual([
+      [1, 'DRAFT'],
+      [0, 'ISSUED'],
+    ]);
     await signatory.post(`/reports/${row.id}/revise`, { reason: 'twice' }).expect(422); // already has an open revision
     r = await toIssued(row.id);
-    expect(r.revisions.map((x: { revisionNo: number; status: string }) => [x.revisionNo, x.status])).toEqual([[1, 'ISSUED'], [0, 'SUPERSEDED']]);
+    expect(r.revisions.map((x: { revisionNo: number; status: string }) => [x.revisionNo, x.status])).toEqual([
+      [1, 'ISSUED'],
+      [0, 'SUPERSEDED'],
+    ]);
     expect(r.revisions[1].supersededAt).toBeTruthy();
     expect(r.revisions[0].revisionReason).toBe('Customer name misspelt');
     // the earlier version stays downloadable
@@ -286,10 +317,21 @@ describe('wording and accreditation', () => {
 
   it('prints attached images at their set print size', async () => {
     const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
-    const { job, sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
+    const {
+      job,
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
     let d = (await tech.get(`/tests/${id}`).expect(200)).body;
     d = (await tech.post(`/tests/${id}/start`, { version: d.version }).expect(200)).body;
-    await tech.post('/files').field('entity', 'SampleTest').field('entityId', id).field('category', 'result-image').field('printWidthMm', '91').field('printHeightMm', '47').attach('file', PNG, 'm.png').expect(201);
+    await tech
+      .post('/files')
+      .field('entity', 'SampleTest')
+      .field('entityId', id)
+      .field('category', 'result-image')
+      .field('printWidthMm', '91')
+      .field('printHeightMm', '47')
+      .attach('file', PNG, 'm.png')
+      .expect(201);
     d = await workTest(team, id, { DENSITY: '0.85' });
     await hod.post(`/tests/${id}/approve`, { version: d.version }).expect(200);
     const row = (await reviewer.get(`/reports?jobId=${job.id}`).expect(200)).body.data[0];
@@ -300,7 +342,10 @@ describe('wording and accreditation', () => {
 
   it('withholds release when the customer setting is on', async () => {
     const cust = (await admin.post('/customers', { name: 'Withheld Co', stateName: 'Maharashtra', stateCode: '27', withholdReportUntilPaid: true }).expect(201)).body;
-    const { job, sampleTestIds: [id] } = await plannedTests(ctx, team, cust.id, [fx.tests.d]);
+    const {
+      job,
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, cust.id, [fx.tests.d]);
     const d = await workTest(team, id, { DENSITY: '0.85' });
     await hod.post(`/tests/${id}/approve`, { version: d.version }).expect(200);
     const row = (await reviewer.get(`/reports?jobId=${job.id}`).expect(200)).body.data[0];
@@ -369,7 +414,9 @@ describe('snapshots across a lab profile change', () => {
     await toIssued(row.id);
     const before = (await signatory.get(`/reports/${row.id}`).expect(200)).body;
     const lab = (await admin.get('/admin/lab').expect(200)).body;
-    await admin.put('/admin/lab/profile', { version: lab.profileVersion, profile: { ...lab.profile, companyName: 'Greenfield Analytical', legalName: 'Greenfield Analytical Private Limited' } }).expect(200);
+    await admin
+      .put('/admin/lab/profile', { version: lab.profileVersion, profile: { ...lab.profile, companyName: 'Greenfield Analytical', legalName: 'Greenfield Analytical Private Limited' } })
+      .expect(200);
     try {
       const { html } = await ctx.app.get(ReportsService).preview(row.id);
       expect(html).toContain('BluePeak Testing Labs Private Limited');

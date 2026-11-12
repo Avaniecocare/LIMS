@@ -10,32 +10,44 @@ import { OrdersService } from './orders.service.js';
 export class OrdersController {
   constructor(private readonly orders: OrdersService) {}
 
-  @Get() @Perm('orders.view') @ApiOkResponse({ type: OrderPageDto })
+  @Get()
+  @Perm('orders.view')
+  @ApiOkResponse({ type: OrderPageDto })
   list(@Query() q: OrderQuery) {
     return this.orders.list(q);
   }
 
-  @Get('pipeline') @Perm('orders.view') @ApiOkResponse({ type: [PipelineStageDto] })
+  @Get('pipeline')
+  @Perm('orders.view')
+  @ApiOkResponse({ type: [PipelineStageDto] })
   pipeline() {
     return this.orders.pipeline();
   }
 
-  @Get('owners') @Perm('orders.view') @ApiOkResponse({ type: [OwnerDto] })
+  @Get('owners')
+  @Perm('orders.view')
+  @ApiOkResponse({ type: [OwnerDto] })
   owners() {
     return this.orders.owners();
   }
 
-  @Get(':id') @Perm('orders.view') @ApiOkResponse({ type: OrderDto })
+  @Get(':id')
+  @Perm('orders.view')
+  @ApiOkResponse({ type: OrderDto })
   get(@Param('id', ParseUUIDPipe) id: string) {
     return this.orders.get(id);
   }
 
-  @Post() @Perm('orders.edit') @ApiOkResponse({ type: OrderDto })
+  @Post()
+  @Perm('orders.edit')
+  @ApiOkResponse({ type: OrderDto })
   create(@Body() dto: CreateOrderDto) {
     return this.orders.create(dto);
   }
 
-  @Patch(':id') @Perm('orders.edit') @ApiOkResponse({ type: OrderDto })
+  @Patch(':id')
+  @Perm('orders.edit')
+  @ApiOkResponse({ type: OrderDto })
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateOrderDto) {
     return this.orders.update(id, dto);
   }

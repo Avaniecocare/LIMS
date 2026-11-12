@@ -66,7 +66,11 @@ export const MASTERS: MasterDef[] = [
       const n = (await tx.testMaster.count({ where: { departmentId: id, deletedAt: null } })) + (await tx.user.count({ where: { departmentId: id, deletedAt: null } }));
       return n ? inUseMessage('tests or users') : null;
     },
-    columns: [{ header: 'Code', key: 'code' }, { header: 'Name', key: 'name', width: 30 }, { header: 'Active', key: 'isActive' }],
+    columns: [
+      { header: 'Code', key: 'code' },
+      { header: 'Name', key: 'name', width: 30 },
+      { header: 'Active', key: 'isActive' },
+    ],
     fromRow: async (v) => ({ code: v.Code, name: v.Name, isActive: bool(v.Active) }),
     importKey: (i) => ({ code: i.code }),
   },
@@ -83,7 +87,12 @@ export const MASTERS: MasterDef[] = [
     dto: (r) => ({ id: r.id, code: r.code, name: r.name, symbol: r.symbol, isActive: r.isActive, version: r.version }),
     data: (i) => ({ code: i.code, name: i.name, symbol: i.symbol }),
     inUse: async (tx, id) => ((await tx.testParameter.count({ where: { unitId: id, deletedAt: null } })) ? inUseMessage('test parameters') : null),
-    columns: [{ header: 'Code', key: 'code' }, { header: 'Name', key: 'name', width: 30 }, { header: 'Symbol', key: 'symbol' }, { header: 'Active', key: 'isActive' }],
+    columns: [
+      { header: 'Code', key: 'code' },
+      { header: 'Name', key: 'name', width: 30 },
+      { header: 'Symbol', key: 'symbol' },
+      { header: 'Active', key: 'isActive' },
+    ],
     fromRow: async (v) => ({ code: v.Code, name: v.Name, symbol: v.Symbol, isActive: bool(v.Active) }),
     importKey: (i) => ({ code: i.code }),
   },
@@ -98,12 +107,26 @@ export const MASTERS: MasterDef[] = [
     sort: ['createdAt'],
     defaultSort: 'createdAt',
     include: { fromUnit: true, toUnit: true },
-    dto: (r) => ({ id: r.id, fromUnitId: r.fromUnitId, toUnitId: r.toUnitId, fromUnitCode: r.fromUnit.code, toUnitCode: r.toUnit.code, factor: String(r.factor), isActive: r.isActive, version: r.version }),
+    dto: (r) => ({
+      id: r.id,
+      fromUnitId: r.fromUnitId,
+      toUnitId: r.toUnitId,
+      fromUnitCode: r.fromUnit.code,
+      toUnitCode: r.toUnit.code,
+      factor: String(r.factor),
+      isActive: r.isActive,
+      version: r.version,
+    }),
     data: (i) => {
       if (i.fromUnitId === i.toUnitId) throw badRequest('A unit cannot convert to itself', [{ field: 'toUnitId', message: 'Pick a different unit' }]);
       return { fromUnitId: i.fromUnitId, toUnitId: i.toUnitId, factor: i.factor };
     },
-    columns: [{ header: 'From', key: 'fromUnitCode' }, { header: 'To', key: 'toUnitCode' }, { header: 'Factor', key: 'factor' }, { header: 'Active', key: 'isActive' }],
+    columns: [
+      { header: 'From', key: 'fromUnitCode' },
+      { header: 'To', key: 'toUnitCode' },
+      { header: 'Factor', key: 'factor' },
+      { header: 'Active', key: 'isActive' },
+    ],
     fromRow: async (v, tx) => ({ fromUnitId: await idByCode(tx.unit, v.From, 'Unit'), toUnitId: await idByCode(tx.unit, v.To, 'Unit'), factor: v.Factor, isActive: bool(v.Active) }),
     importKey: (i) => ({ fromUnitId: i.fromUnitId, toUnitId: i.toUnitId }),
   },
@@ -120,7 +143,14 @@ export const MASTERS: MasterDef[] = [
     dto: (r) => ({ id: r.id, code: r.code, name: r.name, standardRef: r.standardRef, accredited: r.accredited, accreditedUntil: r.accreditedUntil, isActive: r.isActive, version: r.version }),
     data: (i) => ({ code: i.code, name: i.name, standardRef: i.standardRef, accredited: i.accredited, accreditedUntil: date(i.accreditedUntil) }),
     inUse: async (tx, id) => ((await tx.testMaster.count({ where: { methodId: id, deletedAt: null } })) ? inUseMessage('tests') : null),
-    columns: [{ header: 'Code', key: 'code' }, { header: 'Name', key: 'name', width: 40 }, { header: 'Standard', key: 'standardRef', width: 30 }, { header: 'Accredited', key: 'accredited' }, { header: 'Accredited until', key: 'accreditedUntil' }, { header: 'Active', key: 'isActive' }],
+    columns: [
+      { header: 'Code', key: 'code' },
+      { header: 'Name', key: 'name', width: 40 },
+      { header: 'Standard', key: 'standardRef', width: 30 },
+      { header: 'Accredited', key: 'accredited' },
+      { header: 'Accredited until', key: 'accreditedUntil' },
+      { header: 'Active', key: 'isActive' },
+    ],
     fromRow: async (v) => ({ code: v.Code, name: v.Name, standardRef: v.Standard, accredited: bool(v.Accredited), accreditedUntil: v['Accredited until'] || undefined, isActive: bool(v.Active) }),
     importKey: (i) => ({ code: i.code }),
   },
@@ -137,16 +167,62 @@ export const MASTERS: MasterDef[] = [
     include: { department: true, method: true, _count: { select: { parameters: { where: { deletedAt: null } } } } },
     filter: (q) => (q.departmentId ? { departmentId: q.departmentId } : {}),
     dto: (r) => ({
-      id: r.id, code: r.code, name: r.name, category: r.category, departmentId: r.departmentId, departmentName: r.department?.name ?? null, methodId: r.methodId, methodName: r.method?.name ?? null,
-      defaultTatDays: r.defaultTatDays, urgentTatDays: r.urgentTatDays, accredited: r.accredited, accreditedUntil: r.accreditedUntil, stages: r.stages, parameterCount: r._count.parameters, isActive: r.isActive, version: r.version,
+      id: r.id,
+      code: r.code,
+      name: r.name,
+      category: r.category,
+      departmentId: r.departmentId,
+      departmentName: r.department?.name ?? null,
+      methodId: r.methodId,
+      methodName: r.method?.name ?? null,
+      defaultTatDays: r.defaultTatDays,
+      urgentTatDays: r.urgentTatDays,
+      accredited: r.accredited,
+      accreditedUntil: r.accreditedUntil,
+      stages: r.stages,
+      parameterCount: r._count.parameters,
+      isActive: r.isActive,
+      version: r.version,
     }),
     data: (i) => {
-      if (i.urgentTatDays !== undefined && i.defaultTatDays !== undefined && i.urgentTatDays > i.defaultTatDays) throw badRequest('Urgent TAT cannot be longer than the default TAT', [{ field: 'urgentTatDays', message: 'Cannot exceed the default TAT' }]);
-      return { code: i.code, name: i.name, category: i.category, departmentId: i.departmentId, methodId: i.methodId, defaultTatDays: i.defaultTatDays, urgentTatDays: i.urgentTatDays, accredited: i.accredited, accreditedUntil: date(i.accreditedUntil), stages: i.stages };
+      if (i.urgentTatDays !== undefined && i.defaultTatDays !== undefined && i.urgentTatDays > i.defaultTatDays)
+        throw badRequest('Urgent TAT cannot be longer than the default TAT', [{ field: 'urgentTatDays', message: 'Cannot exceed the default TAT' }]);
+      return {
+        code: i.code,
+        name: i.name,
+        category: i.category,
+        departmentId: i.departmentId,
+        methodId: i.methodId,
+        defaultTatDays: i.defaultTatDays,
+        urgentTatDays: i.urgentTatDays,
+        accredited: i.accredited,
+        accreditedUntil: date(i.accreditedUntil),
+        stages: i.stages,
+      };
     },
     inUse: async (tx, id) => ((await tx.sampleTest.count({ where: { testId: id } })) ? inUseMessage('samples') : null),
-    columns: [{ header: 'Code', key: 'code' }, { header: 'Name', key: 'name', width: 40 }, { header: 'Category', key: 'category' }, { header: 'Department', key: 'departmentName' }, { header: 'Method', key: 'methodName', width: 30 }, { header: 'TAT days', key: 'defaultTatDays' }, { header: 'Urgent TAT days', key: 'urgentTatDays' }, { header: 'Accredited', key: 'accredited' }, { header: 'Active', key: 'isActive' }],
-    fromRow: async (v, tx) => ({ code: v.Code, name: v.Name, category: v.Category || undefined, departmentId: await idByCode(tx.department, v['Department code'], 'Department'), methodId: await idByCode(tx.testMethod, v['Method code'], 'Method'), defaultTatDays: num(v['TAT days']), urgentTatDays: num(v['Urgent TAT days']), accredited: bool(v.Accredited), isActive: bool(v.Active) }),
+    columns: [
+      { header: 'Code', key: 'code' },
+      { header: 'Name', key: 'name', width: 40 },
+      { header: 'Category', key: 'category' },
+      { header: 'Department', key: 'departmentName' },
+      { header: 'Method', key: 'methodName', width: 30 },
+      { header: 'TAT days', key: 'defaultTatDays' },
+      { header: 'Urgent TAT days', key: 'urgentTatDays' },
+      { header: 'Accredited', key: 'accredited' },
+      { header: 'Active', key: 'isActive' },
+    ],
+    fromRow: async (v, tx) => ({
+      code: v.Code,
+      name: v.Name,
+      category: v.Category || undefined,
+      departmentId: await idByCode(tx.department, v['Department code'], 'Department'),
+      methodId: await idByCode(tx.testMethod, v['Method code'], 'Method'),
+      defaultTatDays: num(v['TAT days']),
+      urgentTatDays: num(v['Urgent TAT days']),
+      accredited: bool(v.Accredited),
+      isActive: bool(v.Active),
+    }),
     importKey: (i) => ({ code: i.code }),
   },
   {
@@ -162,8 +238,24 @@ export const MASTERS: MasterDef[] = [
     include: { test: { select: { code: true } }, unit: { select: { symbol: true } } },
     filter: (q) => (q.testId ? { testId: q.testId } : {}),
     dto: (r) => ({
-      id: r.id, testId: r.testId, testCode: r.test.code, code: r.code, name: r.name, kind: r.kind, unitId: r.unitId, unitSymbol: r.unit?.symbol ?? null, decimals: r.decimals, resultSetId: r.resultSetId, formulaId: r.formulaId, formulaBindings: r.formulaBindings,
-      accredited: r.accredited, accreditedUntil: r.accreditedUntil, sortOrder: r.sortOrder, showOnReport: r.showOnReport, isActive: r.isActive, version: r.version,
+      id: r.id,
+      testId: r.testId,
+      testCode: r.test.code,
+      code: r.code,
+      name: r.name,
+      kind: r.kind,
+      unitId: r.unitId,
+      unitSymbol: r.unit?.symbol ?? null,
+      decimals: r.decimals,
+      resultSetId: r.resultSetId,
+      formulaId: r.formulaId,
+      formulaBindings: r.formulaBindings,
+      accredited: r.accredited,
+      accreditedUntil: r.accreditedUntil,
+      sortOrder: r.sortOrder,
+      showOnReport: r.showOnReport,
+      isActive: r.isActive,
+      version: r.version,
     }),
     data: async (i, tx) => {
       if (i.kind === 'RESULT_SET' && !i.resultSetId) throw badRequest('Choose a result set', [{ field: 'resultSetId', message: 'Required for this kind' }]);
@@ -175,11 +267,47 @@ export const MASTERS: MasterDef[] = [
         const unbound = vars.filter((v) => !i.formulaBindings?.[v]);
         if (unbound.length) throw badRequest(`Bind these formula inputs to parameters: ${unbound.join(', ')}`, [{ field: 'formulaBindings', message: `Missing: ${unbound.join(', ')}` }]);
       }
-      return { testId: i.testId, code: i.code, name: i.name, kind: i.kind, unitId: i.unitId, decimals: i.decimals, resultSetId: i.resultSetId, formulaId: i.formulaId, formulaBindings: i.formulaBindings ?? undefined, accredited: i.accredited, accreditedUntil: date(i.accreditedUntil), sortOrder: i.sortOrder, showOnReport: i.showOnReport };
+      return {
+        testId: i.testId,
+        code: i.code,
+        name: i.name,
+        kind: i.kind,
+        unitId: i.unitId,
+        decimals: i.decimals,
+        resultSetId: i.resultSetId,
+        formulaId: i.formulaId,
+        formulaBindings: i.formulaBindings ?? undefined,
+        accredited: i.accredited,
+        accreditedUntil: date(i.accreditedUntil),
+        sortOrder: i.sortOrder,
+        showOnReport: i.showOnReport,
+      };
     },
     inUse: async (tx, id) => ((await tx.parameterResult.count({ where: { parameterId: id } })) ? inUseMessage('test results') : null),
-    columns: [{ header: 'Test code', key: 'testCode' }, { header: 'Code', key: 'code' }, { header: 'Name', key: 'name', width: 30 }, { header: 'Kind', key: 'kind' }, { header: 'Unit', key: 'unitSymbol' }, { header: 'Decimals', key: 'decimals' }, { header: 'Accredited', key: 'accredited' }, { header: 'Sort order', key: 'sortOrder' }, { header: 'Show on report', key: 'showOnReport' }, { header: 'Active', key: 'isActive' }],
-    fromRow: async (v, tx) => ({ testId: await idByCode(tx.testMaster, v['Test code'], 'Test'), code: v.Code, name: v.Name, kind: v.Kind || undefined, unitId: await idByCode(tx.unit, v['Unit code'], 'Unit'), decimals: num(v.Decimals), accredited: bool(v.Accredited), sortOrder: num(v['Sort order']), showOnReport: bool(v['Show on report']), isActive: bool(v.Active) }),
+    columns: [
+      { header: 'Test code', key: 'testCode' },
+      { header: 'Code', key: 'code' },
+      { header: 'Name', key: 'name', width: 30 },
+      { header: 'Kind', key: 'kind' },
+      { header: 'Unit', key: 'unitSymbol' },
+      { header: 'Decimals', key: 'decimals' },
+      { header: 'Accredited', key: 'accredited' },
+      { header: 'Sort order', key: 'sortOrder' },
+      { header: 'Show on report', key: 'showOnReport' },
+      { header: 'Active', key: 'isActive' },
+    ],
+    fromRow: async (v, tx) => ({
+      testId: await idByCode(tx.testMaster, v['Test code'], 'Test'),
+      code: v.Code,
+      name: v.Name,
+      kind: v.Kind || undefined,
+      unitId: await idByCode(tx.unit, v['Unit code'], 'Unit'),
+      decimals: num(v.Decimals),
+      accredited: bool(v.Accredited),
+      sortOrder: num(v['Sort order']),
+      showOnReport: bool(v['Show on report']),
+      isActive: bool(v.Active),
+    }),
     importKey: (i) => ({ testId: i.testId, code: i.code }),
   },
   {
@@ -195,8 +323,22 @@ export const MASTERS: MasterDef[] = [
     include: { limits: { where: { deletedAt: null }, include: { parameter: { include: { test: { select: { id: true, code: true } } } } } } },
     filter: (q) => (q.customerId ? { OR: [{ customerId: q.customerId }, { customerId: null }] } : {}),
     dto: (r) => ({
-      id: r.id, code: r.code, name: r.name, customerId: r.customerId, isActive: r.isActive, version: r.version,
-      limits: r.limits.map((l: any) => ({ parameterId: l.parameterId, parameterCode: l.parameter.code, parameterName: l.parameter.name, testId: l.parameter.test.id, testCode: l.parameter.test.code, minValue: dec(l.minValue), maxValue: dec(l.maxValue), textLimit: l.textLimit })),
+      id: r.id,
+      code: r.code,
+      name: r.name,
+      customerId: r.customerId,
+      isActive: r.isActive,
+      version: r.version,
+      limits: r.limits.map((l: any) => ({
+        parameterId: l.parameterId,
+        parameterCode: l.parameter.code,
+        parameterName: l.parameter.name,
+        testId: l.parameter.test.id,
+        testCode: l.parameter.test.code,
+        minValue: dec(l.minValue),
+        maxValue: dec(l.maxValue),
+        textLimit: l.textLimit,
+      })),
     }),
     data: async (i, tx, existing) => {
       const dup = await tx.specification.findFirst({ where: { code: i.code, customerId: i.customerId ?? null, deletedAt: null, ...(existing ? { id: { not: existing.id } } : {}) } });
@@ -205,18 +347,30 @@ export const MASTERS: MasterDef[] = [
     },
     children: async (tx, id, i) => {
       if (!i.limits) return;
-      uniqueCheck(i.limits.map((l: any) => l.parameterId), 'A parameter is listed twice');
+      uniqueCheck(
+        i.limits.map((l: any) => l.parameterId),
+        'A parameter is listed twice',
+      );
       for (const l of i.limits) {
-        if (l.minValue != null && l.maxValue != null && Number(l.minValue) > Number(l.maxValue)) throw badRequest('Minimum cannot be above maximum', [{ field: 'limits', message: 'Minimum is above maximum' }]);
+        if (l.minValue != null && l.maxValue != null && Number(l.minValue) > Number(l.maxValue))
+          throw badRequest('Minimum cannot be above maximum', [{ field: 'limits', message: 'Minimum is above maximum' }]);
       }
       await tx.specificationLimit.updateMany({ where: { specificationId: id }, data: { deletedAt: new Date() } });
       for (const l of i.limits) {
         const values = { minValue: l.minValue ?? null, maxValue: l.maxValue ?? null, textLimit: l.textLimit ?? null, deletedAt: null };
-        await tx.specificationLimit.upsert({ where: { specificationId_parameterId: { specificationId: id, parameterId: l.parameterId } }, create: { specificationId: id, parameterId: l.parameterId, ...values }, update: values });
+        await tx.specificationLimit.upsert({
+          where: { specificationId_parameterId: { specificationId: id, parameterId: l.parameterId } },
+          create: { specificationId: id, parameterId: l.parameterId, ...values },
+          update: values,
+        });
       }
     },
     inUse: async (tx, id) => ((await tx.sampleTest.count({ where: { OR: [{ specificationId: id }, { dualSpecificationId: id }] } })) ? inUseMessage('samples') : null),
-    columns: [{ header: 'Code', key: 'code' }, { header: 'Name', key: 'name', width: 40 }, { header: 'Active', key: 'isActive' }],
+    columns: [
+      { header: 'Code', key: 'code' },
+      { header: 'Name', key: 'name', width: 40 },
+      { header: 'Active', key: 'isActive' },
+    ],
     fromRow: async (v) => ({ code: v.Code, name: v.Name, isActive: bool(v.Active) }),
     importKey: (i) => ({ code: i.code, customerId: null }),
   },
@@ -232,7 +386,12 @@ export const MASTERS: MasterDef[] = [
     defaultSort: 'name',
     include: { items: { include: { test: { select: { code: true, name: true } }, parameter: { select: { name: true } } } } },
     dto: (r) => ({
-      id: r.id, code: r.code, name: r.name, kind: r.kind, isActive: r.isActive, version: r.version,
+      id: r.id,
+      code: r.code,
+      name: r.name,
+      kind: r.kind,
+      isActive: r.isActive,
+      version: r.version,
       items: r.items.map((x: any) => ({ testId: x.testId, testCode: x.test.code, testName: x.test.name, parameterId: x.parameterId, parameterName: x.parameter?.name ?? null })),
     }),
     data: (i) => ({ code: i.code, name: i.name, kind: i.kind }),
@@ -241,7 +400,12 @@ export const MASTERS: MasterDef[] = [
       await tx.testGroupItem.deleteMany({ where: { groupId: id } });
       await tx.testGroupItem.createMany({ data: i.items.map((x: any) => ({ groupId: id, testId: x.testId, parameterId: x.parameterId ?? null })) });
     },
-    columns: [{ header: 'Code', key: 'code' }, { header: 'Name', key: 'name', width: 30 }, { header: 'Kind', key: 'kind' }, { header: 'Active', key: 'isActive' }],
+    columns: [
+      { header: 'Code', key: 'code' },
+      { header: 'Name', key: 'name', width: 30 },
+      { header: 'Kind', key: 'kind' },
+      { header: 'Active', key: 'isActive' },
+    ],
     fromRow: async (v) => ({ code: v.Code, name: v.Name, kind: v.Kind || undefined, isActive: bool(v.Active) }),
     importKey: (i) => ({ code: i.code }),
   },
@@ -260,12 +424,19 @@ export const MASTERS: MasterDef[] = [
     data: (i) => ({ code: i.code, name: i.name }),
     children: async (tx, id, i) => {
       if (!i.options) return;
-      uniqueCheck(i.options.map((o: any) => o.value), 'A result value is listed twice');
+      uniqueCheck(
+        i.options.map((o: any) => o.value),
+        'A result value is listed twice',
+      );
       await tx.resultSetOption.deleteMany({ where: { resultSetId: id } });
       await tx.resultSetOption.createMany({ data: i.options.map((o: any, n: number) => ({ resultSetId: id, value: o.value, isPass: o.isPass ?? null, sortOrder: n })) });
     },
     inUse: async (tx, id) => ((await tx.testParameter.count({ where: { resultSetId: id, deletedAt: null } })) ? inUseMessage('test parameters') : null),
-    columns: [{ header: 'Code', key: 'code' }, { header: 'Name', key: 'name', width: 30 }, { header: 'Active', key: 'isActive' }],
+    columns: [
+      { header: 'Code', key: 'code' },
+      { header: 'Name', key: 'name', width: 30 },
+      { header: 'Active', key: 'isActive' },
+    ],
     fromRow: async (v) => ({ code: v.Code, name: v.Name, isActive: bool(v.Active) }),
     importKey: (i) => ({ code: i.code }),
   },
@@ -283,7 +454,16 @@ export const MASTERS: MasterDef[] = [
     dto: (r) => {
       const cur = r.versions.find((v: any) => v.versionNo === r.currentVersion) ?? r.versions[0];
       return {
-        id: r.id, code: r.code, name: r.name, description: r.description, currentVersion: r.currentVersion, expression: cur?.expression ?? '', variables: cur?.variables ?? [], decimals: cur?.decimals ?? 2, isActive: r.isActive, version: r.version,
+        id: r.id,
+        code: r.code,
+        name: r.name,
+        description: r.description,
+        currentVersion: r.currentVersion,
+        expression: cur?.expression ?? '',
+        variables: cur?.variables ?? [],
+        decimals: cur?.decimals ?? 2,
+        isActive: r.isActive,
+        version: r.version,
         versions: r.versions.map((v: any) => ({ id: v.id, versionNo: v.versionNo, expression: v.expression, variables: v.variables, decimals: v.decimals, createdAt: v.createdAt })),
       };
     },
@@ -301,7 +481,13 @@ export const MASTERS: MasterDef[] = [
       await tx.formula.update({ where: { id }, data: { currentVersion: versionNo } });
     },
     inUse: async (tx, id) => ((await tx.testParameter.count({ where: { formulaId: id, deletedAt: null } })) ? inUseMessage('test parameters') : null),
-    columns: [{ header: 'Code', key: 'code' }, { header: 'Name', key: 'name', width: 30 }, { header: 'Expression', key: 'expression', width: 50 }, { header: 'Decimals', key: 'decimals' }, { header: 'Active', key: 'isActive' }],
+    columns: [
+      { header: 'Code', key: 'code' },
+      { header: 'Name', key: 'name', width: 30 },
+      { header: 'Expression', key: 'expression', width: 50 },
+      { header: 'Decimals', key: 'decimals' },
+      { header: 'Active', key: 'isActive' },
+    ],
     fromRow: async (v) => ({ code: v.Code, name: v.Name, expression: v.Expression, decimals: num(v.Decimals), isActive: bool(v.Active) }),
     importKey: (i) => ({ code: i.code }),
   },
@@ -318,16 +504,51 @@ export const MASTERS: MasterDef[] = [
     include: { department: { select: { name: true } } },
     filter: (q) => (q.departmentId ? { departmentId: q.departmentId } : {}),
     dto: (r) => ({
-      id: r.id, code: r.code, name: r.name, serialNo: r.serialNo, departmentId: r.departmentId, departmentName: r.department?.name ?? null, lastCalibratedAt: r.lastCalibratedAt, calibrationDueAt: r.calibrationDueAt, certificateFileId: r.certificateFileId,
-      calibrationOverdue: !!r.calibrationDueAt && r.calibrationDueAt < istToday(), isActive: r.isActive, version: r.version,
+      id: r.id,
+      code: r.code,
+      name: r.name,
+      serialNo: r.serialNo,
+      departmentId: r.departmentId,
+      departmentName: r.department?.name ?? null,
+      lastCalibratedAt: r.lastCalibratedAt,
+      calibrationDueAt: r.calibrationDueAt,
+      certificateFileId: r.certificateFileId,
+      calibrationOverdue: !!r.calibrationDueAt && r.calibrationDueAt < istToday(),
+      isActive: r.isActive,
+      version: r.version,
     }),
     data: (i) => {
-      if (i.lastCalibratedAt && i.calibrationDueAt && new Date(i.calibrationDueAt) < new Date(i.lastCalibratedAt)) throw badRequest('Due date cannot be before the last calibration', [{ field: 'calibrationDueAt', message: 'Before last calibration' }]);
-      return { code: i.code, name: i.name, serialNo: i.serialNo, departmentId: i.departmentId, lastCalibratedAt: date(i.lastCalibratedAt), calibrationDueAt: date(i.calibrationDueAt), certificateFileId: i.certificateFileId };
+      if (i.lastCalibratedAt && i.calibrationDueAt && new Date(i.calibrationDueAt) < new Date(i.lastCalibratedAt))
+        throw badRequest('Due date cannot be before the last calibration', [{ field: 'calibrationDueAt', message: 'Before last calibration' }]);
+      return {
+        code: i.code,
+        name: i.name,
+        serialNo: i.serialNo,
+        departmentId: i.departmentId,
+        lastCalibratedAt: date(i.lastCalibratedAt),
+        calibrationDueAt: date(i.calibrationDueAt),
+        certificateFileId: i.certificateFileId,
+      };
     },
     inUse: async (tx, id) => ((await tx.sampleTest.count({ where: { instrumentId: id } })) ? inUseMessage('tests') : null),
-    columns: [{ header: 'Code', key: 'code' }, { header: 'Name', key: 'name', width: 30 }, { header: 'Serial no', key: 'serialNo' }, { header: 'Department', key: 'departmentName' }, { header: 'Last calibrated', key: 'lastCalibratedAt' }, { header: 'Calibration due', key: 'calibrationDueAt' }, { header: 'Active', key: 'isActive' }],
-    fromRow: async (v, tx) => ({ code: v.Code, name: v.Name, serialNo: v['Serial no'], departmentId: await idByCode(tx.department, v['Department code'], 'Department'), lastCalibratedAt: v['Last calibrated'] || undefined, calibrationDueAt: v['Calibration due'] || undefined, isActive: bool(v.Active) }),
+    columns: [
+      { header: 'Code', key: 'code' },
+      { header: 'Name', key: 'name', width: 30 },
+      { header: 'Serial no', key: 'serialNo' },
+      { header: 'Department', key: 'departmentName' },
+      { header: 'Last calibrated', key: 'lastCalibratedAt' },
+      { header: 'Calibration due', key: 'calibrationDueAt' },
+      { header: 'Active', key: 'isActive' },
+    ],
+    fromRow: async (v, tx) => ({
+      code: v.Code,
+      name: v.Name,
+      serialNo: v['Serial no'],
+      departmentId: await idByCode(tx.department, v['Department code'], 'Department'),
+      lastCalibratedAt: v['Last calibrated'] || undefined,
+      calibrationDueAt: v['Calibration due'] || undefined,
+      isActive: bool(v.Active),
+    }),
     importKey: (i) => ({ code: i.code }),
   },
   {
@@ -342,13 +563,36 @@ export const MASTERS: MasterDef[] = [
     defaultSort: 'effectiveFrom',
     include: { test: { select: { code: true, name: true } } },
     filter: (q) => ({ ...(q.testId ? { testId: q.testId } : {}), ...(q.q ? { test: { name: { contains: q.q, mode: 'insensitive' } } } : {}) }),
-    dto: (r) => ({ id: r.id, testId: r.testId, testCode: r.test.code, testName: r.test.name, rate: String(r.rate), effectiveFrom: r.effectiveFrom, effectiveTo: r.effectiveTo, isActive: r.isActive, version: r.version }),
+    dto: (r) => ({
+      id: r.id,
+      testId: r.testId,
+      testCode: r.test.code,
+      testName: r.test.name,
+      rate: String(r.rate),
+      effectiveFrom: r.effectiveFrom,
+      effectiveTo: r.effectiveTo,
+      isActive: r.isActive,
+      version: r.version,
+    }),
     data: (i) => {
       assertRate(i);
       return { testId: i.testId, rate: i.rate, effectiveFrom: date(i.effectiveFrom), effectiveTo: date(i.effectiveTo) };
     },
-    columns: [{ header: 'Test code', key: 'testCode' }, { header: 'Test', key: 'testName', width: 30 }, { header: 'Rate', key: 'rate' }, { header: 'Effective from', key: 'effectiveFrom' }, { header: 'Effective to', key: 'effectiveTo' }, { header: 'Active', key: 'isActive' }],
-    fromRow: async (v, tx) => ({ testId: await idByCode(tx.testMaster, v['Test code'], 'Test'), rate: v.Rate, effectiveFrom: v['Effective from'], effectiveTo: v['Effective to'] || undefined, isActive: bool(v.Active) }),
+    columns: [
+      { header: 'Test code', key: 'testCode' },
+      { header: 'Test', key: 'testName', width: 30 },
+      { header: 'Rate', key: 'rate' },
+      { header: 'Effective from', key: 'effectiveFrom' },
+      { header: 'Effective to', key: 'effectiveTo' },
+      { header: 'Active', key: 'isActive' },
+    ],
+    fromRow: async (v, tx) => ({
+      testId: await idByCode(tx.testMaster, v['Test code'], 'Test'),
+      rate: v.Rate,
+      effectiveFrom: v['Effective from'],
+      effectiveTo: v['Effective to'] || undefined,
+      isActive: bool(v.Active),
+    }),
     importKey: (i) => ({ testId: i.testId, effectiveFrom: new Date(i.effectiveFrom) }),
   },
   {
@@ -362,17 +606,50 @@ export const MASTERS: MasterDef[] = [
     sort: ['effectiveFrom', 'rate'],
     defaultSort: 'effectiveFrom',
     include: { test: { select: { code: true, name: true } }, customer: { select: { name: true, crn: true } } },
-    filter: (q) => ({ ...(q.testId ? { testId: q.testId } : {}), ...(q.customerId ? { customerId: q.customerId } : {}), ...(q.q ? { OR: [{ customer: { name: { contains: q.q, mode: 'insensitive' } } }, { test: { name: { contains: q.q, mode: 'insensitive' } } }] } : {}) }),
-    dto: (r) => ({ id: r.id, customerId: r.customerId, customerName: r.customer.name, crn: r.customer.crn, testId: r.testId, testCode: r.test.code, testName: r.test.name, rate: String(r.rate), effectiveFrom: r.effectiveFrom, effectiveTo: r.effectiveTo, isActive: r.isActive, version: r.version }),
+    filter: (q) => ({
+      ...(q.testId ? { testId: q.testId } : {}),
+      ...(q.customerId ? { customerId: q.customerId } : {}),
+      ...(q.q ? { OR: [{ customer: { name: { contains: q.q, mode: 'insensitive' } } }, { test: { name: { contains: q.q, mode: 'insensitive' } } }] } : {}),
+    }),
+    dto: (r) => ({
+      id: r.id,
+      customerId: r.customerId,
+      customerName: r.customer.name,
+      crn: r.customer.crn,
+      testId: r.testId,
+      testCode: r.test.code,
+      testName: r.test.name,
+      rate: String(r.rate),
+      effectiveFrom: r.effectiveFrom,
+      effectiveTo: r.effectiveTo,
+      isActive: r.isActive,
+      version: r.version,
+    }),
     data: (i) => {
       assertRate(i);
       return { customerId: i.customerId, testId: i.testId, rate: i.rate, effectiveFrom: date(i.effectiveFrom), effectiveTo: date(i.effectiveTo) };
     },
-    columns: [{ header: 'CRN', key: 'crn' }, { header: 'Customer', key: 'customerName', width: 30 }, { header: 'Test code', key: 'testCode' }, { header: 'Test', key: 'testName', width: 30 }, { header: 'Rate', key: 'rate' }, { header: 'Effective from', key: 'effectiveFrom' }, { header: 'Effective to', key: 'effectiveTo' }, { header: 'Active', key: 'isActive' }],
+    columns: [
+      { header: 'CRN', key: 'crn' },
+      { header: 'Customer', key: 'customerName', width: 30 },
+      { header: 'Test code', key: 'testCode' },
+      { header: 'Test', key: 'testName', width: 30 },
+      { header: 'Rate', key: 'rate' },
+      { header: 'Effective from', key: 'effectiveFrom' },
+      { header: 'Effective to', key: 'effectiveTo' },
+      { header: 'Active', key: 'isActive' },
+    ],
     fromRow: async (v, tx) => {
       const customer = await tx.customer.findFirst({ where: { crn: v.CRN, deletedAt: null }, select: { id: true } });
       if (!customer) throw new Error(`Customer "${v.CRN}" not found`);
-      return { customerId: customer.id, testId: await idByCode(tx.testMaster, v['Test code'], 'Test'), rate: v.Rate, effectiveFrom: v['Effective from'], effectiveTo: v['Effective to'] || undefined, isActive: bool(v.Active) };
+      return {
+        customerId: customer.id,
+        testId: await idByCode(tx.testMaster, v['Test code'], 'Test'),
+        rate: v.Rate,
+        effectiveFrom: v['Effective from'],
+        effectiveTo: v['Effective to'] || undefined,
+        isActive: bool(v.Active),
+      };
     },
     importKey: (i) => ({ customerId: i.customerId, testId: i.testId, effectiveFrom: new Date(i.effectiveFrom) }),
   },
@@ -389,7 +666,12 @@ export const MASTERS: MasterDef[] = [
     filter: (q) => (q.testId ? { OR: [{ testId: q.testId }, { testId: null }] } : {}),
     dto: (r) => ({ id: r.id, code: r.code, text: r.text, testId: r.testId, outcome: r.outcome, isActive: r.isActive, version: r.version }),
     data: (i) => ({ code: i.code, text: i.text, testId: i.testId, outcome: i.outcome }),
-    columns: [{ header: 'Code', key: 'code' }, { header: 'Text', key: 'text', width: 60 }, { header: 'Outcome', key: 'outcome' }, { header: 'Active', key: 'isActive' }],
+    columns: [
+      { header: 'Code', key: 'code' },
+      { header: 'Text', key: 'text', width: 60 },
+      { header: 'Outcome', key: 'outcome' },
+      { header: 'Active', key: 'isActive' },
+    ],
     fromRow: async (v) => ({ code: v.Code, text: v.Text, outcome: v.Outcome || undefined, isActive: bool(v.Active) }),
     importKey: (i) => ({ code: i.code }),
   },
@@ -406,7 +688,12 @@ export const MASTERS: MasterDef[] = [
     filter: (q) => (q.kind ? { kind: q.kind } : {}),
     dto: (r) => ({ id: r.id, kind: r.kind, code: r.code, label: r.label, isActive: r.isActive, version: r.version }),
     data: (i) => ({ kind: i.kind, code: i.code, label: i.label }),
-    columns: [{ header: 'Kind', key: 'kind' }, { header: 'Code', key: 'code' }, { header: 'Label', key: 'label', width: 30 }, { header: 'Active', key: 'isActive' }],
+    columns: [
+      { header: 'Kind', key: 'kind' },
+      { header: 'Code', key: 'code' },
+      { header: 'Label', key: 'label', width: 30 },
+      { header: 'Active', key: 'isActive' },
+    ],
     fromRow: async (v) => ({ kind: v.Kind, code: v.Code, label: v.Label, isActive: bool(v.Active) }),
     importKey: (i) => ({ kind: i.kind, code: i.code }),
   },
@@ -426,4 +713,3 @@ export function compileFormula(expression: string): string[] {
     throw e;
   }
 }
-

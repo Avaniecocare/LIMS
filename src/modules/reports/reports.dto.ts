@@ -65,35 +65,118 @@ export class ReportReviseDto {
 }
 
 export class ReportRowDto {
-  id: string; reportNo: string; revisionId: string; revisionNo: number; status: ReportStatus; sampleId: string; sampleNo: string; jobId: string; jobNo: string; customerName: string | null; ulrNumber: string | null; createdAt: Date; issuedAt: Date | null; version: number;
+  id: string;
+  reportNo: string;
+  revisionId: string;
+  revisionNo: number;
+  status: ReportStatus;
+  sampleId: string;
+  sampleNo: string;
+  jobId: string;
+  jobNo: string;
+  customerName: string | null;
+  ulrNumber: string | null;
+  createdAt: Date;
+  issuedAt: Date | null;
+  version: number;
 }
-export class ReportPageDto { data: ReportRowDto[]; meta: PageMetaDto; }
-export class ReportRejectionDto { id: string; stage: string; action: string; reason: string; byName: string | null; at: Date;
+export class ReportPageDto {
+  data: ReportRowDto[];
+  meta: PageMetaDto;
+}
+export class ReportRejectionDto {
+  id: string;
+  stage: string;
+  action: string;
+  reason: string;
+  byName: string | null;
+  at: Date;
   @ApiProperty({ type: [String], nullable: true }) sampleTestIds: string[] | null;
 }
-export class SignatureDto { name: string; designation: string | null; signedAt: Date; contentSha256: string; }
+export class SignatureDto {
+  name: string;
+  designation: string | null;
+  signedAt: Date;
+  contentSha256: string;
+}
 export class RevisionDto {
-  id: string; revisionNo: number; status: ReportStatus; revisionReason: string | null; ulrNumber: string | null; reviewedByName: string | null; reviewedAt: Date | null; approvedByName: string | null; approvedAt: Date | null; issuedAt: Date | null; supersededAt: Date | null;
-  pdfReady: boolean; pdfSha256: string | null; version: number; rejections: ReportRejectionDto[];
+  id: string;
+  revisionNo: number;
+  status: ReportStatus;
+  revisionReason: string | null;
+  ulrNumber: string | null;
+  reviewedByName: string | null;
+  reviewedAt: Date | null;
+  approvedByName: string | null;
+  approvedAt: Date | null;
+  issuedAt: Date | null;
+  supersededAt: Date | null;
+  pdfReady: boolean;
+  pdfSha256: string | null;
+  version: number;
+  rejections: ReportRejectionDto[];
   @ApiProperty({ type: () => SignatureDto, nullable: true }) signature: SignatureDto | null;
 }
-export class ReportTestDto { sampleTestId: string; testName: string; status: string; }
+export class ReportTestDto {
+  sampleTestId: string;
+  testName: string;
+  status: string;
+}
 export class ReportDetailDto {
-  id: string; reportNo: string; sampleId: string; sampleNo: string; jobId: string; jobNo: string; customerName: string | null; customerEmail: string | null; currentRevisionNo: number; revisions: RevisionDto[]; tests: ReportTestDto[]; canReview: boolean; canApprove: boolean; withheld: boolean; reportRemarks: string | null; sampleDescription: string; customerReference: string | null; kindAttention: string | null;
+  id: string;
+  reportNo: string;
+  sampleId: string;
+  sampleNo: string;
+  jobId: string;
+  jobNo: string;
+  customerName: string | null;
+  customerEmail: string | null;
+  currentRevisionNo: number;
+  revisions: RevisionDto[];
+  tests: ReportTestDto[];
+  canReview: boolean;
+  canApprove: boolean;
+  withheld: boolean;
+  reportRemarks: string | null;
+  sampleDescription: string;
+  customerReference: string | null;
+  kindAttention: string | null;
   @ApiProperty({ type: () => [ReportPhotoDto] }) samplePhotos: ReportPhotoDto[];
 }
-export class ReportPreviewDto { html: string; }
-export class SignedPdfDto { url: string; filename: string; }
+export class ReportPreviewDto {
+  html: string;
+}
+export class SignedPdfDto {
+  url: string;
+  filename: string;
+}
 
-export class VerifiedParameterDto { name: string; value: string | null; unit: string | null; }
+export class VerifiedParameterDto {
+  name: string;
+  value: string | null;
+  unit: string | null;
+}
 export class VerifiedTestDto {
-  testName: string; methodName: string | null;
+  testName: string;
+  methodName: string | null;
   @ApiProperty({ type: () => [VerifiedParameterDto] }) parameters: VerifiedParameterDto[];
 }
 /** Public report verification. Only these fields leave without a sign-in. */
 export class ReportVerificationDto {
   @ApiProperty({ enum: ['VALID', 'SUPERSEDED'] }) status: 'VALID' | 'SUPERSEDED';
-  laboratoryName: string; reportNo: string; revisionNo: number; ulrNumber: string | null; issuedAt: Date | null; approvedAt: Date; approvedByName: string;
-  customerName: string; sampleNo: string; sampleDescription: string; contentSha256: string | null; pdfSha256: string | null; supersededAt: Date | null; replacedByRevisionNo: number | null;
+  laboratoryName: string;
+  reportNo: string;
+  revisionNo: number;
+  ulrNumber: string | null;
+  issuedAt: Date | null;
+  approvedAt: Date;
+  approvedByName: string;
+  customerName: string;
+  sampleNo: string;
+  sampleDescription: string;
+  contentSha256: string | null;
+  pdfSha256: string | null;
+  supersededAt: Date | null;
+  replacedByRevisionNo: number | null;
   @ApiProperty({ type: () => [VerifiedTestDto] }) tests: VerifiedTestDto[];
 }

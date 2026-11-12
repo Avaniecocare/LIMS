@@ -22,8 +22,20 @@ export class OrdersService {
     const ownerIds = [...new Set(rows.map((r) => r.ownerId).filter((x): x is string => !!x))];
     const owners = new Map((await this.prisma.user.findMany({ where: { id: { in: ownerIds } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]));
     return rows.map((r) => ({
-      id: r.id, orderNo: r.orderNo, customerId: r.customerId, customerName: r.customer.name, source: r.source, reference: r.reference, description: r.description, receivedOn: r.receivedOn,
-      stage: r.stage, ownerId: r.ownerId, ownerName: r.ownerId ? (owners.get(r.ownerId) ?? null) : null, version: r.version, createdAt: r.createdAt, quotationCount: r._count.quotations,
+      id: r.id,
+      orderNo: r.orderNo,
+      customerId: r.customerId,
+      customerName: r.customer.name,
+      source: r.source,
+      reference: r.reference,
+      description: r.description,
+      receivedOn: r.receivedOn,
+      stage: r.stage,
+      ownerId: r.ownerId,
+      ownerName: r.ownerId ? (owners.get(r.ownerId) ?? null) : null,
+      version: r.version,
+      createdAt: r.createdAt,
+      quotationCount: r._count.quotations,
     }));
   }
 
@@ -34,7 +46,9 @@ export class OrdersService {
       ...(q.customerId ? { customerId: q.customerId } : {}),
       ...(q.ownerId ? { ownerId: q.ownerId } : {}),
       ...(q.from || q.to ? { receivedOn: { ...(q.from ? { gte: new Date(q.from) } : {}), ...(q.to ? { lte: new Date(q.to) } : {}) } } : {}),
-      ...(q.q ? { OR: [{ orderNo: { contains: q.q, mode: 'insensitive' } }, { reference: { contains: q.q, mode: 'insensitive' } }, { customer: { name: { contains: q.q, mode: 'insensitive' } } }] } : {}),
+      ...(q.q
+        ? { OR: [{ orderNo: { contains: q.q, mode: 'insensitive' } }, { reference: { contains: q.q, mode: 'insensitive' } }, { customer: { name: { contains: q.q, mode: 'insensitive' } } }] }
+        : {}),
     };
     const [rows, total] = await Promise.all([
       this.prisma.order.findMany({ where, include, orderBy: orderBy(q, ['orderNo', 'receivedOn', 'stage'], 'receivedOn'), ...skipTake(q) }),
@@ -58,7 +72,16 @@ export class OrdersService {
     const id = await this.prisma.$transaction(async (tx) => {
       const orderNo = await this.numbering.next(tx, 'ORDER');
       const row = await tx.order.create({
-        data: { orderNo, customerId: dto.customerId, source: dto.source, reference: dto.reference, description: dto.description, receivedOn: new Date(dto.receivedOn), ownerId: dto.ownerId ?? actorId(), createdById: actorId() },
+        data: {
+          orderNo,
+          customerId: dto.customerId,
+          source: dto.source,
+          reference: dto.reference,
+          description: dto.description,
+          receivedOn: new Date(dto.receivedOn),
+          ownerId: dto.ownerId ?? actorId(),
+          createdById: actorId(),
+        },
       });
       await this.audit.record({ action: 'Order.create', entity: 'Order', entityId: row.id, after: row }, tx);
       return row.id;
@@ -70,7 +93,15 @@ export class OrdersService {
     await this.prisma.$transaction(async (tx) => {
       const before = await tx.order.findFirst({ where: { id, deletedAt: null } });
       if (!before) throw notFound('Order');
-      await updateVersioned(tx.order as never, id, dto.version, { customerId: dto.customerId, source: dto.source, reference: dto.reference, description: dto.description, receivedOn: new Date(dto.receivedOn), ownerId: dto.ownerId, stage: dto.stage });
+      await updateVersioned(tx.order as never, id, dto.version, {
+        customerId: dto.customerId,
+        source: dto.source,
+        reference: dto.reference,
+        description: dto.description,
+        receivedOn: new Date(dto.receivedOn),
+        ownerId: dto.ownerId,
+        stage: dto.stage,
+      });
       await this.audit.record({ action: 'Order.update', entity: 'Order', entityId: id, before, after: dto }, tx);
     });
     return this.get(id);

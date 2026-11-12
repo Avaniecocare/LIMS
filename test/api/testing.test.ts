@@ -16,7 +16,16 @@ beforeAll(async () => {
   await resetDb(ctx);
   const { loadBaseline } = await import('../../src/modules/rbac/baseline.js');
   await ctx.prisma.$transaction(loadBaseline);
-  for (const [e, r] of Object.entries({ admin: ROLE_NAMES.admin, sales: ROLE_NAMES.sales, reception: ROLE_NAMES.reception, planner: ROLE_NAMES.planner, tech: ROLE_NAMES.tech, tech2: ROLE_NAMES.tech, hod: ROLE_NAMES.hod })) await createUser(ctx, `${e}@t.example`, [r], `${e} name`);
+  for (const [e, r] of Object.entries({
+    admin: ROLE_NAMES.admin,
+    sales: ROLE_NAMES.sales,
+    reception: ROLE_NAMES.reception,
+    planner: ROLE_NAMES.planner,
+    tech: ROLE_NAMES.tech,
+    tech2: ROLE_NAMES.tech,
+    hod: ROLE_NAMES.hod,
+  }))
+    await createUser(ctx, `${e}@t.example`, [r], `${e} name`);
   admin = await login(ctx, 'admin@t.example');
   sales = await login(ctx, 'sales@t.example');
   reception = await login(ctx, 'reception@t.example');
@@ -60,14 +69,18 @@ describe('technician worklist', () => {
   });
 
   it('another technician cannot read or touch the test, and gets not-found', async () => {
-    const { sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
+    const {
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
     await tech2.get(`/tests/${id}`).expect(404);
     await tech2.post(`/tests/${id}/start`, { version: 2 }).expect(403);
     await tech2.get(`/tests/${id}/history`).expect(404);
   });
 
   it('never leaks customer identity or rate in the detail response', async () => {
-    const { sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
+    const {
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
     const d = (await tech.get(`/tests/${id}`).expect(200)).body;
     const text = JSON.stringify(d);
     expect(text).not.toContain(fx.intra.name);
@@ -77,7 +90,9 @@ describe('technician worklist', () => {
   });
 
   it('shows the customer when the impartiality control is off', async () => {
-    const { sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
+    const {
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
     await admin.put('/admin/settings/controls.impartiality', { value: false, version: 0, reason: 'Small lab' }).expect(200);
     expect((await tech.get(`/tests/${id}`).expect(200)).body.customerName).toBe(fx.intra.name);
     await admin.put('/admin/settings/controls.impartiality', { value: true, version: 1, reason: 'Restored' }).expect(200);
@@ -87,7 +102,10 @@ describe('technician worklist', () => {
 
 describe('stages and results', () => {
   it('runs in order, records who and when, and rolls status up to the job', async () => {
-    const { job, sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
+    const {
+      job,
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
     let d = (await tech.get(`/tests/${id}`).expect(200)).body;
     expect(d.status).toBe('ASSIGNED');
     await tech.put(`/tests/${id}/results`, { version: d.version, values: [] }).expect(422);
@@ -105,14 +123,26 @@ describe('stages and results', () => {
   });
 
   it('calculates server-side, shows working, and stores the formula version on submit', async () => {
-    const { sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [tensile.id]);
+    const {
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, fx.intra.id, [tensile.id]);
     let d = (await tech.get(`/tests/${id}`).expect(200)).body;
     d = (await tech.post(`/tests/${id}/start`, { version: d.version }).expect(200)).body;
     const byCode = (code: string) => d.results.find((r: { code: string }) => r.code === code);
     d = (await tech.put(`/tests/${id}/results`, { version: d.version, values: [{ parameterId: byCode('W').parameterId, value: '12.5' }] }).expect(200)).body;
     expect(byCode('UTS').numericValue).toBeNull();
     expect(byCode('A0').error).toContain('Waiting');
-    d = (await tech.put(`/tests/${id}/results`, { version: d.version, values: [{ parameterId: byCode('T').parameterId, value: '10' }, { parameterId: byCode('LOAD').parameterId, value: '62500' }] }).expect(200)).body;
+    d = (
+      await tech
+        .put(`/tests/${id}/results`, {
+          version: d.version,
+          values: [
+            { parameterId: byCode('T').parameterId, value: '10' },
+            { parameterId: byCode('LOAD').parameterId, value: '62500' },
+          ],
+        })
+        .expect(200)
+    ).body;
     expect(byCode('A0').numericValue).toBe('125.000');
     expect(byCode('UTS').numericValue).toBe('500.00');
     expect(byCode('UTS').calculation.working).toContain('62500 / 125');
@@ -129,7 +159,9 @@ describe('stages and results', () => {
   });
 
   it('checks pass and fail against both grades', async () => {
-    const { sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d], { specificationId: spec.id, dualSpecificationId: dual.id });
+    const {
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d], { specificationId: spec.id, dualSpecificationId: dual.id });
     let d = (await tech.get(`/tests/${id}`).expect(200)).body;
     d = (await tech.post(`/tests/${id}/start`, { version: d.version }).expect(200)).body;
     d = (await tech.put(`/tests/${id}/results`, { version: d.version, values: [{ parameterId: densityParam, value: '0.82' }] }).expect(200)).body;
@@ -139,7 +171,9 @@ describe('stages and results', () => {
   });
 
   it('refuses to submit with missing results or incomplete stages', async () => {
-    const { sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
+    const {
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
     let d = (await tech.get(`/tests/${id}`).expect(200)).body;
     d = (await tech.post(`/tests/${id}/start`, { version: d.version }).expect(200)).body;
     const r1 = await tech.post(`/tests/${id}/submit`, { version: d.version }).expect(422);
@@ -152,7 +186,9 @@ describe('stages and results', () => {
 
   it('warns on an overdue instrument and blocks it only when the setting requires', async () => {
     const inst = (await admin.post('/masters/instruments', { code: 'OLD-1', name: 'Old balance', calibrationDueAt: '2020-01-01' }).expect(201)).body;
-    const { sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
+    const {
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
     let d = (await tech.get(`/tests/${id}`).expect(200)).body;
     d = (await tech.post(`/tests/${id}/start`, { version: d.version }).expect(200)).body;
     d = (await tech.put(`/tests/${id}/results`, { version: d.version, instrumentId: inst.id }).expect(200)).body;
@@ -166,7 +202,10 @@ describe('stages and results', () => {
   });
 
   it('holds with a reason, blocks work, and releases to the earlier status', async () => {
-    const { job, sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
+    const {
+      job,
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
     let d = (await tech.get(`/tests/${id}`).expect(200)).body;
     d = (await tech.post(`/tests/${id}/start`, { version: d.version }).expect(200)).body;
     await tech.post(`/tests/${id}/hold`, { version: d.version, reason: '' }).expect(400);
@@ -185,10 +224,16 @@ describe('stages and results', () => {
   it('offers remark suggestions from the outcome and conversions without masters access', async () => {
     await admin.post('/masters/remark-templates', { code: 'OK', text: 'Meets the spec', outcome: 'PASS' }).expect(201);
     await admin.post('/masters/remark-templates', { code: 'BAD', text: 'Fails the spec', outcome: 'FAIL' }).expect(201);
-    const { sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d], { specificationId: spec.id });
+    const {
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d], { specificationId: spec.id });
     let d = (await tech.get(`/tests/${id}`).expect(200)).body;
     d = (await tech.post(`/tests/${id}/start`, { version: d.version }).expect(200)).body;
-    d = (await tech.put(`/tests/${id}/results`, { version: d.version, values: [{ parameterId: densityParam, value: '0.85' }], remarks: 'Tested as received', observations: 'Clear', notes: 'None' }).expect(200)).body;
+    d = (
+      await tech
+        .put(`/tests/${id}/results`, { version: d.version, values: [{ parameterId: densityParam, value: '0.85' }], remarks: 'Tested as received', observations: 'Clear', notes: 'None' })
+        .expect(200)
+    ).body;
     expect(d.outcome).toBe('PASS');
     expect(d.remarkOptions.find((r: { code: string }) => r.code === 'OK').suggested).toBe(true);
     expect(d.remarkOptions.find((r: { code: string }) => r.code === 'BAD').suggested).toBe(false);
@@ -200,8 +245,11 @@ describe('stages and results', () => {
 
   it('lets the assignee attach files with a print size until the test is submitted', async () => {
     const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
-    const { sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
-    const attach = (c: Client) => c.post('/files').field('entity', 'SampleTest').field('entityId', id).field('category', 'result-image').field('printWidthMm', '80').field('printHeightMm', '60').attach('file', PNG, 'micro.png');
+    const {
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
+    const attach = (c: Client) =>
+      c.post('/files').field('entity', 'SampleTest').field('entityId', id).field('category', 'result-image').field('printWidthMm', '80').field('printHeightMm', '60').attach('file', PNG, 'micro.png');
     await attach(tech).expect(403); // not started
     const d = (await tech.get(`/tests/${id}`).expect(200)).body;
     await tech.post(`/tests/${id}/start`, { version: d.version }).expect(200);
@@ -218,7 +266,9 @@ describe('stages and results', () => {
 
 describe('bad entries', () => {
   it('refuses a non-numeric result instead of storing it as blank', async () => {
-    const { sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
+    const {
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
     let d = (await tech.get(`/tests/${id}`).expect(200)).body;
     d = (await tech.post(`/tests/${id}/start`, { version: d.version }).expect(200)).body;
     const res = await tech.put(`/tests/${id}/results`, { version: d.version, values: [{ parameterId: densityParam, value: 'abc' }] }).expect(400);
@@ -234,7 +284,10 @@ describe('bad entries', () => {
 
 describe('HoD approval', () => {
   it('approves, locks results, and reject returns to the analyst with the reason', async () => {
-    const { job, sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
+    const {
+      job,
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
     let d = await workTest(team, id, { DENSITY: '0.85' });
     const queue = (await hod.get('/tests/approvals').expect(200)).body;
     const item = queue.data.find((q: { id: string }) => q.id === id);
@@ -282,13 +335,24 @@ describe('HoD approval', () => {
     const b = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
     const da = await workTest(team, a.sampleTestIds[0], { DENSITY: '0.85' });
     const db = await workTest(team, b.sampleTestIds[0], { DENSITY: '0.85' });
-    const res = (await hod.post('/tests/approvals/bulk', { items: [{ id: a.sampleTestIds[0], version: da.version }, { id: b.sampleTestIds[0], version: db.version + 5 }] }).expect(200)).body;
+    const res = (
+      await hod
+        .post('/tests/approvals/bulk', {
+          items: [
+            { id: a.sampleTestIds[0], version: da.version },
+            { id: b.sampleTestIds[0], version: db.version + 5 },
+          ],
+        })
+        .expect(200)
+    ).body;
     expect(res.approved).toEqual([a.sampleTestIds[0]]);
     expect(res.failed[0].id).toBe(b.sampleTestIds[0]);
   });
 
   it('keeps an audit trail of every status change', async () => {
-    const { sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
+    const {
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
     await workTest(team, id, { DENSITY: '0.85' });
     const hist = (await tech.get(`/tests/${id}/history`).expect(200)).body;
     expect(hist.map((h: { action: string }) => h.action)).toContain('SampleTest.status');
@@ -297,7 +361,9 @@ describe('HoD approval', () => {
 
   it('renders the test data sheet for the assignee only', async () => {
     const { DocumentsService } = await import('../../src/modules/documents/documents.service.js');
-    const { sampleTestIds: [id] } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
+    const {
+      sampleTestIds: [id],
+    } = await plannedTests(ctx, team, fx.intra.id, [fx.tests.d]);
     await workTest(team, id, { DENSITY: '0.85' });
     await tech2.post('/documents', { kind: 'test-data', params: { sampleTestId: id } }).expect(403);
     const job = (await tech.post('/documents', { kind: 'test-data', params: { sampleTestId: id } }).expect(201)).body;

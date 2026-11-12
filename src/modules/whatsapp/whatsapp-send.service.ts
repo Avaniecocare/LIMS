@@ -47,28 +47,54 @@ export class WhatsappSendService {
     const base = { to, entity: ENTITY[dto.kind], entityId: dto.entityId, consentConfirmedBy: currentUser()!.name, createdById: actorId() };
 
     if (dto.kind === 'report') {
-      const r = await this.prisma.report.findFirst({ where: { id: dto.entityId }, include: { sample: { select: { sampleNo: true } }, revisions: { where: { status: 'ISSUED' }, orderBy: { revisionNo: 'desc' }, take: 1 } } });
+      const r = await this.prisma.report.findFirst({
+        where: { id: dto.entityId },
+        include: { sample: { select: { sampleNo: true } }, revisions: { where: { status: 'ISSUED' }, orderBy: { revisionNo: 'desc' }, take: 1 } },
+      });
       if (!r) throw notFound('Report');
       const rev = r.revisions[0];
       if (!rev?.pdfFileId) throw rule('NOT_ISSUED', 'Only an issued report can be sent');
       const company = rev.companySnapshot as unknown as CompanySnapshot;
       const content = rev.content as unknown as { customer?: { kindAttention?: string | null; name?: string } };
       await this.whatsapp.enqueue({
-        ...base, kind: 'report',
-        values: { ...this.lab(company), contactName: greet ?? content.customer?.kindAttention ?? 'Sir/Madam', customerName: content.customer?.name, reportNo: r.reportNo, sampleNo: r.sample.sampleNo, issuedOn: formatDate(rev.issuedAt) },
-        documentFileId: rev.pdfFileId, documentName: `Report ${r.reportNo}${rev.revisionNo ? ` rev ${rev.revisionNo}` : ''}.pdf`.replace(/[/\\]/g, '-'),
+        ...base,
+        kind: 'report',
+        values: {
+          ...this.lab(company),
+          contactName: greet ?? content.customer?.kindAttention ?? 'Sir/Madam',
+          customerName: content.customer?.name,
+          reportNo: r.reportNo,
+          sampleNo: r.sample.sampleNo,
+          issuedOn: formatDate(rev.issuedAt),
+        },
+        documentFileId: rev.pdfFileId,
+        documentName: `Report ${r.reportNo}${rev.revisionNo ? ` rev ${rev.revisionNo}` : ''}.pdf`.replace(/[/\\]/g, '-'),
       });
     } else if (dto.kind === 'invoice' || dto.kind === 'reminder') {
       const inv = await this.prisma.invoice.findFirst({ where: { id: dto.entityId, deletedAt: null } });
       if (!inv) throw notFound('Invoice');
       const company = inv.companySnapshot as unknown as CompanySnapshot;
-      const common = { ...this.lab(company), contactName: greet ?? 'Sir/Madam', customerName: (inv.customerSnapshot as { name?: string } | null)?.name, invoiceNo: inv.invoiceNo, dueDate: formatDate(inv.dueDate) };
+      const common = {
+        ...this.lab(company),
+        contactName: greet ?? 'Sir/Madam',
+        customerName: (inv.customerSnapshot as { name?: string } | null)?.name,
+        invoiceNo: inv.invoiceNo,
+        dueDate: formatDate(inv.dueDate),
+      };
       if (dto.kind === 'invoice') {
         if (inv.status === 'DRAFT' || inv.status === 'CANCELLED') throw rule('NOT_ISSUED', 'Only an issued invoice can be sent');
-        await this.viaDocument('invoice-pdf', { invoiceId: inv.id }, { ...base, kind: 'invoice', values: { ...common, amount: `₹${formatINR(inv.grandTotal)}`, invoiceDate: formatDate(inv.invoiceDate) } });
+        await this.viaDocument(
+          'invoice-pdf',
+          { invoiceId: inv.id },
+          { ...base, kind: 'invoice', values: { ...common, amount: `₹${formatINR(inv.grandTotal)}`, invoiceDate: formatDate(inv.invoiceDate) } },
+        );
       } else {
         if (!OPEN.includes(inv.status)) throw rule('NOT_DUE', 'Only unpaid invoices can be reminded');
-        await this.whatsapp.enqueue({ ...base, kind: 'reminder', values: { ...common, balance: `₹${formatINR(balanceOf(inv).toFixed(2))}`, daysOverdue: inv.dueDate ? Math.max(0, daysOverdue(inv.dueDate, istToday())) : 0 } });
+        await this.whatsapp.enqueue({
+          ...base,
+          kind: 'reminder',
+          values: { ...common, balance: `₹${formatINR(balanceOf(inv).toFixed(2))}`, daysOverdue: inv.dueDate ? Math.max(0, daysOverdue(inv.dueDate, istToday())) : 0 },
+        });
         await this.prisma.reminderLog.create({ data: { invoiceId: inv.id, kind: 'MANUAL', sentById: actorId() } });
       }
     } else {
@@ -77,7 +103,18 @@ export class WhatsappSendService {
       await this.viaDocument(
         'job-acknowledgement',
         { jobId: job.id, ...(dto.photoIds?.length ? { photoIds: dto.photoIds } : {}) },
-        { ...base, kind: 'acknowledgement', values: { ...this.lab(this.company.config), contactName: greet ?? job.kindAttention ?? 'Sir/Madam', customerName: job.customer.name, jobNo: job.jobNo, sampleCount: job._count.samples, receivedOn: formatDate(job.receivedAt) } },
+        {
+          ...base,
+          kind: 'acknowledgement',
+          values: {
+            ...this.lab(this.company.config),
+            contactName: greet ?? job.kindAttention ?? 'Sir/Madam',
+            customerName: job.customer.name,
+            jobNo: job.jobNo,
+            sampleCount: job._count.samples,
+            receivedOn: formatDate(job.receivedAt),
+          },
+        },
       );
     }
     await this.audit.record({ action: `whatsapp.${dto.kind}.queued`, entity: base.entity, entityId: dto.entityId, after: { to, consentConfirmedBy: base.consentConfirmedBy } });
@@ -102,9 +139,16 @@ export class WhatsappSendService {
     const available = await this.modules.isOn('whatsapp');
     const customerId = await this.customerOf(entity, entityId);
     // Phone numbers are customer identity: only people who may see customers get them suggested.
-    const contacts = customerId && can('customers.view')
-      ? (await this.prisma.customerContact.findMany({ where: { customerId, deletedAt: null, phone: { not: null } }, orderBy: [{ isPrimary: 'desc' }, { name: 'asc' }], select: { name: true, phone: true } })).map((c) => ({ name: c.name, phone: c.phone! }))
-      : [];
+    const contacts =
+      customerId && can('customers.view')
+        ? (
+            await this.prisma.customerContact.findMany({
+              where: { customerId, deletedAt: null, phone: { not: null } },
+              orderBy: [{ isPrimary: 'desc' }, { name: 'asc' }],
+              select: { name: true, phone: true },
+            })
+          ).map((c) => ({ name: c.name, phone: c.phone! }))
+        : [];
     const seeNumbers = can('customers.view');
     const messages = (await this.whatsapp.log(entity, entityId)).map((m) => ({ ...m, toNumber: seeNumbers ? m.toNumber : `••••${m.toNumber.slice(-4)}` }));
     return { available, contacts, messages };

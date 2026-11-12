@@ -46,33 +46,137 @@ export class ApprovalQuery extends PageQuery {
 }
 
 export class WorklistItemDto {
-  id: string; testCode: string; testName: string; methodName: string | null; status: string; urgent: boolean; dueDate: Date | null; overdue: boolean; sampleNo: string; jobNo: string; sampleDescription: string;
+  id: string;
+  testCode: string;
+  testName: string;
+  methodName: string | null;
+  status: string;
+  urgent: boolean;
+  dueDate: Date | null;
+  overdue: boolean;
+  sampleNo: string;
+  jobNo: string;
+  sampleDescription: string;
   /** null while impartiality is on */
-  customerName: string | null; currentStage: string | null; rejectionReason: string | null; holdReason: string | null; version: number; analysisMode: string | null;
+  customerName: string | null;
+  currentStage: string | null;
+  rejectionReason: string | null;
+  holdReason: string | null;
+  version: number;
+  analysisMode: string | null;
 }
-export class WorklistPageDto { data: WorklistItemDto[]; meta: PageMetaDto; }
+export class WorklistPageDto {
+  data: WorklistItemDto[];
+  meta: PageMetaDto;
+}
 
-export class LimitDto { spec: string; role: string; min: string | null; max: string | null; text: string | null; }
-export class CalculationDto { inputs: Record<string, string>; working: string; result: string; formulaVersion: number | null; }
-export class ResultOptionViewDto { value: string; isPass: boolean | null; }
+export class LimitDto {
+  spec: string;
+  role: string;
+  min: string | null;
+  max: string | null;
+  text: string | null;
+}
+export class CalculationDto {
+  inputs: Record<string, string>;
+  working: string;
+  result: string;
+  formulaVersion: number | null;
+}
+export class ResultOptionViewDto {
+  value: string;
+  isPass: boolean | null;
+}
 export class ParameterResultDto {
-  parameterId: string; code: string; name: string; kind: string; unit: string | null; decimals: number; accredited: boolean; value: string | null; numericValue: string | null; qualifier: string | null; textValue: string | null;
-  limits: LimitDto[]; passPrimary: boolean | null; passDual: boolean | null; options: ResultOptionViewDto[]; error: string | null;
+  parameterId: string;
+  code: string;
+  name: string;
+  kind: string;
+  unit: string | null;
+  decimals: number;
+  accredited: boolean;
+  value: string | null;
+  numericValue: string | null;
+  qualifier: string | null;
+  textValue: string | null;
+  limits: LimitDto[];
+  passPrimary: boolean | null;
+  passDual: boolean | null;
+  options: ResultOptionViewDto[];
+  error: string | null;
   @ApiProperty({ type: () => CalculationDto, nullable: true }) calculation: CalculationDto | null;
 }
-export class StageDto { seq: number; name: string; completedAt: Date | null; completedByName: string | null; }
-export class ConversionOptionDto { id: string; fromCode: string; fromSymbol: string; toCode: string; toSymbol: string; }
-export class InstrumentChoiceDto { id: string; code: string; name: string; calibrationDueAt: Date | null; calibrationOverdue: boolean; }
-export class RemarkOptionDto { id: string; code: string; text: string; outcome: string; suggested: boolean; }
+export class StageDto {
+  seq: number;
+  name: string;
+  completedAt: Date | null;
+  completedByName: string | null;
+}
+export class ConversionOptionDto {
+  id: string;
+  fromCode: string;
+  fromSymbol: string;
+  toCode: string;
+  toSymbol: string;
+}
+export class InstrumentChoiceDto {
+  id: string;
+  code: string;
+  name: string;
+  calibrationDueAt: Date | null;
+  calibrationOverdue: boolean;
+}
+export class RemarkOptionDto {
+  id: string;
+  code: string;
+  text: string;
+  outcome: string;
+  suggested: boolean;
+}
 export class TestDetailDto extends WorklistItemDto {
-  sampleId: string; officeInstructions: string | null; technicalData: string | null; instrumentId: string | null; remarks: string | null; observations: string | null; notes: string | null; conductedByName: string | null; canEdit: boolean; assignedToMe: boolean;
-  blockOverdueInstruments: boolean; instrumentWarning: string | null; stages: StageDto[]; results: ParameterResultDto[]; instruments: InstrumentChoiceDto[]; conversions: ConversionOptionDto[]; remarkOptions: RemarkOptionDto[];
-  assignedToName: string | null; submittedAt: Date | null; approvedAt: Date | null; approvedByName: string | null; outcome: string;
+  sampleId: string;
+  officeInstructions: string | null;
+  technicalData: string | null;
+  instrumentId: string | null;
+  remarks: string | null;
+  observations: string | null;
+  notes: string | null;
+  conductedByName: string | null;
+  canEdit: boolean;
+  assignedToMe: boolean;
+  blockOverdueInstruments: boolean;
+  instrumentWarning: string | null;
+  stages: StageDto[];
+  results: ParameterResultDto[];
+  instruments: InstrumentChoiceDto[];
+  conversions: ConversionOptionDto[];
+  remarkOptions: RemarkOptionDto[];
+  assignedToName: string | null;
+  submittedAt: Date | null;
+  approvedAt: Date | null;
+  approvedByName: string | null;
+  outcome: string;
 }
 export class ApprovalItemDto {
-  id: string; testCode: string; testName: string; methodName: string | null; sampleNo: string; jobNo: string; urgent: boolean; dueDate: Date | null; submittedAt: Date | null; conductedByName: string | null; outcome: string; version: number; ownResult: boolean; results: ParameterResultDto[];
+  id: string;
+  testCode: string;
+  testName: string;
+  methodName: string | null;
+  sampleNo: string;
+  jobNo: string;
+  urgent: boolean;
+  dueDate: Date | null;
+  submittedAt: Date | null;
+  conductedByName: string | null;
+  outcome: string;
+  version: number;
+  ownResult: boolean;
+  results: ParameterResultDto[];
 }
-export class ApprovalPageDto { data: ApprovalItemDto[]; meta: PageMetaDto; }
+export class ApprovalPageDto {
+  data: ApprovalItemDto[];
+  meta: PageMetaDto;
+}
 export class BulkApproveResultDto {
   approved: string[];
   failed: { id: string; message: string }[];

@@ -45,7 +45,12 @@ export function assertPasswordPolicy(password: string, field = 'newPassword') {
 }
 
 // One answer for a wrong password, an unknown email and a locked account, so the response never reveals which emails exist.
-const invalidLogin = () => new AppError('INVALID_CREDENTIALS', 401, `Incorrect email or password. After ${MAX_FAILED_LOGINS} failed attempts an account is locked for ${LOCK_MINUTES} minutes; use Forgot password if you are unsure.`);
+const invalidLogin = () =>
+  new AppError(
+    'INVALID_CREDENTIALS',
+    401,
+    `Incorrect email or password. After ${MAX_FAILED_LOGINS} failed attempts an account is locked for ${LOCK_MINUTES} minutes; use Forgot password if you are unsure.`,
+  );
 
 @Injectable()
 export class AuthService {
@@ -154,7 +159,12 @@ export class AuthService {
   }
 
   async signInHistory(userId: string) {
-    const rows = await this.prisma.auditLog.findMany({ where: { entity: 'User', entityId: userId, action: { in: ['auth.login', 'auth.login.failed', 'auth.login.locked', 'auth.account.locked'] } }, orderBy: { at: 'desc' }, take: 50, select: { at: true, action: true, ip: true } });
+    const rows = await this.prisma.auditLog.findMany({
+      where: { entity: 'User', entityId: userId, action: { in: ['auth.login', 'auth.login.failed', 'auth.login.locked', 'auth.account.locked'] } },
+      orderBy: { at: 'desc' },
+      take: 50,
+      select: { at: true, action: true, ip: true },
+    });
     return rows;
   }
 

@@ -28,12 +28,9 @@ export class AppError extends HttpException {
 export const notFound = (what = 'Record') => new AppError('NOT_FOUND', 404, `${what} not found`);
 export const forbidden = (message = 'You do not have permission to do this') => new AppError('FORBIDDEN', 403, message);
 export const badRequest = (message: string, fields: FieldError[] = []) => new AppError('BAD_REQUEST', 400, message, fields);
-export const conflict = (message = 'This record was changed by someone else. Reload and try again.') =>
-  new AppError('CONFLICT', 409, message);
-export const invalidTransition = (from: string, to: string) =>
-  new AppError('INVALID_TRANSITION', 422, `Cannot move from ${from} to ${to}`);
-export const reasonRequired = () =>
-  new AppError('REASON_REQUIRED', 422, 'A reason is required', [{ field: 'reason', message: 'A reason is required' }]);
+export const conflict = (message = 'This record was changed by someone else. Reload and try again.') => new AppError('CONFLICT', 409, message);
+export const invalidTransition = (from: string, to: string) => new AppError('INVALID_TRANSITION', 422, `Cannot move from ${from} to ${to}`);
+export const reasonRequired = () => new AppError('REASON_REQUIRED', 422, 'A reason is required', [{ field: 'reason', message: 'A reason is required' }]);
 export const rule = (code: string, message: string) => new AppError(code, 422, message);
 
 export function flattenValidation(errors: ValidationError[], parent = ''): FieldError[] {

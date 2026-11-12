@@ -12,7 +12,22 @@ import { CompanyService, type BrandImageKind } from '../../core/company.service.
 import { StorageService } from '../../core/storage.service.js';
 import { Perm } from '../auth/decorators.js';
 import { readUpload } from '../files/files.controller.js';
-import { ModuleListDto, SaveModulesDto, EmailPreviewDto, EmailTemplateInputDto, EmailTemplateListDto, SaveEmailTemplateDto, ApplyTemplatesDto, ApplyTemplatesResultDto, LabDetailsDto, SaveBrandingDto, SaveLabProfileDto, SetupStatusDetailDto, TemplateSummaryDto, TestEmailDto } from './lab.dto.js';
+import {
+  ModuleListDto,
+  SaveModulesDto,
+  EmailPreviewDto,
+  EmailTemplateInputDto,
+  EmailTemplateListDto,
+  SaveEmailTemplateDto,
+  ApplyTemplatesDto,
+  ApplyTemplatesResultDto,
+  LabDetailsDto,
+  SaveBrandingDto,
+  SaveLabProfileDto,
+  SetupStatusDetailDto,
+  TemplateSummaryDto,
+  TestEmailDto,
+} from './lab.dto.js';
 import { TemplatesService } from './templates.service.js';
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -36,26 +51,34 @@ export class LabController {
     private readonly modules: ModulesService,
   ) {}
 
-  @Get() @Perm('admin.company.view') @ApiOkResponse({ type: LabDetailsDto })
+  @Get()
+  @Perm('admin.company.view')
+  @ApiOkResponse({ type: LabDetailsDto })
   details(): Promise<LabDetailsDto> {
     return this.company.details();
   }
 
   /** Bank account, GSTIN and accreditation print on every invoice and report, so the password is confirmed first. */
-  @Put('profile') @Perm('admin.company.edit') @ApiOkResponse({ type: LabDetailsDto })
+  @Put('profile')
+  @Perm('admin.company.edit')
+  @ApiOkResponse({ type: LabDetailsDto })
   async saveProfile(@Body() dto: SaveLabProfileDto): Promise<LabDetailsDto> {
     requireRecentAuth();
     await this.company.saveProfile(dto.profile, dto.version);
     return this.company.details();
   }
 
-  @Put('branding') @Perm('admin.company.edit') @ApiOkResponse({ type: LabDetailsDto })
+  @Put('branding')
+  @Perm('admin.company.edit')
+  @ApiOkResponse({ type: LabDetailsDto })
   async saveBranding(@Body() dto: SaveBrandingDto): Promise<LabDetailsDto> {
     await this.company.saveBranding(dto.branding, dto.version);
     return this.company.details();
   }
 
-  @Post('branding/:kind') @Perm('admin.company.edit') @ApiConsumes('multipart/form-data')
+  @Post('branding/:kind')
+  @Perm('admin.company.edit')
+  @ApiConsumes('multipart/form-data')
   @ApiBody({ schema: { type: 'object', required: ['file', 'version'], properties: { file: { type: 'string', format: 'binary' }, version: { type: 'integer' } } } })
   @ApiOkResponse({ type: LabDetailsDto })
   async uploadImage(@Param('kind') kind: string, @Req() req: FastifyRequest): Promise<LabDetailsDto> {
@@ -70,7 +93,9 @@ export class LabController {
     return this.company.details();
   }
 
-  @Delete('branding/:kind') @Perm('admin.company.edit') @ApiOkResponse({ type: LabDetailsDto })
+  @Delete('branding/:kind')
+  @Perm('admin.company.edit')
+  @ApiOkResponse({ type: LabDetailsDto })
   async removeImage(@Param('kind') kind: string, @Query('version', ParseIntPipe) version: number): Promise<LabDetailsDto> {
     await this.company.setImage(this.kind(kind), null, version);
     return this.company.details();
@@ -78,18 +103,25 @@ export class LabController {
 
   // ---------------------------------------------------------------- setup wizard
 
-  @Get('templates') @Perm('admin.company.view') @ApiOkResponse({ type: [TemplateSummaryDto] })
+  @Get('templates')
+  @Perm('admin.company.view')
+  @ApiOkResponse({ type: [TemplateSummaryDto] })
   templates(): TemplateSummaryDto[] {
     return this.templatesService.list();
   }
 
   /** Adds a starting test catalogue. Only adds: anything already there by code is left as it is. */
-  @Post('templates/apply') @HttpCode(200) @Perm('admin.company.edit') @ApiOkResponse({ type: ApplyTemplatesResultDto })
+  @Post('templates/apply')
+  @HttpCode(200)
+  @Perm('admin.company.edit')
+  @ApiOkResponse({ type: ApplyTemplatesResultDto })
   applyTemplates(@Body() dto: ApplyTemplatesDto): Promise<ApplyTemplatesResultDto> {
     return this.templatesService.apply(dto.templates);
   }
 
-  @Get('setup') @Perm('admin.company.view') @ApiOkResponse({ type: SetupStatusDetailDto })
+  @Get('setup')
+  @Perm('admin.company.view')
+  @ApiOkResponse({ type: SetupStatusDetailDto })
   async setup(): Promise<SetupStatusDetailDto> {
     const { profile, brandingVersion } = await this.company.details();
     const [tests, users, emailTested, completed] = await Promise.all([
@@ -111,11 +143,18 @@ export class LabController {
   }
 
   /** Sends a branded test email at once and reports what the mail server said. */
-  @Post('setup/test-email') @HttpCode(200) @Perm('admin.company.edit') @ApiOkResponse({ type: OkDto })
+  @Post('setup/test-email')
+  @HttpCode(200)
+  @Perm('admin.company.edit')
+  @ApiOkResponse({ type: OkDto })
   async testEmail(@Body() dto: TestEmailDto): Promise<OkDto> {
     const c = this.company.config;
     try {
-      await this.mail.sendNow(dto.to, `Test email from ${c.productName}`, `<p>This is a test email from ${escapeHtml(c.productName)}.</p><p>If you can read it, emails to customers (acknowledgements, reports, invoices, reminders) will be delivered from this address with your lab's name.</p>`);
+      await this.mail.sendNow(
+        dto.to,
+        `Test email from ${c.productName}`,
+        `<p>This is a test email from ${escapeHtml(c.productName)}.</p><p>If you can read it, emails to customers (acknowledgements, reports, invoices, reminders) will be delivered from this address with your lab's name.</p>`,
+      );
     } catch (e) {
       throw new AppError('EMAIL_FAILED', 502, `The mail server refused or could not be reached: ${e instanceof Error ? e.message.slice(0, 200) : 'unknown error'}`);
     }
@@ -124,7 +163,10 @@ export class LabController {
     return { ok: true };
   }
 
-  @Post('setup/complete') @HttpCode(200) @Perm('admin.company.edit') @ApiOkResponse({ type: OkDto })
+  @Post('setup/complete')
+  @HttpCode(200)
+  @Perm('admin.company.edit')
+  @ApiOkResponse({ type: OkDto })
   async complete(): Promise<OkDto> {
     const version = (await this.prisma.setting.findUnique({ where: { key: 'setup.labCompleted' } }))?.version ?? 0;
     if (version === 0 || !(await this.settings.get('setup.labCompleted'))) await this.settings.set('setup.labCompleted', true, version, 'Setup wizard finished');
@@ -133,12 +175,16 @@ export class LabController {
 
   // ---------------------------------------------------------------- modules
 
-  @Get('modules') @Perm('admin.company.view') @ApiOkResponse({ type: ModuleListDto })
+  @Get('modules')
+  @Perm('admin.company.view')
+  @ApiOkResponse({ type: ModuleListDto })
   moduleList(): Promise<ModuleListDto> {
     return this.modules.list();
   }
 
-  @Put('modules') @Perm('admin.company.edit') @ApiOkResponse({ type: ModuleListDto })
+  @Put('modules')
+  @Perm('admin.company.edit')
+  @ApiOkResponse({ type: ModuleListDto })
   async saveModules(@Body() dto: SaveModulesDto): Promise<ModuleListDto> {
     if (Object.values(dto.enabled).some((v) => typeof v !== 'boolean')) throw badRequest('Each module is on or off', [{ field: 'enabled', message: 'true or false' }]);
     await this.modules.save(dto.enabled, dto.version);
@@ -147,25 +193,34 @@ export class LabController {
 
   // ---------------------------------------------------------------- email templates
 
-  @Get('email-templates') @Perm('admin.company.view') @ApiOkResponse({ type: EmailTemplateListDto })
+  @Get('email-templates')
+  @Perm('admin.company.view')
+  @ApiOkResponse({ type: EmailTemplateListDto })
   emailTemplates(): Promise<EmailTemplateListDto> {
     return this.emailTemplatesService.list();
   }
 
-  @Put('email-templates/:key') @Perm('admin.company.edit') @ApiOkResponse({ type: EmailTemplateListDto })
+  @Put('email-templates/:key')
+  @Perm('admin.company.edit')
+  @ApiOkResponse({ type: EmailTemplateListDto })
   async saveEmailTemplate(@Param('key') key: string, @Body() dto: SaveEmailTemplateDto): Promise<EmailTemplateListDto> {
     await this.emailTemplatesService.save(this.templateKey(key), dto.subject, dto.body, dto.version);
     return this.emailTemplatesService.list();
   }
 
   /** Back to the product's wording. */
-  @Delete('email-templates/:key') @Perm('admin.company.edit') @ApiOkResponse({ type: EmailTemplateListDto })
+  @Delete('email-templates/:key')
+  @Perm('admin.company.edit')
+  @ApiOkResponse({ type: EmailTemplateListDto })
   async resetEmailTemplate(@Param('key') key: string, @Query('version', ParseIntPipe) version: number): Promise<EmailTemplateListDto> {
     await this.emailTemplatesService.reset(this.templateKey(key), version);
     return this.emailTemplatesService.list();
   }
 
-  @Post('email-templates/:key/preview') @HttpCode(200) @Perm('admin.company.view') @ApiOkResponse({ type: EmailPreviewDto })
+  @Post('email-templates/:key/preview')
+  @HttpCode(200)
+  @Perm('admin.company.view')
+  @ApiOkResponse({ type: EmailPreviewDto })
   previewEmailTemplate(@Param('key') key: string, @Body() dto: EmailTemplateInputDto): EmailPreviewDto {
     return this.emailTemplatesService.preview(this.templateKey(key), dto.subject, dto.body);
   }

@@ -30,7 +30,8 @@ export class PublicController {
   ) {}
 
   /** Allow-list by construction: only these fields may ever leave without a login. Nothing private (no bank, PAN or GSTIN). */
-  @Get('branding') @ApiOkResponse({ type: BrandingDto })
+  @Get('branding')
+  @ApiOkResponse({ type: BrandingDto })
   branding(): BrandingDto {
     const c = this.company.config;
     const url = (kind: BrandImageKind) => {
@@ -86,7 +87,8 @@ export class PublicController {
       .send(img.buffer);
   }
 
-  @Get('setup-status') @ApiOkResponse({ type: SetupStatusDto })
+  @Get('setup-status')
+  @ApiOkResponse({ type: SetupStatusDto })
   async setupStatus(): Promise<SetupStatusDto> {
     return { setupRequired: await this.setupRequired(), tokenRequired: !!this.infra.setupToken };
   }
@@ -98,7 +100,8 @@ export class PublicController {
   }
 
   /** First-run wizard. Refuses permanently once any user exists. */
-  @Post('setup') @ApiOkResponse({ type: OkDto })
+  @Post('setup')
+  @ApiOkResponse({ type: OkDto })
   async setup(@Body() dto: SetupDto): Promise<OkDto> {
     if (this.infra.setupToken) {
       const a = Buffer.from(dto.setupToken ?? '');
