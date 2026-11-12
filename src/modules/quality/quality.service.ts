@@ -1,3 +1,4 @@
+import { dateOnly } from '../../common/calendar.js';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { actorId, currentUser } from '../../common/context.js';
 import { badRequest, conflict, notFound, rule } from '../../common/errors.js';
@@ -12,7 +13,6 @@ import { NotificationsService } from '../notifications/notifications.service.js'
 import { SchedulerService } from '../scheduler/scheduler.service.js';
 import type { AuthorisationQuery, CreateAuthorisationDto, CreateNcDto, CreateTrainingDto, EquipmentScheduleDto, NcQuery, RecordEquipmentEventDto, UpdateNcDto } from './quality.dto.js';
 
-const day = (s: string) => new Date(`${s.slice(0, 10)}T00:00:00Z`);
 export function addMonths(d: Date, months: number): Date {
   const r = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months, d.getUTCDate()));
   // 31 January + 1 month is the last day of February, not 3 March.
@@ -94,9 +94,9 @@ export class QualityService implements OnModuleInit {
 
   /** Records a calibration, check, maintenance or repair. A calibration or maintenance moves the next due date. */
   async recordEvent(instrumentId: string, dto: RecordEquipmentEventDto) {
-    const performedOn = day(dto.performedOn);
+    const performedOn = dateOnly(dto.performedOn);
     if (performedOn > istToday()) throw badRequest('That date is in the future', [{ field: 'performedOn', message: 'In the future' }]);
-    const nextDue = dto.nextDueOn ? day(dto.nextDueOn) : null;
+    const nextDue = dto.nextDueOn ? dateOnly(dto.nextDueOn) : null;
     if (nextDue && nextDue <= performedOn) throw badRequest('The next due date must be after this one', [{ field: 'nextDueOn', message: 'Before or on the date done' }]);
     return this.prisma.$transaction(async (tx) => {
       const i = await this.instrument(instrumentId, tx);
@@ -140,7 +140,7 @@ export class QualityService implements OnModuleInit {
       data: {
         ...(dto.calibrationIntervalMonths !== undefined ? { calibrationIntervalMonths: dto.calibrationIntervalMonths } : {}),
         ...(dto.maintenanceIntervalMonths !== undefined ? { maintenanceIntervalMonths: dto.maintenanceIntervalMonths } : {}),
-        ...(dto.maintenanceDueAt !== undefined ? { maintenanceDueAt: dto.maintenanceDueAt ? day(dto.maintenanceDueAt) : null } : {}),
+        ...(dto.maintenanceDueAt !== undefined ? { maintenanceDueAt: dto.maintenanceDueAt ? dateOnly(dto.maintenanceDueAt) : null } : {}),
         version: { increment: 1 },
       },
     });
@@ -209,8 +209,8 @@ export class QualityService implements OnModuleInit {
     ]);
     if (!user) throw notFound('User');
     if (!test) throw notFound('Test');
-    const from = day(dto.authorisedOn);
-    const until = dto.validUntil ? day(dto.validUntil) : null;
+    const from = dateOnly(dto.authorisedOn);
+    const until = dto.validUntil ? dateOnly(dto.validUntil) : null;
     if (until && until <= from) throw badRequest('Valid until must be after the date authorised', [{ field: 'validUntil', message: 'Before the start' }]);
     const active = await this.prisma.staffAuthorisation.findFirst({
       where: { userId: dto.userId, testId: dto.testId, withdrawnAt: null, OR: [{ validUntil: null }, { validUntil: { gte: istToday() } }] },
@@ -276,7 +276,7 @@ export class QualityService implements OnModuleInit {
   async addTraining(dto: CreateTrainingDto) {
     const user = await this.prisma.user.findFirst({ where: { id: dto.userId, deletedAt: null } });
     if (!user) throw notFound('User');
-    const trainedOn = day(dto.trainedOn);
+    const trainedOn = dateOnly(dto.trainedOn);
     if (trainedOn > istToday()) throw badRequest('That date is in the future', [{ field: 'trainedOn', message: 'In the future' }]);
     const row = await this.prisma.trainingRecord.create({
       data: {
@@ -346,7 +346,7 @@ export class QualityService implements OnModuleInit {
           reference: dto.reference?.trim() || null,
           ownerId: dto.ownerId ?? null,
           ownerName,
-          dueOn: dto.dueOn ? day(dto.dueOn) : null,
+          dueOn: dto.dueOn ? dateOnly(dto.dueOn) : null,
           createdById: me?.id ?? null,
           createdByName: me?.name ?? null,
         },
@@ -382,7 +382,7 @@ export class QualityService implements OnModuleInit {
       ...(dto.correctiveAction !== undefined ? { correctiveAction: dto.correctiveAction?.trim() || null } : {}),
       ...(dto.verification !== undefined ? { verification: dto.verification?.trim() || null } : {}),
       ...(dto.ownerId !== undefined ? { ownerId: dto.ownerId, ownerName } : {}),
-      ...(dto.dueOn !== undefined ? { dueOn: dto.dueOn ? day(dto.dueOn) : null } : {}),
+      ...(dto.dueOn !== undefined ? { dueOn: dto.dueOn ? dateOnly(dto.dueOn) : null } : {}),
       version: { increment: 1 },
     };
     if (dto.status && dto.status !== n.status) {

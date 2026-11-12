@@ -1,3 +1,4 @@
+import { escapeHtml } from '../common/html.js';
 /**
  * Customer-facing email wording, editable by the lab in Admin > Email templates.
  *
@@ -124,7 +125,7 @@ export const EMAIL_TEMPLATES = {
 export type EmailTemplateKey = keyof typeof EMAIL_TEMPLATES;
 export const EMAIL_TEMPLATE_KEYS = Object.keys(EMAIL_TEMPLATES) as EmailTemplateKey[];
 
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+const esc = escapeHtml;
 const SECTION = /\{\{#([a-zA-Z]+)\}\}([\s\S]*?)\{\{\/\1\}\}/g;
 const VARIABLE = /\{\{([a-zA-Z]+)\}\}/g;
 const filled = (v: unknown) => v !== undefined && v !== null && String(v).trim() !== '';

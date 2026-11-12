@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, Post, Put
 import { ApiBody, ApiConsumes, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 import { AppError, badRequest, requireRecentAuth } from '../../common/errors.js';
+import { escapeHtml } from '../../common/html.js';
 import { EmailTemplateService } from '../../core/email-template.service.js';
 import { MailService } from '../../core/mail.service.js';
 import { ModulesService } from '../../core/modules.service.js';
@@ -29,8 +30,6 @@ import {
   TestEmailDto,
 } from './lab.dto.js';
 import { TemplatesService } from './templates.service.js';
-
-const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 const KINDS = ['logo', 'favicon', 'login'] as const;
 // TODO(product-decision): 2 MB for a logo or sign-in picture; ample for a sharp PNG, small enough for every PDF.

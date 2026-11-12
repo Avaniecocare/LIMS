@@ -1,12 +1,8 @@
+import { escapeHtml } from '../../../common/html.js';
 import type { CompanySnapshot } from '../../../config/company.config.js';
 
-export const esc = (v: unknown): string =>
-  String(v ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+/** Short name the templates use throughout. */
+export const esc = escapeHtml;
 
 /** Multi-line user text, escaped, keeping its line breaks. */
 export const multiline = (v: unknown): string => esc(v).replace(/\n/g, '<br>');

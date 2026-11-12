@@ -1,3 +1,4 @@
+import { escapeHtml } from '../common/html.js';
 import { Inject, Injectable } from '@nestjs/common';
 import nodemailer, { type Transporter } from 'nodemailer';
 import { actorId } from '../common/context.js';
@@ -47,7 +48,7 @@ export interface QueueEmailInput {
   attachmentFileIds?: string[];
 }
 
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const esc = escapeHtml;
 
 @Injectable()
 export class MailService {

@@ -1,3 +1,4 @@
+import { dateOnly } from '../../common/calendar.js';
 import { Injectable } from '@nestjs/common';
 import { currentUser } from '../../common/context.js';
 import { badRequest, conflict, notFound, requireRecentAuth, rule } from '../../common/errors.js';
@@ -8,7 +9,6 @@ import { SettingsService } from '../../core/settings.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import type { CreateBreachDto, CreateDataRequestDto, ResolveDataRequestDto, UpdateBreachDto } from './privacy.dto.js';
 
-const day = (s: string) => new Date(`${s.slice(0, 10)}T00:00:00Z`);
 // TODO(product-decision): the detailed breach report is due to the Data Protection Board within 72 hours (DPDP Rules 2025, rule 7).
 const BOARD_REPORT_HOURS = 72;
 
@@ -36,7 +36,7 @@ export class PrivacyService {
   }
 
   async createRequest(dto: CreateDataRequestDto) {
-    const receivedOn = day(dto.receivedOn);
+    const receivedOn = dateOnly(dto.receivedOn);
     if (receivedOn > istToday()) throw badRequest('That date is in the future', [{ field: 'receivedOn', message: 'In the future' }]);
     const days = await this.settings.get('privacy.responseDays');
     const r = await this.prisma.dataRequest.create({
