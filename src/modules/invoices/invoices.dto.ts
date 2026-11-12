@@ -98,12 +98,6 @@ export class PaymentQuery extends PageQuery {
   @IsOptional() @IsIn(['true']) unapplied?: string;
 }
 
-export class StatementParams {
-  @IsUUID() customerId: string;
-  @IsOptional() @IsDateString() from?: string;
-  @IsOptional() @IsDateString() to?: string;
-}
-
 export class InvoiceLineDto {
   id: string; seq: number; jobId: string | null; sampleTestId: string | null; description: string; sacCode: string; quantity: number; rate: string; rateSource: string | null; amount: string;
 }

@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsEmail, IsIn, IsInt, IsObject, IsOptional, IsString, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsEmail, IsInt, IsObject, IsOptional, IsString, MaxLength, Min, ValidateNested } from 'class-validator';
 
 export class BankDetailsDto {
   @IsString() @MaxLength(200) accountName: string;
@@ -86,10 +86,6 @@ export class LabDetailsDto {
   productName: string;
   profileVersion: number;
   brandingVersion: number;
-}
-
-export class BrandImageQuery {
-  @ApiProperty({ enum: ['logo', 'favicon', 'login'] }) @IsIn(['logo', 'favicon', 'login']) kind: 'logo' | 'favicon' | 'login';
 }
 
 export class TemplateSummaryDto {

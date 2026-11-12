@@ -64,6 +64,3 @@ export class TechnicianDto { id: string; name: string; departmentId: string | nu
 export class InstrumentOptionDto {
   id: string; code: string; name: string; departmentId: string | null; calibrationDueAt: Date | null; calibrationOverdue: boolean;
 }
-export class CancelTestDto {
-  @IsString() @MaxLength(1000) reason: string;
-}
