@@ -14,7 +14,7 @@ RUN npx nest build && npm rebuild argon2 && npm prune --omit=dev --ignore-script
   && test -f node_modules/prisma/package.json && test -e node_modules/.bin/prisma
 
 # Playwright's image carries Chromium and its system libraries for PDF rendering.
-FROM mcr.microsoft.com/playwright:v1.64.1-noble AS runtime
+FROM mcr.microsoft.com/playwright:v1.65.1-noble AS runtime
 ENV NODE_ENV=production PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
