@@ -73,6 +73,7 @@ export class CompanyService implements OnModuleInit, OnModuleDestroy {
   private images = new Map<BrandImageKind, Image | null>();
   private current: CompanyConfig;
   private subscriber: Redis | null = null;
+  private timer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -96,11 +97,15 @@ export class CompanyService implements OnModuleInit, OnModuleDestroy {
       await this.subscriber.subscribe(CHANNEL);
       this.subscriber.on('message', () => void this.reload().catch((err) => logger.error({ err }, 'reloading the lab profile failed')));
     } catch (err) {
-      logger.warn({ err }, 'lab profile change notifications are unavailable; changes apply to other processes on restart');
+      logger.warn({ err }, 'lab profile change notifications are unavailable; changes are picked up within a minute');
     }
+    // For an announcement that was missed.
+    this.timer = setInterval(() => void this.reload().catch((err) => logger.warn({ err }, 'reloading the lab profile failed')), 60_000);
+    this.timer.unref();
   }
 
   async onModuleDestroy() {
+    if (this.timer) clearInterval(this.timer);
     this.subscriber?.disconnect();
   }
 
@@ -158,13 +163,17 @@ export class CompanyService implements OnModuleInit, OnModuleDestroy {
       this.brand = { ...defaults.branding, ...(b.value as unknown as Partial<BrandingSettings>) };
       this.versions.branding = b.version;
     }
-    this.images.clear();
-    for (const kind of Object.keys(IMAGE_FIELD) as BrandImageKind[]) this.images.set(kind, await this.loadImage(this.brand[IMAGE_FIELD[kind]]));
+    // Built aside and swapped in, so a document made meanwhile is never without its logo.
+    const images = new Map<BrandImageKind, Image | null>();
+    for (const kind of Object.keys(IMAGE_FIELD) as BrandImageKind[]) images.set(kind, await this.loadImage(this.brand[IMAGE_FIELD[kind]], this.images.get(kind) ?? null));
+    this.images = images;
     this.current = toCompanyConfig(this.profile, this.brand);
   }
 
-  private async loadImage(fileId: string | null): Promise<Image | null> {
+  private async loadImage(fileId: string | null, held: Image | null): Promise<Image | null> {
     if (!fileId) return null;
+    // A stored file never changes, so the copy already held is the same one.
+    if (held?.version === fileId.slice(-12)) return held;
     try {
       const f = await this.storage.read(fileId);
       return { buffer: f.buffer, mimeType: f.mimeType, version: fileId.slice(-12) };

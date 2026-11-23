@@ -534,9 +534,11 @@ export class TestingService implements OnModuleInit {
   }
 
   /** Separation of duties: nobody approves their own results, unless an Admin has relaxed the control. */
-  private async assertNotOwnResult(tx: Tx, t: { conductedById: string | null; submittedById: string | null }) {
+  private async assertNotOwnResult(tx: Tx, t: { id: string; conductedById: string | null; submittedById: string | null }) {
     const me = actorId();
-    if ((t.conductedById === me || t.submittedById === me) && !(await this.settings.get('controls.allowSelfApproval', tx))) {
+    // A test handed to someone else and submitted by them may still carry values this person entered.
+    const entered = me ? await tx.parameterResult.count({ where: { sampleTestId: t.id, enteredById: me } }) : 0;
+    if ((t.conductedById === me || t.submittedById === me || entered > 0) && !(await this.settings.get('controls.allowSelfApproval', tx))) {
       throw new AppError('SELF_APPROVAL', 403, 'You cannot approve results you entered');
     }
   }

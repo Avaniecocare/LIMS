@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { can, currentUser } from '../../common/context.js';
-import { badRequest, forbidden, notFound } from '../../common/errors.js';
+import { badRequest, forbidden, notFound, rule } from '../../common/errors.js';
 import { AuditService } from '../../core/audit.service.js';
 import { PrismaService } from '../../core/prisma.service.js';
 import { PDFDocument } from 'pdf-lib';
@@ -164,10 +164,24 @@ export class FilesService {
     return this.storage.signedUrl(id);
   }
 
+  /** Signed reports, the photographs and signatures frozen into them, and the certificates and evidence behind quality records. */
+  private async isPartOfARecord(id: string): Promise<boolean> {
+    const found = await Promise.all([
+      this.prisma.reportRevision.count({ where: { pdfFileId: id } }),
+      this.prisma.reportRevision.count({ where: { status: { in: ['APPROVED', 'ISSUED', 'SUPERSEDED'] }, content: { path: ['samplePhotos'], array_contains: [{ fileId: id }] } } }),
+      this.prisma.reportSignature.count({ where: { signatureFileId: id } }),
+      this.prisma.equipmentEvent.count({ where: { certificateFileId: id } }),
+      this.prisma.staffAuthorisation.count({ where: { evidenceFileId: id } }),
+      this.prisma.trainingRecord.count({ where: { evidenceFileId: id } }),
+    ]);
+    return found.some((n) => n > 0);
+  }
+
   async remove(id: string, reason?: string) {
     const file = await this.prisma.fileObject.findFirst({ where: { id, deletedAt: null } });
     if (!file) throw notFound('File');
     await this.assertAccess(file.entity, file.entityId, true);
+    if (file.category === 'generated' || (await this.isPartOfARecord(id))) throw rule('FILE_KEPT', 'This file is part of a signed or quality record, so it cannot be removed');
     await this.prisma.fileObject.update({ where: { id }, data: { deletedAt: new Date() } });
     await this.audit.record({ action: 'file.remove', entity: file.entity ?? 'File', entityId: file.entityId, before: { fileId: id, name: file.originalName }, reason });
   }

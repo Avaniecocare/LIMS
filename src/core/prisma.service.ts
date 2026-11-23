@@ -1,19 +1,22 @@
-import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { conflict } from '../common/errors.js';
 import { INFRA_CONFIG, type InfraConfig } from '../config/infra.config.js';
 
+// Waiting for a connection, and for one statement: an error the caller can retry rather than a request that never ends.
+const TIMEOUTS = { connectionTimeoutMillis: 10_000, statement_timeout: 120_000 };
+
 export type Tx = Prisma.TransactionClient;
 export { Prisma };
 
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleDestroy {
+export class PrismaService extends PrismaClient implements OnApplicationShutdown {
   constructor(@Inject(INFRA_CONFIG) cfg: InfraConfig) {
     // Big bookings and plans run many statements in one transaction; Prisma's 5-second default turns them into errors.
-    super({ adapter: new PrismaPg({ connectionString: cfg.databaseUrl, max: cfg.databasePoolSize }), transactionOptions: { timeout: 30_000, maxWait: 10_000 } });
+    super({ adapter: new PrismaPg({ connectionString: cfg.databaseUrl, max: cfg.databasePoolSize, ...TIMEOUTS }), transactionOptions: { timeout: 30_000, maxWait: 10_000 } });
   }
-  async onModuleDestroy() {
+  async onApplicationShutdown() {
     await this.$disconnect();
   }
 }
@@ -23,14 +26,18 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy {
  * so moving these queries to a replica is a configuration change only.
  */
 @Injectable()
-export class ReadPrismaService extends PrismaClient implements OnModuleDestroy {
+export class ReadPrismaService extends PrismaClient implements OnApplicationShutdown {
   constructor(@Inject(INFRA_CONFIG) cfg: InfraConfig) {
     super({
       // Without a replica this is a second pool on the same database, so keep it small.
-      adapter: new PrismaPg({ connectionString: cfg.databaseReadUrl ?? cfg.databaseUrl, max: cfg.databaseReadUrl ? cfg.databasePoolSize : Math.max(2, Math.ceil(cfg.databasePoolSize / 4)) }),
+      adapter: new PrismaPg({
+        connectionString: cfg.databaseReadUrl ?? cfg.databaseUrl,
+        max: cfg.databaseReadUrl ? cfg.databasePoolSize : Math.max(2, Math.ceil(cfg.databasePoolSize / 4)),
+        ...TIMEOUTS,
+      }),
     });
   }
-  async onModuleDestroy() {
+  async onApplicationShutdown() {
     await this.$disconnect();
   }
 }

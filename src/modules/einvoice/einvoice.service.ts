@@ -176,7 +176,7 @@ export class EInvoiceService {
   /** The customer as a party: GSTIN and legal name from the frozen snapshot, the address from the billing address. */
   private async buyer(customerId: string, snapshot: { name?: string; gstin?: string | null; contactEmail?: string | null; contactPhone?: string | null } | null): Promise<Party | null> {
     const c = await this.prisma.customer.findUniqueOrThrow({ where: { id: customerId }, include: { addresses: { where: { deletedAt: null } } } });
-    const gstin = (snapshot?.gstin ?? c.gstin)?.trim().toUpperCase();
+    const gstin = (snapshot ? snapshot.gstin : c.gstin)?.trim().toUpperCase();
     if (!gstin) return null;
     const a = c.addresses.find((x) => x.kind === 'BILLING') ?? c.addresses[0];
     return {
@@ -245,7 +245,8 @@ export class EInvoiceService {
   /** Whether an invoice to this customer must carry an IRN: e-invoicing is on and the customer has a GSTIN. */
   async requiredFor(customerSnapshot: { gstin?: string | null } | null, customerId: string): Promise<boolean> {
     if (!(await this.active())) return false;
-    if (customerSnapshot?.gstin) return true;
+    // An issued invoice keeps the GSTIN it was issued with, or its absence: a customer registering later changes nothing.
+    if (customerSnapshot) return !!customerSnapshot.gstin;
     return !!(await this.prisma.customer.findUnique({ where: { id: customerId }, select: { gstin: true } }))?.gstin;
   }
 

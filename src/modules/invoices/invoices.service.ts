@@ -442,8 +442,10 @@ export class InvoicesService implements OnModuleInit {
   /** Numbers, dates and freezes the invoice. From here it is immutable. */
   async issue(id: string, dto: IssueInvoiceDto) {
     await this.prisma.$transaction(async (tx) => {
+      await this.lockInvoices(tx, [id]);
       const inv = await this.load(id, tx);
       assertTransition(INVOICE, inv.status, 'ISSUED');
+      if (!inv.lines.length) throw rule('NO_LINES', 'This draft has nothing on it, so it cannot be issued');
       await this.recompute(tx, id);
       const customer = await tx.customer.findUniqueOrThrow({ where: { id: inv.customerId } });
       const invoiceDate = dto.invoiceDate ? new Date(dto.invoiceDate) : istToday();
@@ -921,12 +923,21 @@ export class InvoicesService implements OnModuleInit {
     return sent;
   }
 
+  private async lockInvoices(tx: Tx, ids: string[]) {
+    await tx.$queryRaw`SELECT 1 FROM "Invoice" WHERE "id" = ANY(${ids}) ORDER BY "id" FOR UPDATE`;
+  }
+
   /** Cancelling work removes it from drafts. Issued invoices are untouched and need a credit note. */
   async removeFromDrafts(tx: Tx, sampleTestIds: string[]) {
     const lines = await tx.invoiceLine.findMany({ where: { sampleTestId: { in: sampleTestIds }, invoice: { status: 'DRAFT' } }, select: { id: true, invoiceId: true } });
     if (!lines.length) return;
-    await tx.invoiceLine.deleteMany({ where: { id: { in: lines.map((l) => l.id) } } });
-    for (const invoiceId of new Set(lines.map((l) => l.invoiceId))) await this.recompute(tx, invoiceId);
+    // Issuing takes the same lock, so a draft issued meanwhile keeps its lines.
+    await this.lockInvoices(tx, [...new Set(lines.map((l) => l.invoiceId))].sort());
+    const drafts = await tx.invoice.findMany({ where: { id: { in: lines.map((l) => l.invoiceId) }, status: 'DRAFT' }, select: { id: true } });
+    for (const { id } of drafts) {
+      await tx.invoiceLine.deleteMany({ where: { id: { in: lines.filter((l) => l.invoiceId === id).map((l) => l.id) } } });
+      await this.recompute(tx, id);
+    }
   }
 
   async history(id: string) {

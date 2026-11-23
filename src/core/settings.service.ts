@@ -64,7 +64,7 @@ export const SETTINGS = {
   },
   'reminders.enabled': { default: false, validate: isBool, label: 'Automatic invoice reminders', group: 'Accounts' },
   'reminders.scheduleDays': { default: [1, 7, 15, 30], validate: isIntArr(0, 365), label: 'Reminder days after due date', group: 'Accounts' },
-  'calendar.workingDays': { default: [1, 2, 3, 4, 5, 6], validate: isIntArr(0, 6), label: 'Working days (0 = Sunday)', group: 'Calendar' },
+  'calendar.workingDays': { default: [1, 2, 3, 4, 5, 6], validate: (v: unknown) => isIntArr(0, 6)(v) && (v as number[]).length > 0, label: 'Working days (0 = Sunday)', group: 'Calendar' },
   'retention.sampleDays': { default: 90, validate: isNonNeg, label: 'Sample retention (days)', group: 'Retention' },
   'retention.reportYears': { default: 5, validate: isNonNeg, label: 'Report retention (years)', group: 'Retention' },
   'controls.allowSelfApproval': { default: false, validate: isBool, label: 'Allow self-approval of results', group: 'Controls', sensitive: true },

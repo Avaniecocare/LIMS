@@ -34,6 +34,7 @@ export async function createApp(options: { trustProxy?: boolean | number | strin
     runWithContext({ requestId, ip: req.ip ?? null, userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null }, done);
   });
   fastify.addHook('onResponse', (req, reply, done) => {
+    if (req.url.startsWith('/health/') && reply.statusCode < 400) return done();
     logger.info(
       {
         requestId: reply.getHeader('X-Request-Id'),

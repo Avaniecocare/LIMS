@@ -338,7 +338,9 @@ export class AdminService {
       ...(q.entityId ? { entityId: q.entityId } : {}),
       ...(q.action ? { action: { startsWith: q.action } } : {}),
       ...(q.userId ? { userId: q.userId } : {}),
-      ...(q.from || q.to ? { at: { ...(q.from ? { gte: new Date(q.from) } : {}), ...(q.to ? { lte: new Date(q.to) } : {}) } } : {}),
+      ...(q.from || q.to
+        ? { at: { ...(q.from ? { gte: new Date(`${q.from.slice(0, 10)}T00:00:00+05:30`) } : {}), ...(q.to ? { lte: new Date(`${q.to.slice(0, 10)}T23:59:59.999+05:30`) } : {}) } }
+        : {}),
       ...(q.q ? { OR: [{ userName: { contains: q.q, mode: 'insensitive' } }, { reason: { contains: q.q, mode: 'insensitive' } }] } : {}),
     };
     const [rows, total] = await Promise.all([

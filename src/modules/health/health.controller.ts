@@ -21,8 +21,8 @@ export class HealthController {
   @Get('ready')
   async ready() {
     try {
-      await this.prisma.$queryRaw`SELECT 1`;
-      await this.redis.client.ping();
+      // A busy pool must answer "not ready" in good time, not hold the probe.
+      await Promise.race([Promise.all([this.prisma.$queryRaw`SELECT 1`, this.redis.client.ping()]), new Promise((_, no) => setTimeout(() => no(new Error('timed out')), 4_000).unref())]);
       return { status: 'ok' };
     } catch {
       throw new ServiceUnavailableException('Dependencies are not ready');

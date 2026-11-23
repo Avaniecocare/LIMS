@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { can, currentUser } from '../../common/context.js';
 import { AppError, badRequest, forbidden, notFound, requireRecentAuth } from '../../common/errors.js';
+import { logger } from '../../common/logger.js';
 import { Prisma, PrismaService } from '../../core/prisma.service.js';
 import { MailService, type QueueEmailInput } from '../../core/mail.service.js';
 import { QueueService } from '../../core/queue.service.js';
@@ -150,10 +151,15 @@ export class DocumentsService {
         entity: doc.entity,
         entityId: doc.entityId,
       });
-      await this.prisma.documentJob.update({ where: { id: job.id }, data: { status: 'DONE', fileId: file.id, finishedAt: new Date(), error: null } });
       await handler.after?.(file, params);
       const email = params.email as QueueEmailInput | undefined;
-      if (email) await this.mail.enqueue({ ...email, attachmentFileIds: [file.id] });
+      // Together, so a worker stopped here neither loses the email nor, on the retry, sends it twice.
+      const emailLogId = await this.prisma.$transaction(async (tx) => {
+        await tx.documentJob.update({ where: { id: job.id }, data: { status: 'DONE', fileId: file.id, finishedAt: new Date(), error: null } });
+        return email ? this.mail.enqueue({ ...email, attachmentFileIds: [file.id] }, tx) : null;
+      });
+      // The scheduled sweep sends it if this fails.
+      if (emailLogId) await this.mail.dispatch(emailLogId).catch((err: unknown) => logger.warn({ err, emailLogId }, 'email left for the sweep'));
       const whatsapp = params.whatsapp as WhatsappInput | undefined;
       if (whatsapp) await this.whatsapp.enqueue({ ...whatsapp, documentFileId: file.id, documentName: doc.filename });
       return file;
