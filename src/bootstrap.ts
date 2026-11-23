@@ -13,6 +13,7 @@ import { runWithContext } from './common/context.js';
 import { AllExceptionsFilter, AppError, flattenValidation } from './common/errors.js';
 import { installErrorWebhook } from './common/error-webhook.js';
 import { logger } from './common/logger.js';
+import { httpDuration } from './common/metrics.js';
 import { INFRA_CONFIG, parseTrustProxy, type InfraConfig } from './config/infra.config.js';
 
 /** Builds the API. Tests use this too, so they exercise the same middleware as production. */
@@ -34,6 +35,9 @@ export async function createApp(options: { trustProxy?: boolean | number | strin
     runWithContext({ requestId, ip: req.ip ?? null, userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null }, done);
   });
   fastify.addHook('onResponse', (req, reply, done) => {
+    // The route's pattern, not its address: addresses hold record ids.
+    const route = (req as unknown as { routeOptions?: { url?: string } }).routeOptions?.url ?? 'none';
+    httpDuration.observe({ method: req.method, route, status: String(reply.statusCode) }, reply.elapsedTime / 1000);
     if (req.url.startsWith('/health/') && reply.statusCode < 400) return done();
     logger.info(
       {

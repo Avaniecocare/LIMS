@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { logger } from '../../common/logger.js';
+import { taskLastSuccess } from '../../common/metrics.js';
 import { QueueService } from '../../core/queue.service.js';
 
 export interface ScheduledTask {
@@ -24,6 +25,7 @@ export class SchedulerService {
     const task = this.tasks.get(name);
     if (!task) return;
     const result = await task.run();
+    taskLastSuccess.set({ task: name }, Date.now() / 1000);
     logger.info({ task: name, result }, 'scheduled task finished');
     return result;
   }

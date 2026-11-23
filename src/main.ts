@@ -6,6 +6,7 @@ import 'reflect-metadata';
 import { logger } from './common/logger.js';
 import { CompanyConfigError, legacyCompanyFromEnv } from './config/company.config.js';
 import { InfraConfigError, loadInfraConfig } from './config/infra.config.js';
+import { startOpsServer } from './ops/server.js';
 
 function validateConfigOrExit() {
   try {
@@ -27,6 +28,8 @@ async function main() {
   if (mode === 'worker') {
     const { startWorker } = await import('./worker/worker.js');
     const worker = await startWorker();
+    const { opsPort } = loadInfraConfig();
+    if (opsPort) startOpsServer(opsPort, { live: worker.live, ready: worker.ready });
     // Finish running jobs, then exit, so a restart never leaves a half-closed worker behind.
     const shutdown = (signal: string) => {
       logger.info({ signal }, 'worker stopping');
@@ -49,11 +52,14 @@ async function main() {
     process.exit(64);
   }
   const { createApp } = await import('./bootstrap.js');
+  const { HealthController } = await import('./modules/health/health.controller.js');
   const app = await createApp();
   app.enableShutdownHooks();
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port, '0.0.0.0');
   logger.info({ port }, 'api listening');
+  const { opsPort } = loadInfraConfig();
+  if (opsPort) startOpsServer(opsPort, { live: () => true, ready: () => app.get(HealthController).ready() });
 }
 
 main().catch((e) => {

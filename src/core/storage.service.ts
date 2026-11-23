@@ -74,7 +74,8 @@ export class StorageService {
         endpoint,
         region: cfg.s3.region,
         forcePathStyle: cfg.s3.forcePathStyle,
-        credentials: { accessKeyId: cfg.s3.accessKey, secretAccessKey: cfg.s3.secretKey },
+        // Without keys, the SDK uses the identity the machine or pod was given (EKS Pod Identity, an instance role).
+        ...(cfg.s3.credentials ? { credentials: cfg.s3.credentials } : {}),
       });
     this.s3 = client(cfg.s3.endpoint);
     this.signer = client(cfg.s3.publicEndpoint ?? cfg.s3.endpoint);
@@ -84,7 +85,9 @@ export class StorageService {
     if (this.bucketChecked) return;
     try {
       await this.s3.send(new HeadBucketCommand({ Bucket: this.cfg.s3.bucket }));
-    } catch {
+    } catch (err) {
+      // Only a bucket that is not there is made. On AWS the app may not make buckets, and "forbidden" is worth seeing.
+      if ((err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode !== 404) throw err;
       await this.s3.send(new CreateBucketCommand({ Bucket: this.cfg.s3.bucket }));
     }
     this.bucketChecked = true;

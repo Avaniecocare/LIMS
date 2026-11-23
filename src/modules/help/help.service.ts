@@ -2,6 +2,7 @@ import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import { AppError, badRequest } from '../../common/errors.js';
 import { logger } from '../../common/logger.js';
+import { helpAnswers, helpCost, helpLatency, helpTokens } from '../../common/metrics.js';
 import { INFRA_CONFIG, type InfraConfig } from '../../config/infra.config.js';
 import { Prisma, PrismaService } from '../../core/prisma.service.js';
 import { RedisService } from '../../core/redis.service.js';
@@ -357,6 +358,14 @@ export class HelpService implements OnModuleInit {
     costMicros?: number;
     attempts?: number;
   }) {
+    const model = e.model ?? 'none';
+    helpAnswers.inc({ outcome: e.outcome, model });
+    if (e.model) {
+      helpTokens.inc({ direction: 'input', model }, e.inputTokens ?? 0);
+      helpTokens.inc({ direction: 'output', model }, e.outputTokens ?? 0);
+      helpCost.inc({ model }, (e.costMicros ?? 0) / 1e6);
+      helpLatency.observe((Date.now() - e.started) / 1000);
+    }
     try {
       await this.prisma.helpQuestion.create({
         data: {

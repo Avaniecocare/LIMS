@@ -1,3 +1,4 @@
+import { helpProviderErrors } from '../../common/metrics.js';
 import { costMicros, NO_USAGE, ProviderError, type AnswerInput, type AnswerProvider, type ProviderEvent, type Usage } from './providers/types.js';
 
 /** The whole answer, every provider included. */
@@ -54,6 +55,7 @@ export async function* answerFrom(providers: AnswerProvider[], request: Omit<Ans
       const u = usage || written ? soFar() : stopped ? { ...NO_USAGE, inputTokens: tokens(inputChars) } : NO_USAGE;
       yield spent(u);
       before += costMicros(provider.price, u);
+      if (!visitor.aborted) helpProviderErrors.inc({ provider: provider.name, model: provider.model, retryable: String(late || (err instanceof ProviderError && err.retryable)) });
       const another = !last && !written && !overall.aborted && (late || (err instanceof ProviderError && err.retryable));
       if (!another) throw err;
     } finally {

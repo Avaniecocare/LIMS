@@ -19,7 +19,7 @@ export interface InfraConfig {
   frontendOrigin: string;
   publicApiUrl: string;
   setupToken: string | null;
-  s3: { endpoint: string; publicEndpoint: string | null; region: string; bucket: string; accessKey: string; secretKey: string; forcePathStyle: boolean };
+  s3: { endpoint: string; publicEndpoint: string | null; region: string; bucket: string; credentials: { accessKeyId: string; secretAccessKey: string } | null; forcePathStyle: boolean };
   smtp: { host: string; port: number; secure: boolean; user: string | null; password: string | null; from: string; transport: 'smtp' | 'json' };
   maxUploadBytes: number;
   /** PIN code lookup service (India Post data); empty turns the lookup off */
@@ -29,6 +29,8 @@ export interface InfraConfig {
   /** WhatsApp Business Cloud API; null when not set up */
   whatsapp: { apiUrl: string; token: string | null; phoneNumberId: string | null; transport: 'cloud' | 'json'; appSecret: string | null; verifyToken: string | null } | null;
   /** The help site's "Ask AI" assistant; see HelpConfig. */
+  /** internal health and metrics; null for none */
+  opsPort: number | null;
   /** a licence to use at the first start, for images that need one */
   licence: string | null;
   help: HelpConfig;
@@ -127,8 +129,7 @@ export function loadInfraConfig(env: NodeJS.ProcessEnv = process.env): InfraConf
       publicEndpoint: env.S3_PUBLIC_ENDPOINT?.trim() || null,
       region: env.S3_REGION?.trim() || 'us-east-1',
       bucket: req('S3_BUCKET'),
-      accessKey: req('S3_ACCESS_KEY'),
-      secretKey: req('S3_SECRET_KEY'),
+      credentials: s3Credentials(env),
       forcePathStyle: (env.S3_FORCE_PATH_STYLE ?? 'true') === 'true',
     },
     // WhatsApp is on when the token and phone number id are set (or the json transport, for development and tests).
@@ -157,6 +158,7 @@ export function loadInfraConfig(env: NodeJS.ProcessEnv = process.env): InfraConf
     pincodeLookupUrl: env.PINCODE_LOOKUP_URL === undefined ? 'https://api.postalpincode.in/pincode/' : env.PINCODE_LOOKUP_URL.trim() || null,
     errorTrackingDsn: env.ERROR_TRACKING_DSN?.trim() || null,
     logLevel: env.LOG_LEVEL ?? 'info',
+    opsPort: opsPort(env, Number(env.PORT ?? 3000)),
     licence: env.LICENCE?.trim() || null,
     help: loadHelpConfig(env, req('FRONTEND_ORIGIN')),
     einvoice: loadEInvoiceConfig(env),
@@ -194,6 +196,20 @@ function problemWith(p: HelpProviderConfig, prefix: string): string | null {
   if (p.provider === 'openai-compatible' && !p.model) return `${prefix}MODEL is not set`;
   // Without a price the spending limit would mean nothing. A lab's own server can be given 0.
   return p.price ? null : `the price of ${p.model} is not known: set ${prefix}PRICE_INPUT and ${prefix}PRICE_OUTPUT`;
+}
+
+/** Both keys, or neither: then the identity given to the machine is used. One alone is a mistake. */
+function s3Credentials(env: NodeJS.ProcessEnv): { accessKeyId: string; secretAccessKey: string } | null {
+  const [id, secret] = [env.S3_ACCESS_KEY?.trim(), env.S3_SECRET_KEY?.trim()];
+  if (!id !== !secret) throw new InfraConfigError('Set both S3_ACCESS_KEY and S3_SECRET_KEY, or neither to use the identity given to the machine');
+  return id && secret ? { accessKeyId: id, secretAccessKey: secret } : null;
+}
+
+function opsPort(env: NodeJS.ProcessEnv, port: number): number | null {
+  const raw = env.OPS_PORT?.trim() || '9464';
+  if (!/^\d{1,5}$/.test(raw)) throw new InfraConfigError('OPS_PORT must be a port number, or 0 for none');
+  if (Number(raw) === port) throw new InfraConfigError('OPS_PORT must differ from PORT: the operations port is never public');
+  return Number(raw) || null;
 }
 
 // TODO(product-decision): the help assistant's limits. Low by default so a public docs site cannot run up a bill.

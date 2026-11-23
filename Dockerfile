@@ -26,7 +26,9 @@ COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/prisma.config.ts /app/package.json /app/package-lock.json ./
 # Chromium comes with this base image (PLAYWRIGHT_BROWSERS_PATH); the worker renders PDFs with it.
 # Nothing is installed here: every package comes, locked, from the build stage.
-USER pwuser
-EXPOSE 3000
+# pwuser, by number: Kubernetes checks runAsNonRoot against a number.
+USER 1001:1001
+# 9464 is the operations port: never publish it.
+EXPOSE 3000 9464
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s CMD node -e "fetch('http://localhost:'+(process.env.PORT||3000)+'/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "dist/main.js", "api"]

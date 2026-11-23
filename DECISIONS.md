@@ -166,3 +166,8 @@ Choices made where the brief left room. Each is the default; anything a lab may 
 - **When it ends nothing is deleted and nothing new is saved.** The guard refuses every request that would save, public ones included, unless the route says why it must work (`@WhenReadOnly`): signing in, exports and PDFs, a new licence, letting people back in. Automatic payment reminders pause.
 - **The clock.** The latest time known is kept, with the append-only audit log as a second witness, so setting the clock back gives nothing back. A newly issued licence carries the vendor's date and resets this, for a server whose clock once jumped ahead.
 - **What it cannot do.** A person who controls the machine can replace the program, the key file or the database. Offline checks deter; contracts enforce.
+
+## Running in Kubernetes and monitoring
+- **Storage keys are optional.** Without `S3_ACCESS_KEY` and `S3_SECRET_KEY` the identity given to the machine or pod is used. The app makes its bucket only when there is none; being refused is an error, not a reason to try making one.
+- **Health and metrics on their own port** (`OPS_PORT`, 9464), in the API and the worker, never published. The worker had no health check that could tell a hung one. Labels are fixed words: no ids, names or addresses. One number that cannot be measured does not take the others away. Installation-wide numbers come from the worker only, so they are not counted once per API copy.
+- **Images name their user by number and need no writable files** except `/tmp` (and `/dev/shm` for Chromium). The screens' container copies its files to `/tmp` and changes them there.
