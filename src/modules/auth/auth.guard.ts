@@ -7,7 +7,8 @@ import { AppError, forbidden } from '../../common/errors.js';
 import { logger } from '../../common/logger.js';
 import { ModulesService, type ModuleKey } from '../../core/modules.service.js';
 import { PrismaService } from '../../core/prisma.service.js';
-import { BACKGROUND_KEY, PERMS_KEY, MODULE_KEY, PUBLIC_KEY, SIGNED_IN_KEY } from './decorators.js';
+import { BACKGROUND_KEY, PERMS_KEY, MODULE_KEY, PUBLIC_KEY, SIGNED_IN_KEY, WHEN_READ_ONLY_KEY } from './decorators.js';
+import { LicenceService } from '../licence/licence.service.js';
 import { SessionService } from './session.service.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -27,6 +28,7 @@ export class AuthGuard implements CanActivate {
     private readonly sessions: SessionService,
     private readonly prisma: PrismaService,
     private readonly modules: ModulesService,
+    private readonly licence: LicenceService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -34,9 +36,13 @@ export class AuthGuard implements CanActivate {
     // A module the lab has turned off is closed to everyone, its public routes (phone links) included.
     const module = this.reflector.getAllAndOverride<ModuleKey>(MODULE_KEY, targets);
     if (module) await this.modules.require(module);
-    if (this.reflector.getAllAndOverride<boolean>(PUBLIC_KEY, targets)) return true;
-
     const req = context.switchToHttp().getRequest<FastifyRequest>();
+    const saves = !SAFE_METHODS.has(req.method) && !this.reflector.getAllAndOverride<string>(WHEN_READ_ONLY_KEY, targets);
+    if (this.reflector.getAllAndOverride<boolean>(PUBLIC_KEY, targets)) {
+      if (saves) await this.licence.requireWritable();
+      return true;
+    }
+
     const sid = req.cookies?.[this.sessions.cookieName];
     if (!sid) throw unauthenticated();
     const session = await this.sessions.touch(sid, !this.reflector.getAllAndOverride<boolean>(BACKGROUND_KEY, targets));
@@ -86,6 +92,8 @@ export class AuthGuard implements CanActivate {
       throw forbidden();
     }
     if (required?.length && !required.some((p) => current.permissions.has(p))) throw forbidden();
+    // Last, so a person is told about their own access first.
+    if (saves) await this.licence.requireWritable();
     return true;
   }
 }

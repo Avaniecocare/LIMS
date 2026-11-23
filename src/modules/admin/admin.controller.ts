@@ -3,7 +3,7 @@ import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { badRequest } from '../../common/errors.js';
 import { SettingsService } from '../../core/settings.service.js';
 import { OkDto } from '../auth/auth.dto.js';
-import { Perm, SignedIn } from '../auth/decorators.js';
+import { Perm, SignedIn, WhenReadOnly } from '../auth/decorators.js';
 import {
   AdminResetPasswordDto,
   AuditEntryDto,
@@ -69,6 +69,7 @@ export class AdminController {
     return this.admin.updateUser(id, dto);
   }
 
+  @WhenReadOnly('so people can get back in to read and export')
   @Post('users/:id/reset-password')
   @HttpCode(200)
   @Perm('admin.users')
@@ -78,6 +79,7 @@ export class AdminController {
     return { ok: true };
   }
 
+  @WhenReadOnly('so people can get back in to read and export')
   @Post('users/:id/reset-2fa')
   @HttpCode(200)
   @Perm('admin.users')

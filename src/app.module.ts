@@ -40,8 +40,10 @@ import { TestingModule } from './modules/testing/testing.module.js';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module.js';
 import { EInvoiceModule } from './modules/einvoice/einvoice.module.js';
 import { HelpModule } from './modules/help/help.module.js';
+import { LicenceModule } from './modules/licence/licence.module.js';
 
 export const DOMAIN_MODULES = [
+  LicenceModule,
   PdfModule,
   SchedulerModule,
   DocumentsModule,

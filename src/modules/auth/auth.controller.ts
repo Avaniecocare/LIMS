@@ -20,10 +20,11 @@ import {
   TotpSetupDto,
 } from './auth.dto.js';
 import { AuthService } from './auth.service.js';
-import { Public, SignedIn } from './decorators.js';
+import { Public, SignedIn, WhenReadOnly } from './decorators.js';
 import { SessionService } from './session.service.js';
 
 @ApiTags('auth')
+@WhenReadOnly('people must be able to sign in to read and export, and to keep their account safe')
 @SignedIn('the caller’s own account and session; sign-in routes are @Public')
 @Controller('auth')
 export class AuthController {

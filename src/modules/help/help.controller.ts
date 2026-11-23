@@ -6,7 +6,7 @@ import { AppError } from '../../common/errors.js';
 import { logger } from '../../common/logger.js';
 import { PrismaService } from '../../core/prisma.service.js';
 import { OkDto } from '../auth/auth.dto.js';
-import { Perm, Public } from '../auth/decorators.js';
+import { Perm, Public, WhenReadOnly } from '../auth/decorators.js';
 import { SessionService } from '../auth/session.service.js';
 import { HelpAnalyticsDto, HelpAnalyticsQuery, HelpAskDto, HelpFeedbackDto, HelpPageFeedbackDto, HelpStatusDto } from './help.dto.js';
 import { HelpService, type Asker } from './help.service.js';
@@ -18,6 +18,7 @@ const MAX_BODY_BYTES = 32 * 1024;
  * The help site's "Ask AI". Public, because the docs can be read without signing in; a signed-in person is
  * recognised from their session for higher limits and staff-only pages. All AI calls are made from here.
  */
+@WhenReadOnly('the help assistant saves no lab records')
 @ApiTags('help')
 @Controller('help')
 export class HelpController {

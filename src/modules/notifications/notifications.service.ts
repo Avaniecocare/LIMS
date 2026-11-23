@@ -7,6 +7,7 @@ import { MailService } from '../../core/mail.service.js';
 import { Prisma, PrismaService, type Tx } from '../../core/prisma.service.js';
 import { SettingsService } from '../../core/settings.service.js';
 import { esc } from '../pdf/templates/base.js';
+import { LicenceService } from '../licence/licence.service.js';
 import { PlanningService } from '../planning/planning.service.js';
 import { ReportsService } from '../reports/reports.service.js';
 import { SchedulerService } from '../scheduler/scheduler.service.js';
@@ -27,6 +28,7 @@ export const NOTIFICATION_TYPES: Record<string, string> = {
   EQUIPMENT_DUE: 'Equipment due for calibration or maintenance',
   NC_ASSIGNED: 'Non-conformances assigned to you',
   PRIVACY_REQUEST: 'Privacy requests to answer',
+  LICENCE: 'Licence or trial ending',
 };
 
 interface Message {
@@ -54,6 +56,7 @@ export class NotificationsService implements OnModuleInit {
     private readonly testing: TestingService,
     private readonly reports: ReportsService,
     private readonly planning: PlanningService,
+    private readonly licence: LicenceService,
     @Inject(INFRA_CONFIG) private readonly infra: InfraConfig,
   ) {}
 
@@ -80,8 +83,31 @@ export class NotificationsService implements OnModuleInit {
     this.scheduler.register({ name: 'tat-check', pattern: '0 8 * * *', run: () => this.tatCheck() });
     this.scheduler.register({ name: 'quotations-expiring', pattern: '15 8 * * *', run: () => this.quotationsExpiring() });
     this.scheduler.register({ name: 'invoices-overdue', pattern: '30 8 * * *', run: () => this.invoicesOverdue() });
+    this.scheduler.register({ name: 'licence-check', pattern: '0 9 * * *', run: () => this.licenceCheck() });
     // Mail written inside a transaction goes out here, after commit.
     this.scheduler.register({ name: 'email-sweep', pattern: '* * * * *', run: () => this.mail.sweepQueued() });
+  }
+
+  /** Tells administrators as a trial or licence nears its end, and when it has ended. Each step once. */
+  async licenceCheck(): Promise<number> {
+    const s = await this.licence.status();
+    if (!s.licence || !s.endsAt || !s.readOnlyFrom) return 0;
+    const what = s.licence.kind === 'trial' ? 'trial' : 'licence';
+    const step = s.state === 'expired' ? 'ended' : s.state === 'grace' ? 'grace' : [1, 3, 7, 14].find((d) => s.daysLeft! <= d);
+    if (!step) return 0;
+    const title =
+      s.state === 'expired'
+        ? `The ${what} has ended: nothing new can be saved`
+        : s.state === 'grace'
+          ? `The ${what} has ended; saving stops on ${formatDate(s.readOnlyFrom)}`
+          : `The ${what} ends in ${s.daysLeft} day${s.daysLeft === 1 ? '' : 's'}`;
+    return this.notifyHolders(this.prisma, 'admin.settings', {
+      type: 'LICENCE',
+      title,
+      body: 'Nothing is deleted when it ends: everything stays readable and can be exported. Add a new licence in Admin, Licence.',
+      link: '/admin?tab=licence',
+      dedupeKey: `licence-${s.licence.id}-${step}`,
+    });
   }
 
   private async holders(tx: Tx | PrismaService, permission: string): Promise<string[]> {

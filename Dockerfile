@@ -17,6 +17,9 @@ RUN npx nest build && npm rebuild argon2 && npm prune --omit=dev --ignore-script
 FROM mcr.microsoft.com/playwright:v1.64.1-noble AS runtime
 ENV NODE_ENV=production PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 WORKDIR /app
+# A vendor's public key (PEM). With it, the image needs a licence; without it, no licence is asked for.
+ARG LICENCE_PUBLIC_KEY=""
+RUN if [ -n "$LICENCE_PUBLIC_KEY" ]; then printf '%s\n' "$LICENCE_PUBLIC_KEY" > /app/licence.pub && chmod 444 /app/licence.pub; fi
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma

@@ -23,6 +23,7 @@ import { PdfService } from '../pdf/pdf.service.js';
 import { type CustomerSnapshot } from '../pdf/templates/base.js';
 import { creditNoteHtml, invoiceHtml, statementHtml } from '../pdf/templates/commercial.js';
 import { customerSnapshot } from '../quotations/quotations.service.js';
+import { LicenceService } from '../licence/licence.service.js';
 import { SchedulerService } from '../scheduler/scheduler.service.js';
 import { AGEING_BUCKETS, ageingBucket, bucketDueDateRange, daysOverdue, type AgeingBucket } from './ageing.js';
 import type { ApplyAdvanceDto, CreateCreditNoteDto, CreateInvoiceDto, CreatePaymentDto, DueQuery, InvoiceQuery, IssueInvoiceDto, PaymentQuery, UpdateDraftInvoiceDto } from './invoices.dto.js';
@@ -58,6 +59,7 @@ export class InvoicesService implements OnModuleInit {
     private readonly company: CompanyService,
     private readonly templates: EmailTemplateService,
     private readonly modules: ModulesService,
+    private readonly licence: LicenceService,
     private readonly documents: DocumentsService,
     private readonly pdf: PdfService,
     private readonly mail: MailService,
@@ -150,7 +152,11 @@ export class InvoicesService implements OnModuleInit {
       },
     });
     // Skipped while billing is turned off.
-    this.scheduler.register({ name: 'invoice-reminders', pattern: '30 9 * * *', run: async () => ((await this.modules.isOn('billing')) ? this.sendScheduledReminders() : 0) });
+    this.scheduler.register({
+      name: 'invoice-reminders',
+      pattern: '30 9 * * *',
+      run: async () => ((await this.modules.isOn('billing')) && !(await this.licence.status()).readOnly ? this.sendScheduledReminders() : 0),
+    });
   }
 
   // ---------------------------------------------------------------- shapes

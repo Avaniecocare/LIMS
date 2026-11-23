@@ -6,7 +6,7 @@ import { AppError } from '../../common/errors.js';
 import { logger } from '../../common/logger.js';
 import { INFRA_CONFIG, type InfraConfig } from '../../config/infra.config.js';
 import { WhatsappService } from '../../core/whatsapp.service.js';
-import { Public } from '../auth/decorators.js';
+import { Public, WhenReadOnly } from '../auth/decorators.js';
 
 const refused = () => new AppError('FORBIDDEN', 403, 'Not accepted');
 
@@ -34,6 +34,7 @@ export class WhatsappWebhookController {
   }
 
   @Public()
+  @WhenReadOnly('delivery receipts for messages already sent')
   @Post()
   @HttpCode(200)
   async receive(@Req() req: FastifyRequest & { rawBody?: Buffer }) {

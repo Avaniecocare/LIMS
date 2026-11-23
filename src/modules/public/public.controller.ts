@@ -14,7 +14,7 @@ import { BrandingDto, SetupDto, SetupStatusDto } from '../admin/admin.dto.js';
 import { AdminService } from '../admin/admin.service.js';
 import { OkDto } from '../auth/auth.dto.js';
 import { assertPasswordPolicy } from '../auth/auth.service.js';
-import { Public } from '../auth/decorators.js';
+import { Public, WhenReadOnly } from '../auth/decorators.js';
 
 @ApiTags('public')
 @Public()
@@ -99,6 +99,7 @@ export class PublicController {
     return (await this.prisma.user.count({ where: { deletedAt: null } })) === 0;
   }
 
+  @WhenReadOnly('the first administrator is created before a licence can be added')
   /** First-run wizard. Refuses permanently once any user exists. */
   @Post('setup')
   @ApiOkResponse({ type: OkDto })

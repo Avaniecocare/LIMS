@@ -29,6 +29,8 @@ export interface InfraConfig {
   /** WhatsApp Business Cloud API; null when not set up */
   whatsapp: { apiUrl: string; token: string | null; phoneNumberId: string | null; transport: 'cloud' | 'json'; appSecret: string | null; verifyToken: string | null } | null;
   /** The help site's "Ask AI" assistant; see HelpConfig. */
+  /** a licence to use at the first start, for images that need one */
+  licence: string | null;
   help: HelpConfig;
   /** GST e-invoicing (IRN from the Invoice Registration Portal); null when not set up. See EInvoiceConfig. */
   einvoice: EInvoiceConfig | null;
@@ -155,6 +157,7 @@ export function loadInfraConfig(env: NodeJS.ProcessEnv = process.env): InfraConf
     pincodeLookupUrl: env.PINCODE_LOOKUP_URL === undefined ? 'https://api.postalpincode.in/pincode/' : env.PINCODE_LOOKUP_URL.trim() || null,
     errorTrackingDsn: env.ERROR_TRACKING_DSN?.trim() || null,
     logLevel: env.LOG_LEVEL ?? 'info',
+    licence: env.LICENCE?.trim() || null,
     help: loadHelpConfig(env, req('FRONTEND_ORIGIN')),
     einvoice: loadEInvoiceConfig(env),
   };

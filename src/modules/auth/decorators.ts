@@ -22,6 +22,11 @@ export const BACKGROUND_KEY = 'lims:background';
 /** The page calls this by itself on a timer, so it does not count as the person being active (idle timeout). */
 export const Background = () => SetMetadata(BACKGROUND_KEY, true);
 
+export const WHEN_READ_ONLY_KEY = 'lims:whenReadOnly';
+
+/** Still works when the licence has ended and nothing new may be saved. The reason is required, so every such route says why. */
+export const WhenReadOnly = (reason: string) => SetMetadata(WHEN_READ_ONLY_KEY, reason);
+
 export const MODULE_KEY = 'lims:module';
 
 /** The routes belong to a module the lab can turn off (see ModulesService); when it is off they are refused. */
