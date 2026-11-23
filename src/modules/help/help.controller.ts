@@ -3,6 +3,7 @@ import { ApiOkResponse, ApiProduces, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { getContext } from '../../common/context.js';
 import { AppError } from '../../common/errors.js';
+import { logger } from '../../common/logger.js';
 import { PrismaService } from '../../core/prisma.service.js';
 import { OkDto } from '../auth/auth.dto.js';
 import { Perm, Public } from '../auth/decorators.js';
@@ -59,7 +60,7 @@ export class HelpController {
   }
 
   /**
-   * Streams the answer as server-sent events: `meta` (answer id and source pages), `delta` (text), `done`.
+   * Streams the answer as server-sent events: `meta` (answer id and source pages), `delta` (text), `replace` (the text so far is withdrawn), then `done` or `error`.
    * Refusals (limits, captcha, invalid input, assistant off) are ordinary JSON errors before the stream starts.
    */
   @Public()
@@ -68,19 +69,26 @@ export class HelpController {
   @ApiProduces('text/event-stream')
   async ask(@Body() dto: HelpAskDto, @Req() req: FastifyRequest, @Res() reply: FastifyReply, @Headers('content-length') length?: string) {
     if (Number(length ?? 0) > MAX_BODY_BYTES) throw new AppError('PAYLOAD_TOO_LARGE', 413, 'That request is too large.');
-    const events = await this.help.ask(await this.asker(req, dto.turnstileToken ?? null), dto);
+    // The request stream ends as soon as its body is read; it is the response that closes when the visitor leaves.
+    const left = new AbortController();
+    reply.raw.on('close', () => left.abort());
+    const events = await this.help.ask(await this.asker(req, dto.turnstileToken ?? null), dto, left.signal);
     // Headers set by the app (CORS, security headers, request id) carry over to the raw stream.
     for (const [k, v] of Object.entries(reply.getHeaders())) if (v !== undefined) reply.raw.setHeader(k, v as string);
     reply.raw.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no', Connection: 'keep-alive' });
-    let closed = false;
-    req.raw.on('close', () => (closed = true));
+    // Keeps proxies from closing a connection that is quiet while the model thinks.
+    const beat = setInterval(() => reply.raw.write(': waiting\n\n'), 15_000);
     try {
       for await (const e of events) {
-        if (closed) break;
+        if (left.signal.aborted) break;
         reply.raw.write(`event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`);
       }
+    } catch (err) {
+      // The headers have gone, so this cannot become an ordinary error answer.
+      logger.warn({ err }, 'help answer stream failed');
+      if (!left.signal.aborted) reply.raw.write(`event: error\ndata: ${JSON.stringify({ message: 'The help assistant could not finish this answer. Try again, or use Search.' })}\n\n`);
     } finally {
-      if (closed) await events.return(undefined);
+      clearInterval(beat);
       reply.raw.end();
     }
   }

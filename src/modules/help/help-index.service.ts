@@ -5,6 +5,8 @@ import { INFRA_CONFIG, type InfraConfig } from '../../config/infra.config.js';
 import { HelpSearch, type HelpIndexFile } from './retrieval.js';
 
 const REFRESH_MS = 10 * 60_000;
+/** Waits while there is no index yet, for example when the API starts before the help site. */
+const FIRST_MS = [5_000, 10_000, 20_000, 40_000, 60_000];
 
 /**
  * The search index of the published help pages, built by the docs site (help-index.json). Read from
@@ -15,18 +17,31 @@ const REFRESH_MS = 10 * 60_000;
 export class HelpIndexService implements OnModuleInit, OnModuleDestroy {
   private current: HelpSearch | null = null;
   private timer: NodeJS.Timeout | null = null;
+  private stopped = false;
 
   constructor(@Inject(INFRA_CONFIG) private readonly infra: InfraConfig) {}
 
   async onModuleInit() {
     if (!this.infra.help.enabled) return;
-    await this.refresh();
-    this.timer = setInterval(() => void this.refresh(), REFRESH_MS);
+    // A file is read at once; a web address must not hold up the start.
+    if (this.infra.help.indexPath) await this.refresh();
+    else void this.refresh();
+    this.schedule(0);
+  }
+
+  private schedule(attempt: number) {
+    this.timer = setTimeout(
+      () => {
+        void this.refresh().finally(() => !this.stopped && this.schedule(this.current ? 0 : attempt + 1));
+      },
+      this.current ? REFRESH_MS : FIRST_MS[Math.min(attempt, FIRST_MS.length - 1)],
+    );
     this.timer.unref();
   }
 
   onModuleDestroy() {
-    if (this.timer) clearInterval(this.timer);
+    this.stopped = true;
+    if (this.timer) clearTimeout(this.timer);
   }
 
   get search(): HelpSearch | null {

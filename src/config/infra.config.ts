@@ -1,4 +1,7 @@
 /** Infrastructure values and secrets, kept apart from the COMPANY_* group. */
+import { priceOf } from '../modules/help/providers/pricing.js';
+import type { Price } from '../modules/help/providers/types.js';
+
 export interface InfraConfig {
   nodeEnv: string;
   port: number;
@@ -50,13 +53,23 @@ export interface EInvoiceConfig {
   publicKey: string;
 }
 
+export interface HelpProviderConfig {
+  /** anthropic (Claude); openai-compatible (any service with that interface, a lab's own included); mock: offline, for development and tests */
+  provider: 'anthropic' | 'openai-compatible' | 'mock';
+  apiKey: string | null;
+  baseUrl: string | null;
+  model: string;
+  price: Price | null;
+}
+
 /** The help assistant. It answers from the published documentation only, through this server. */
 export interface HelpConfig {
   /** ENABLE_AI_ASSISTANT=true and a usable provider; otherwise the help site shows search only */
   enabled: boolean;
-  /** anthropic (Claude), or mock: an offline extractive answer, for development and tests */
-  provider: 'anthropic' | 'mock';
-  apiKey: string | null;
+  /** why it is off although ENABLE_AI_ASSISTANT=true, for the log */
+  offBecause: string | null;
+  /** asked in order: the second only when the first is busy, down or too slow */
+  providers: HelpProviderConfig[];
   model: string;
   embedding: { provider: 'none' | 'voyage'; apiKey: string | null; model: string };
   /** where the docs build's help-index.json is read from: a file path, or a URL */
@@ -154,6 +167,32 @@ export function loadInfraConfig(env: NodeJS.ProcessEnv = process.env): InfraConf
   return config;
 }
 
+function helpProvider(env: NodeJS.ProcessEnv, prefix: 'AI_' | 'AI_FALLBACK_', defaultModel: string): HelpProviderConfig {
+  const get = (name: string) => env[`${prefix}${name}`]?.trim() || null;
+  const provider = get('PROVIDER') ?? 'anthropic';
+  if (provider !== 'anthropic' && provider !== 'openai-compatible' && provider !== 'mock') throw new InfraConfigError(`${prefix}PROVIDER must be anthropic, openai-compatible or mock`);
+  const baseUrl = get('BASE_URL')?.replace(/\/+$/, '') ?? null;
+  if (baseUrl && !/^https?:\/\/[^\s@]+$/.test(baseUrl)) throw new InfraConfigError(`${prefix}BASE_URL must be an http or https address without a user name`);
+  const dollars = (name: string) => {
+    const raw = get(name);
+    if (raw === null) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) throw new InfraConfigError(`${prefix}${name} must be US dollars per million tokens`);
+    return n;
+  };
+  const model = get('MODEL') ?? (provider === 'anthropic' ? defaultModel || 'claude-haiku-5-5' : defaultModel);
+  return { provider, apiKey: get('API_KEY'), baseUrl, model, price: priceOf(provider, model, { input: dollars('PRICE_INPUT'), output: dollars('PRICE_OUTPUT') }) };
+}
+
+function problemWith(p: HelpProviderConfig, prefix: string): string | null {
+  if (p.provider === 'mock') return null;
+  if (p.provider === 'anthropic' && !p.apiKey) return `${prefix}API_KEY is not set`;
+  if (p.provider === 'openai-compatible' && !p.baseUrl) return `${prefix}BASE_URL is not set`;
+  if (p.provider === 'openai-compatible' && !p.model) return `${prefix}MODEL is not set`;
+  // Without a price the spending limit would mean nothing. A lab's own server can be given 0.
+  return p.price ? null : `the price of ${p.model} is not known: set ${prefix}PRICE_INPUT and ${prefix}PRICE_OUTPUT`;
+}
+
 // TODO(product-decision): the help assistant's limits. Low by default so a public docs site cannot run up a bill.
 function loadHelpConfig(env: NodeJS.ProcessEnv, frontendOrigin: string): HelpConfig {
   const int = (name: string, fallback: number, min = 1) => {
@@ -167,18 +206,22 @@ function loadHelpConfig(env: NodeJS.ProcessEnv, frontendOrigin: string): HelpCon
     const n = raw ? Number(raw) : fallback;
     return Number.isFinite(n) && n >= 0 ? n : fallback;
   };
-  const provider = env.AI_PROVIDER?.trim() === 'mock' ? 'mock' : 'anthropic';
-  const apiKey = env.AI_API_KEY?.trim() || null;
-  const usable = provider === 'mock' || !!apiKey;
+  const first = helpProvider(env, 'AI_', 'claude-haiku-5-5');
+  const second = env.AI_FALLBACK_PROVIDER?.trim() ? helpProvider(env, 'AI_FALLBACK_', '') : null;
+  const on = env.ENABLE_AI_ASSISTANT === 'true';
+  const offBecause = on ? (problemWith(first, 'AI_') ?? (second && problemWith(second, 'AI_FALLBACK_'))) : null;
+  const turnstile = [env.TURNSTILE_SITE_KEY?.trim() || null, env.TURNSTILE_SECRET_KEY?.trim() || null];
+  // With only the secret set, every visitor would be refused; with only the site key, nobody would be checked.
+  if (on && !turnstile[0] !== !turnstile[1]) throw new InfraConfigError('Set both TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY, or neither');
   const origins = (env.ALLOWED_ORIGINS ?? '')
     .split(',')
     .map((o) => o.trim().replace(/\/+$/, ''))
     .filter(Boolean);
   return {
-    enabled: env.ENABLE_AI_ASSISTANT === 'true' && usable,
-    provider,
-    apiKey,
-    model: env.AI_MODEL?.trim() || 'claude-haiku-5-5',
+    enabled: on && !offBecause,
+    offBecause: offBecause || null,
+    providers: second ? [first, second] : [first],
+    model: first.model,
     embedding: {
       provider: env.EMBEDDING_PROVIDER?.trim() === 'voyage' ? 'voyage' : 'none',
       apiKey: env.EMBEDDING_API_KEY?.trim() || null,
@@ -193,8 +236,8 @@ function loadHelpConfig(env: NodeJS.ProcessEnv, frontendOrigin: string): HelpCon
     monthlyBudget: money('MONTHLY_BUDGET_LIMIT', 20),
     maxQuestionLength: Math.min(int('MAX_QUESTION_LENGTH', 500, 20), 2000),
     maxOutputTokens: Math.min(int('MAX_OUTPUT_TOKENS', 800, 100), 4000),
-    turnstileSiteKey: env.TURNSTILE_SITE_KEY?.trim() || null,
-    turnstileSecretKey: env.TURNSTILE_SECRET_KEY?.trim() || null,
+    turnstileSiteKey: turnstile[0],
+    turnstileSecretKey: turnstile[1],
     requireLogin: env.AI_REQUIRE_LOGIN === 'true',
     allowedOrigins: [...new Set([frontendOrigin.replace(/\/+$/, ''), ...origins])],
     supportEmail: env.HELP_SUPPORT_EMAIL?.trim() || null,

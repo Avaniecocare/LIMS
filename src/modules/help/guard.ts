@@ -28,15 +28,20 @@ export function cleanQuestion(raw: unknown, maxLength: number): GuardResult {
 // Attempts to change the assistant's rules or read what it was told. Asking how to set an API key for an
 // integration is a fair question, so "API key" on its own is not here.
 const INJECTION = [
-  /\b(ignore|disregard|forget|override|bypass)\b.{0,40}\b(previous|prior|above|earlier|all|your|the|these|those|system)\b.{0,40}\b(instructions?|rules?|prompts?|directions?|guidelines?)\b/i,
+  /\b(ignore|disregard|forget|override|bypass)\b.{0,40}\b(previous|prior|above|earlier|your|system)\b.{0,40}\b(instructions?|rules?|prompts?|directions?|guidelines?)\b/i,
+  /\b(ignore|disregard|forget|override|bypass)\b.{0,20}\b(all|the|these|those)\b.{0,20}\b(instructions?|prompts?|guidelines?|rules? (above|before|you))\b/i,
   /\b(system|initial|hidden|original)\s+(prompt|instructions?|message)\b/i,
-  /\b(reveal|print|show|repeat|output|display|leak|dump)\b.{0,40}\b(your|the)\b.{0,20}\b(prompt|instructions?|rules|configuration|config)\b/i,
+  /\b(reveal|print|show|repeat|output|display|leak|dump)\b.{0,40}\byour\b.{0,20}\b(prompt|instructions?|rules|configuration|config)\b/i,
+  /\b(reveal|repeat|output|leak|dump)\b.{0,20}\b(the|all)\b.{0,20}\b(prompt|instructions)\b/i,
   /\byour\s+(api|secret|access)\s+keys?\b/i,
   /\b(what|which)\s+is\s+(the|your)\s+(api|secret)\s+key\b/i,
   /\b(jailbreak|dan mode|developer mode|do anything now)\b/i,
-  /\b(you are now|act as|pretend (to be|you are)|roleplay as)\b/i,
-  /<\/?(system|instructions?|documentation|document)>/i,
+  /\b(you are now|you must now|pretend (to be|you are)|roleplay as)\b/i,
+  /^\s*(please\s+)?act as\b|\byou\b.{0,20}\bact as\b/i,
 ];
+
+/** Tags that would pass as part of the prompt. Looked for before cleaning, which removes them. */
+export const hasPromptTags = (raw: string): boolean => /<\/?\s*(system|instructions?|documentation|document|question)\b[^>]*>/i.test(raw);
 
 export function looksLikeInjection(question: string): boolean {
   return INJECTION.some((r) => r.test(question));

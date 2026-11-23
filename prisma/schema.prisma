@@ -1711,6 +1711,9 @@ enum HelpOutcome {
   CAPTCHA_FAILED
   BUDGET_REACHED
   ERROR
+  CANCELLED
+  TRUNCATED
+  REFUSED
 }
 
 /** One question to the help assistant. No IP address or account is stored; the text is scrubbed of emails and numbers. */
@@ -1725,6 +1728,9 @@ model HelpQuestion {
   outputTokens Int         @default(0)
   /** millionths of a US dollar */
   costMicros   Int         @default(0)
+  /** providers asked; 2 means the first was busy, down or slow */
+  attempts     Int         @default(0)
+  promptVersion String?
   latencyMs    Int         @default(0)
   signedIn     Boolean     @default(false)
   helpful      Boolean?

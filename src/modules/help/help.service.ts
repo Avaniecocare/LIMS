@@ -1,6 +1,5 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
-import type Anthropic from '@anthropic-ai/sdk';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { AppError, badRequest } from '../../common/errors.js';
 import { logger } from '../../common/logger.js';
 import { INFRA_CONFIG, type InfraConfig } from '../../config/infra.config.js';
@@ -8,10 +7,13 @@ import { Prisma, PrismaService } from '../../core/prisma.service.js';
 import { RedisService } from '../../core/redis.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { SchedulerService } from '../scheduler/scheduler.service.js';
-import { cleanQuestion, looksLikeInjection, looksOffTopic, normalizeQuestion, scrubPersonal } from './guard.js';
+import { cleanQuestion, hasPromptTags, looksLikeInjection, looksOffTopic, normalizeQuestion, scrubPersonal } from './guard.js';
 import { HelpIndexService } from './help-index.service.js';
 import { HELP_SYSTEM_PROMPT, NOT_FOUND_ANSWER, OFF_TOPIC_ANSWER, buildUserMessage } from './prompt.js';
-import { costMicros, createProvider, type AnswerProvider } from './providers.js';
+import { answerFrom } from './answer.js';
+import { HelpBudget, type Reservation } from './budget.js';
+import { createProviders } from './providers/index.js';
+import { NO_USAGE, worstCaseMicros, type AnswerProvider, type ChatMessage } from './providers/types.js';
 import { isRelevant, type Hit } from './retrieval.js';
 
 /** Who is asking, as far as the limits are concerned. The IP is only ever used hashed, as a counter key. */
@@ -26,19 +28,25 @@ export interface Asker {
 export type HelpEvent =
   | { event: 'meta'; data: { id: string; sources: { title: string; url: string; heading: string | null }[] } }
   | { event: 'delta'; data: { text: string } }
+  /** what has been shown is withdrawn, and this put in its place */
+  | { event: 'replace'; data: { text: string } }
+  | { event: 'error'; data: { message: string } }
   | { event: 'done'; data: { outcome: string } };
 type Outcome = Prisma.HelpQuestionCreateInput['outcome'];
 
 const MAX_HISTORY_TURNS = 4;
 const MAX_TURN_CHARS = 2000;
 const CACHE_TTL_S = 7 * 24 * 3600;
-const REQUEST_TIMEOUT_MS = 45_000;
+const MAX_HISTORY_CHARS = 8000;
+/** Part of the cache key and the log, so answers written under older instructions are not served as new ones. */
+const PROMPT_VERSION = createHash('sha256').update(HELP_SYSTEM_PROMPT).digest('hex').slice(0, 8);
 // Clients that are not a person using a browser. A real browser always sends a user agent.
 const BOT_UA = /(curl|wget|python|httpie|go-http|java\/|okhttp|libwww|scrapy|aiohttp|axios|node-fetch|postman|insomnia|\bbot\b|spider|crawl|slurp)/i;
 
 @Injectable()
 export class HelpService implements OnModuleInit {
-  private readonly provider: AnswerProvider | null;
+  private readonly providers: AnswerProvider[];
+  private readonly budget: HelpBudget;
 
   constructor(
     @Inject(INFRA_CONFIG) private readonly infra: InfraConfig,
@@ -48,7 +56,8 @@ export class HelpService implements OnModuleInit {
     private readonly notifications: NotificationsService,
     private readonly scheduler: SchedulerService,
   ) {
-    this.provider = createProvider(infra.help);
+    this.providers = createProviders(infra.help);
+    this.budget = new HelpBudget(redis, () => ({ day: Math.floor(this.cfg.dailyBudget * 1e6), month: Math.floor(this.cfg.monthlyBudget * 1e6) }));
   }
 
   private get cfg() {
@@ -56,12 +65,13 @@ export class HelpService implements OnModuleInit {
   }
 
   onModuleInit() {
+    if (this.cfg.offBecause) logger.warn({ reason: this.cfg.offBecause }, 'the help assistant is off');
     // Question logs are kept only as long as they are useful for finding gaps in the docs.
     this.scheduler.register({ name: 'help-log-retention', pattern: '15 3 * * *', run: () => this.purgeOldLogs() });
   }
 
   status(signedIn: boolean) {
-    const available = !!this.provider && !!this.index.search;
+    const available = this.providers.length > 0 && !!this.index.search;
     return {
       enabled: available,
       signedIn,
@@ -76,21 +86,22 @@ export class HelpService implements OnModuleInit {
    * Every check that can refuse a request runs here, before any streaming starts, so refusals are plain HTTP
    * errors. Returns the stream of answer events.
    */
-  async ask(asker: Asker, body: { question?: unknown; history?: unknown }): Promise<AsyncGenerator<HelpEvent>> {
+  async ask(asker: Asker, body: { question?: unknown; history?: unknown }, signal: AbortSignal = new AbortController().signal): Promise<AsyncGenerator<HelpEvent>> {
     const started = Date.now();
     const signedIn = !!asker.userId;
-    if (!this.provider || !this.index.search) throw new AppError('HELP_OFF', 503, 'The help assistant is not available right now. Use Search instead.');
+    if (!this.providers.length || !this.index.search) throw new AppError('HELP_OFF', 503, 'The help assistant is not available right now. Use Search instead.');
     if (this.cfg.requireLogin && !signedIn) throw new AppError('HELP_LOGIN', 401, 'Sign in to ask the help assistant.');
 
     // Browsers only: the docs page sends this header and an allowed Origin; scripts and other sites do not.
     if (!asker.userAgent || BOT_UA.test(asker.userAgent) || asker.requestedWith !== 'lims-help' || !asker.origin || !this.cfg.allowedOrigins.includes(asker.origin.replace(/\/+$/, ''))) {
-      await this.log({ outcome: 'BLOCKED', signedIn, started });
+      // A flood of these must not become a flood of rows.
+      if (await this.firstThisMinute('blocked', asker)) await this.log({ outcome: 'BLOCKED', signedIn, started });
       throw new AppError('FORBIDDEN', 403, 'This request was not accepted.');
     }
 
     await this.limit(asker, started);
     if (!signedIn && this.cfg.turnstileSecretKey && !(await this.human(asker.turnstileToken))) {
-      await this.log({ outcome: 'CAPTCHA_FAILED', signedIn, started });
+      if (await this.firstThisMinute('captcha', asker)) await this.log({ outcome: 'CAPTCHA_FAILED', signedIn, started });
       throw new AppError('HELP_CAPTCHA', 403, 'Please confirm you are a person and ask again.');
     }
 
@@ -107,22 +118,28 @@ export class HelpService implements OnModuleInit {
     await this.notRepeated(asker, question);
     const history = this.history(body.history);
 
-    if (looksLikeInjection(question)) return this.fixed(OFF_TOPIC_ANSWER, 'BLOCKED', question, signedIn, started);
+    if (hasPromptTags(body.question as string) || looksLikeInjection(question) || history.some((h) => h.role === 'user' && looksLikeInjection(h.content)))
+      return this.fixed(OFF_TOPIC_ANSWER, 'BLOCKED', question, signedIn, started);
     if (looksOffTopic(question)) return this.fixed(OFF_TOPIC_ANSWER, 'OFF_TOPIC', question, signedIn, started);
 
     // A short follow-up ("and on a phone?") is searched together with the question before it.
-    const lastUser = [...history].reverse().find((t) => t.role === 'user')?.content as string | undefined;
+    const lastUser = [...history].reverse().find((t) => t.role === 'user')?.content;
     const searchText = lastUser && question.split(' ').length < 8 ? `${lastUser} ${question}` : question;
-    const queryVector = await this.embedQuery(searchText);
+    // The visitor's browser sends the history, so it can only help a question that has something to do with the docs
+    // itself: an off-topic question must not ride in on an invented earlier turn.
+    const onItsOwn = this.index.search.search(question, { staff: signedIn, k: 5 });
+    const spent = await this.budget.spentToday();
+    const paused = spent.day >= this.cfg.dailyBudget * 1e6 || spent.month >= this.cfg.monthlyBudget * 1e6;
+    const queryVector = paused ? null : await this.embedQuery(searchText);
     const result = this.index.search.search(searchText, { staff: signedIn, k: 5, queryVector });
     const { hits } = result;
-    if (!isRelevant(result)) {
+    if (!isRelevant(result) || (lastUser && !onItsOwn.hits.length)) {
       const suggestions = hits.slice(0, 3).map((h) => `- [${h.chunk.heading ?? h.chunk.title}](${h.chunk.url})`);
       const text = `${NOT_FOUND_ANSWER}${suggestions.length ? `\n\nThese pages may be related:\n${suggestions.join('\n')}` : ' Try Search at the top of the page, or ask your administrator.'}`;
       return this.fixed(text, 'NOT_FOUND', question, signedIn, started, hits.slice(0, 3));
     }
 
-    const cacheKey = history.length ? null : `help:answer:${this.index.search.version}:${this.cfg.model}:${sha(normalizeQuestion(question))}`;
+    const cacheKey = history.length ? null : `help:answer:${signedIn ? 'staff' : 'public'}:${this.index.search.version}:${PROMPT_VERSION}:${this.cfg.model}:${sha(normalizeQuestion(question))}`;
     if (cacheKey) {
       const hit = await this.redis.client.get(cacheKey);
       if (hit) {
@@ -132,56 +149,82 @@ export class HelpService implements OnModuleInit {
       }
     }
 
-    await this.withinBudget(question, signedIn, started);
-    return this.generate(question, history, hits, cacheKey, signedIn, started);
+    const messages: ChatMessage[] = [...history, { role: 'user', content: buildUserMessage(question, hits) }];
+    const request = { system: HELP_SYSTEM_PROMPT, messages, maxTokens: this.cfg.maxOutputTokens, hits };
+    const held = await this.budget.reserve(Math.max(...this.providers.map((p) => worstCaseMicros(p.price, request))));
+    if (!held) {
+      await this.log({ outcome: 'BUDGET_REACHED', question, signedIn, started });
+      throw new AppError('HELP_PAUSED', 503, 'The help assistant has answered all it can for now and will be back later. Search still works.');
+    }
+    return this.generate({ question, request, hits, cacheKey, signedIn, started, signal, held });
   }
 
-  private async *generate(question: string, history: Anthropic.MessageParam[], hits: Hit[], cacheKey: string | null, signedIn: boolean, started: number): AsyncGenerator<HelpEvent> {
-    const id = await this.newId();
-    const sources = sourcesOf(hits);
-    yield { event: 'meta', data: { id, sources } };
-    const messages: Anthropic.MessageParam[] = [...history, { role: 'user', content: buildUserMessage(question, hits) }];
+  private async *generate(c: {
+    question: string;
+    request: { system: string; messages: ChatMessage[]; maxTokens: number; hits: Hit[] };
+    hits: Hit[];
+    cacheKey: string | null;
+    signedIn: boolean;
+    started: number;
+    signal: AbortSignal;
+    held: Reservation;
+  }): AsyncGenerator<HelpEvent> {
+    const id = randomUUID();
+    const sources = sourcesOf(c.hits);
     let text = '';
-    let usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, refused: false };
-    let outcome: Outcome = 'ANSWERED';
+    let outcome: Outcome = 'CANCELLED';
+    let result = { usage: NO_USAGE, cost: 0, model: this.providers[0].model, attempts: 0 };
+    // Whatever happens, a visitor leaving included, the cost is charged and the question logged.
     try {
-      for await (const ev of this.provider!.answer({ system: HELP_SYSTEM_PROMPT, messages, maxTokens: this.cfg.maxOutputTokens, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), hits })) {
+      yield { event: 'meta', data: { id, sources } };
+      let stop: 'end' | 'length' | 'refusal' | null = null;
+      for await (const ev of answerFrom(this.providers, c.request, c.signal)) {
         if (ev.type === 'text') {
           text += ev.text;
           yield { event: 'delta', data: { text: ev.text } };
-        } else usage = ev;
+        } else if (ev.type === 'spent') result = ev;
+        else stop = ev.stop;
       }
-      if (usage.refused) {
-        outcome = 'OFF_TOPIC';
-        const extra = text ? '' : OFF_TOPIC_ANSWER;
-        if (extra) yield { event: 'delta', data: { text: extra } };
-      } else if (text.trim().startsWith(NOT_FOUND_ANSWER)) outcome = 'NOT_FOUND';
+      if (stop === 'refusal') {
+        outcome = 'REFUSED';
+        yield { event: 'replace', data: { text: OFF_TOPIC_ANSWER } };
+      } else if (stop === 'length') {
+        outcome = 'TRUNCATED';
+        yield { event: 'delta', data: { text: '\n\nThis answer was cut short. Open the pages below for the rest.' } };
+      } else outcome = text.trim().startsWith(NOT_FOUND_ANSWER) ? 'NOT_FOUND' : 'ANSWERED';
     } catch (err) {
-      outcome = 'ERROR';
-      logger.warn({ err: err instanceof Error ? { name: err.name, message: err.message.slice(0, 200) } : 'error' }, 'help assistant answer failed');
-      yield { event: 'delta', data: { text: `${text ? '\n\n' : ''}The help assistant could not finish this answer. Try again, or use Search.` } };
+      if (!c.signal.aborted) {
+        outcome = 'ERROR';
+        logger.warn({ err: err instanceof Error ? { name: err.name, message: err.message.slice(0, 200) } : 'error' }, 'help assistant answer failed');
+      }
+    } finally {
+      await this.settle(c.held, result.cost).catch((err: unknown) => logger.warn({ err }, 'could not settle the help budget'));
+      await this.log({
+        id,
+        outcome,
+        question: c.question,
+        sources,
+        signedIn: c.signedIn,
+        started: c.started,
+        model: result.model,
+        inputTokens: result.usage.inputTokens + result.usage.cacheReadTokens + result.usage.cacheWriteTokens,
+        outputTokens: result.usage.outputTokens,
+        costMicros: result.cost,
+        attempts: result.attempts,
+      });
     }
-    const cost = costMicros(this.provider!.model, usage.inputTokens, usage.outputTokens, usage.cacheReadTokens);
-    await this.spend(cost);
-    await this.log({
-      id,
-      outcome,
-      question,
-      sources,
-      signedIn,
-      started,
-      model: this.provider!.model,
-      inputTokens: usage.inputTokens + usage.cacheReadTokens,
-      outputTokens: usage.outputTokens,
-      costMicros: cost,
-    });
-    if (cacheKey && outcome === 'ANSWERED' && text) await this.redis.client.set(cacheKey, JSON.stringify({ text, urls: hits.map((h) => h.chunk.url) }), 'EX', CACHE_TTL_S);
+    if (outcome === 'ERROR') {
+      yield { event: 'error', data: { message: 'The help assistant could not finish this answer. Try again, or use Search.' } };
+      return;
+    }
+    if (outcome === 'CANCELLED') return;
+    if (c.cacheKey && outcome === 'ANSWERED' && text) await this.redis.client.set(c.cacheKey, JSON.stringify({ text, urls: c.hits.map((h) => h.chunk.url) }), 'EX', CACHE_TTL_S).catch(() => undefined);
     yield { event: 'done', data: { outcome: outcome.toLowerCase() } };
   }
 
   /** An answer that needs no model: not found, off topic, blocked or cached. */
   private async fixed(text: string, outcome: Outcome, question: string, signedIn: boolean, started: number, hits: Hit[] = []): Promise<AsyncGenerator<HelpEvent>> {
-    const id = await this.newId();
+    const id = randomUUID();
     const sources = sourcesOf(hits);
     // Blocked text is not kept: nothing in it is useful for improving the docs.
     await this.log({ id, outcome, question: outcome === 'BLOCKED' ? null : question, sources, signedIn, started });
@@ -195,13 +238,16 @@ export class HelpService implements OnModuleInit {
   // ---------------------------------------------------------------- limits
 
   private requesterKey(asker: Asker) {
-    return asker.userId ? `u:${asker.userId}` : `ip:${sha(`${this.infra.sessionSecret}|${asker.ip ?? 'unknown'}`).slice(0, 24)}`;
+    return asker.userId ? `u:${asker.userId}` : `ip:${sha(`${this.infra.sessionSecret}|${networkOf(asker.ip)}`).slice(0, 24)}`;
   }
 
   private async count(key: string, ttl: number) {
-    const n = await this.redis.client.incr(key);
-    if (n === 1) await this.redis.client.expire(key, ttl);
-    return n;
+    // In one step: a count left without an expiry would lock the person out for good.
+    return Number(await this.redis.client.eval("local n = redis.call('INCR', KEYS[1]) if n == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end return n", 1, key, ttl));
+  }
+
+  private async firstThisMinute(what: string, asker: Asker): Promise<boolean> {
+    return (await this.redis.client.set(`help:once:${what}:${this.requesterKey(asker)}`, '1', 'EX', 60, 'NX')) === 'OK';
   }
 
   /** Per person (signed in) or per address (anonymous), per minute and per day; anonymous addresses also per day. */
@@ -211,7 +257,7 @@ export class HelpService implements OnModuleInit {
     const minute = await this.count(`help:rl:m:${who}`, 60);
     const day = await this.count(`help:rl:d:${who}:${today()}`, 26 * 3600);
     if (minute > this.cfg.perMinute || day > perDay) {
-      await this.log({ outcome: 'RATE_LIMITED', signedIn: !!asker.userId, started });
+      if (await this.firstThisMinute('limited', asker)) await this.log({ outcome: 'RATE_LIMITED', signedIn: !!asker.userId, started });
       throw new AppError(
         'RATE_LIMITED',
         429,
@@ -245,20 +291,8 @@ export class HelpService implements OnModuleInit {
     }
   }
 
-  private async withinBudget(question: string, signedIn: boolean, started: number) {
-    const [day, month] = (await this.redis.client.mget(`help:cost:d:${today()}`, `help:cost:m:${today().slice(0, 7)}`)).map((v) => Number(v ?? 0));
-    if (day >= this.cfg.dailyBudget * 1e6 || month >= this.cfg.monthlyBudget * 1e6) {
-      await this.log({ outcome: 'BUDGET_REACHED', question, signedIn, started });
-      throw new AppError('HELP_PAUSED', 503, 'The help assistant has answered all it can for now and will be back later. Search still works.');
-    }
-  }
-
-  private async spend(micros: number) {
-    if (!micros) return;
-    const day = await this.redis.client.incrby(`help:cost:d:${today()}`, micros);
-    await this.redis.client.expire(`help:cost:d:${today()}`, 3 * 24 * 3600);
-    await this.redis.client.incrby(`help:cost:m:${today().slice(0, 7)}`, micros);
-    await this.redis.client.expire(`help:cost:m:${today().slice(0, 7)}`, 40 * 24 * 3600);
+  private async settle(held: Reservation, micros: number) {
+    const day = await this.budget.settle(held, micros);
     // Administrators hear once a day when the assistant has used most of its daily budget.
     if (day >= this.cfg.dailyBudget * 1e6 * 0.8 && (await this.redis.client.set(`help:alert:${today()}`, '1', 'EX', 26 * 3600, 'NX'))) {
       await this.notifications
@@ -273,7 +307,7 @@ export class HelpService implements OnModuleInit {
     }
   }
 
-  private history(raw: unknown): Anthropic.MessageParam[] {
+  private history(raw: unknown): ChatMessage[] {
     if (raw === undefined || raw === null) return [];
     if (!Array.isArray(raw)) throw badRequest('history must be a list', [{ field: 'history', message: 'A list of earlier turns' }]);
     const turns = raw
@@ -282,9 +316,11 @@ export class HelpService implements OnModuleInit {
       .map((t) => ({ role: t.role, content: scrubPersonal(t.content.replace(/<[^>]*>/g, ' ').slice(0, MAX_TURN_CHARS)) }));
     // The conversation must start with the visitor and alternate.
     while (turns.length && turns[0].role !== 'user') turns.shift();
-    const out: Anthropic.MessageParam[] = [];
+    const out: ChatMessage[] = [];
     for (const t of turns) if (!out.length || out[out.length - 1].role !== t.role) out.push(t);
     if (out.length && out[out.length - 1].role === 'user') out.pop();
+    // The oldest turns go first when the whole is too long.
+    while (out.reduce((n, m) => n + m.content.length, 0) > MAX_HISTORY_CHARS) out.splice(0, 2);
     return out;
   }
 
@@ -308,10 +344,6 @@ export class HelpService implements OnModuleInit {
 
   // ---------------------------------------------------------------- logs and feedback
 
-  private async newId() {
-    return (await this.prisma.$queryRaw<{ id: string }[]>`SELECT gen_random_uuid()::text AS id`)[0].id;
-  }
-
   private async log(e: {
     id?: string;
     outcome: Outcome;
@@ -323,6 +355,7 @@ export class HelpService implements OnModuleInit {
     inputTokens?: number;
     outputTokens?: number;
     costMicros?: number;
+    attempts?: number;
   }) {
     try {
       await this.prisma.helpQuestion.create({
@@ -335,6 +368,8 @@ export class HelpService implements OnModuleInit {
           inputTokens: e.inputTokens ?? 0,
           outputTokens: e.outputTokens ?? 0,
           costMicros: e.costMicros ?? 0,
+          attempts: e.attempts ?? 0,
+          promptVersion: e.model ? PROMPT_VERSION : null,
           latencyMs: Date.now() - e.started,
           signedIn: e.signedIn,
         },
@@ -384,11 +419,15 @@ export class HelpService implements OnModuleInit {
         SELECT path, count(*) FILTER (WHERE helpful) AS yes, count(*) FILTER (WHERE NOT helpful) AS no FROM "HelpPageFeedback"
         WHERE "createdAt" >= ${since} GROUP BY 1 ORDER BY 3 DESC, 2 DESC LIMIT 20`,
     ]);
+    const spent = await this.budget.spentToday();
     const outcomes = Object.fromEntries(byOutcome.map((o) => [o.outcome, o._count._all]));
     return {
       days,
       enabled: this.status(false).enabled,
       model: this.cfg.model,
+      fallbackModel: this.cfg.providers[1]?.model ?? null,
+      spentToday: spent.day / 1e6,
+      spentThisMonth: spent.month / 1e6,
       dailyBudget: this.cfg.dailyBudget,
       monthlyBudget: this.cfg.monthlyBudget,
       outcomes,
@@ -399,6 +438,22 @@ export class HelpService implements OnModuleInit {
       pages: pages.map((p) => ({ path: p.path, helpful: Number(p.yes), notHelpful: Number(p.no) })),
     };
   }
+}
+
+/** One home or office usually has a whole IPv6 /64 to itself, so counting single addresses would not limit anyone. */
+export function networkOf(ip: string | null): string {
+  if (!ip) return 'unknown';
+  const v4 = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (v4) return v4[1];
+  if (!ip.includes(':')) return ip;
+  const [head, tail = ''] = ip.split('%')[0].split('::');
+  const h = head ? head.split(':') : [];
+  const rest = tail ? tail.split(':') : [];
+  const full = ip.includes('::') ? [...h, ...Array<string>(Math.max(0, 8 - h.length - rest.length)).fill('0'), ...rest] : h;
+  return full
+    .slice(0, 4)
+    .map((x) => x.toLowerCase().replace(/^0+(?=.)/, ''))
+    .join(':');
 }
 
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');

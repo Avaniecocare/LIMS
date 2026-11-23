@@ -69,9 +69,13 @@ export class HelpAnalyticsDto {
   days: number;
   enabled: boolean;
   model: string;
+  @ApiProperty({ type: String, nullable: true }) fallbackModel: string | null;
+  /** US dollars spent or held for answers being written, as the limits count it */
+  spentToday: number;
+  spentThisMonth: number;
   dailyBudget: number;
   monthlyBudget: number;
-  /** count per outcome: ANSWERED, CACHED, NOT_FOUND, OFF_TOPIC, BLOCKED, RATE_LIMITED, CAPTCHA_FAILED, BUDGET_REACHED, ERROR */
+  /** count per outcome: ANSWERED, CACHED, NOT_FOUND, OFF_TOPIC, BLOCKED, RATE_LIMITED, CAPTCHA_FAILED, BUDGET_REACHED, ERROR, CANCELLED (the visitor left), TRUNCATED, REFUSED */
   @ApiProperty({ type: 'object', additionalProperties: { type: 'number' } }) outcomes: Record<string, number>;
   @ApiProperty({ type: () => [HelpDayDto] }) daily: HelpDayDto[];
   @ApiProperty({ type: () => [HelpQuestionCountDto] }) topQuestions: HelpQuestionCountDto[];
