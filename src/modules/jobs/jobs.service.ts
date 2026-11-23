@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { actorId, can, currentUser } from '../../common/context.js';
 import { badRequest, conflict, forbidden, notFound, reasonRequired, rule } from '../../common/errors.js';
 import { istToday, methodLabel } from '../../common/india.js';
+import { hideEmailIdentity, hideIdentity } from '../../common/identity.js';
 import { orderBy, skipTake, toPage } from '../../common/pagination.dto.js';
 import { assertSystemTransition, assertTransition, JOB } from '../../common/workflow.js';
 import { AuditService } from '../../core/audit.service.js';
@@ -341,7 +342,7 @@ export class JobsService implements OnModuleInit {
 
   async auditHistory(entity: string, entityId: string) {
     const rows = await this.prisma.auditLog.findMany({ where: { entity, entityId }, orderBy: { at: 'desc' }, take: 200 });
-    return rows.map((r) => ({ id: r.id.toString(), at: r.at, userName: r.userName, action: r.action, before: r.before, after: r.after, reason: r.reason }));
+    return (entity === 'Job' ? hideIdentity(rows) : rows).map((r) => ({ id: r.id.toString(), at: r.at, userName: r.userName, action: r.action, before: r.before, after: r.after, reason: r.reason }));
   }
 
   // ---------------------------------------------------------------- booking
@@ -681,12 +682,13 @@ export class JobsService implements OnModuleInit {
     return { ok: true };
   }
 
-  emails(jobId: string) {
-    return this.prisma.emailLog.findMany({
+  async emails(jobId: string) {
+    const rows = await this.prisma.emailLog.findMany({
       where: { entity: 'Job', entityId: jobId },
       orderBy: { createdAt: 'desc' },
       select: { id: true, toAddress: true, ccAddress: true, subject: true, template: true, status: true, attempts: true, lastError: true, sentAt: true, createdAt: true },
     });
+    return hideEmailIdentity(rows);
   }
 
   /** Combines captured page images into one PDF, in the background. */

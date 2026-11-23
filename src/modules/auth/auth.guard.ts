@@ -7,7 +7,7 @@ import { AppError, forbidden } from '../../common/errors.js';
 import { logger } from '../../common/logger.js';
 import { ModulesService, type ModuleKey } from '../../core/modules.service.js';
 import { PrismaService } from '../../core/prisma.service.js';
-import { PERMS_KEY, MODULE_KEY, PUBLIC_KEY, SIGNED_IN_KEY } from './decorators.js';
+import { BACKGROUND_KEY, PERMS_KEY, MODULE_KEY, PUBLIC_KEY, SIGNED_IN_KEY } from './decorators.js';
 import { SessionService } from './session.service.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -39,7 +39,7 @@ export class AuthGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<FastifyRequest>();
     const sid = req.cookies?.[this.sessions.cookieName];
     if (!sid) throw unauthenticated();
-    const session = await this.sessions.touch(sid);
+    const session = await this.sessions.touch(sid, !this.reflector.getAllAndOverride<boolean>(BACKGROUND_KEY, targets));
     if (!session) throw unauthenticated();
 
     const user = await this.prisma.user.findFirst({

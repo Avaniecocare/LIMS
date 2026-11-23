@@ -78,6 +78,15 @@ export class AdminController {
     return { ok: true };
   }
 
+  @Post('users/:id/reset-2fa')
+  @HttpCode(200)
+  @Perm('admin.users')
+  @ApiOkResponse({ type: OkDto })
+  async resetTotp(@Param('id', ParseUUIDPipe) id: string) {
+    await this.admin.resetTotp(id);
+    return { ok: true };
+  }
+
   /** The image printed on reports this person signs. */
   @Post('users/:id/signature')
   @HttpCode(200)

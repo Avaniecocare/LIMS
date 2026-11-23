@@ -3,6 +3,7 @@ import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import QRCode from 'qrcode';
 import { actorId, can, currentUser, getContext } from '../../common/context.js';
 import { AppError, badRequest, conflict, forbidden, notFound, rule } from '../../common/errors.js';
+import { hideEmailIdentity, hideIdentity } from '../../common/identity.js';
 import { orderBy, skipTake, toPage } from '../../common/pagination.dto.js';
 import { assertSystemTransition, assertTransition, REPORT, TEST } from '../../common/workflow.js';
 import type { CompanySnapshot } from '../../config/company.config.js';
@@ -498,11 +499,22 @@ export class ReportsService implements OnModuleInit {
     await tx.report.update({ where: { id: rev.reportId }, data: { latestStatus: to } });
   }
 
+  /**
+   * A cancelled sample or job must not leave the lab as a report. Taken under the job's lock, which cancelling also
+   * takes, so one of the two always sees the other.
+   */
+  private async assertLive(tx: Tx, r: Full) {
+    await this.jobs.lockJob(tx, r.sample.jobId);
+    const sample = await tx.sample.findUniqueOrThrow({ where: { id: r.sample.id }, select: { status: true, job: { select: { status: true } } } });
+    if (sample.status === 'CANCELLED' || sample.job.status === 'CANCELLED') throw rule('CANCELLED', 'This sample has been cancelled, so its report cannot go any further');
+  }
+
   async submitForReview(id: string, version: number) {
     await this.prisma.$transaction(async (tx) => {
       const r = await this.load(id, tx);
       const rev = this.current(r);
       assertTransition(REPORT, rev.status, 'IN_REVIEW');
+      await this.assertLive(tx, r);
       const open = await tx.sampleTest.count({ where: { sampleId: r.sample.id, deletedAt: null, status: { notIn: ['APPROVED', 'CANCELLED'] } } });
       if (open) throw rule('TESTS_OPEN', 'Some tests are still being re-tested');
       await this.move(tx, rev, version, 'IN_REVIEW');
@@ -516,6 +528,7 @@ export class ReportsService implements OnModuleInit {
       const r = await this.load(id, tx);
       const rev = this.current(r);
       assertTransition(REPORT, rev.status, 'PENDING_APPROVAL');
+      await this.assertLive(tx, r);
       await this.move(tx, rev, version, 'PENDING_APPROVAL', { reviewedById: actorId(), reviewedByName: currentUser()!.name, reviewedAt: new Date() });
       await this.audit.status(tx, { entity: 'Report', entityId: id, from: rev.status, to: 'PENDING_APPROVAL', jobId: r.sample.jobId });
       await this.notify?.(tx, { type: 'REPORT_READY_FOR_APPROVAL', reportId: id });
@@ -630,6 +643,7 @@ export class ReportsService implements OnModuleInit {
       const r = await this.load(id, tx);
       const rev = this.current(r);
       assertTransition(REPORT, rev.status, 'APPROVED');
+      await this.assertLive(tx, r);
       if (rev.reviewedById === me.id && !(await this.settings.get('controls.allowSameReviewerSignatory', tx))) {
         throw new AppError('SAME_REVIEWER', 403, 'The reviewer and signatory of a report must be different people');
       }
@@ -699,6 +713,7 @@ export class ReportsService implements OnModuleInit {
       const r = await this.load(id, tx);
       const rev = this.current(r);
       assertTransition(REPORT, rev.status, 'ISSUED');
+      await this.assertLive(tx, r);
       if (!rev.pdfFileId) throw rule('PDF_PENDING', 'The final PDF is still being prepared. Try again in a moment.');
       if (await this.withheld(tx, r)) throw rule('WITHHELD', 'This customer has report release withheld until payment is received');
       await this.move(tx, rev, dto.version, 'ISSUED', { issuedAt: new Date(), issuedById: actorId() });
@@ -745,12 +760,13 @@ export class ReportsService implements OnModuleInit {
     return { ok: true };
   }
 
-  emails(id: string) {
-    return this.prisma.emailLog.findMany({
+  async emails(id: string) {
+    const rows = await this.prisma.emailLog.findMany({
       where: { entity: 'Report', entityId: id },
       orderBy: { createdAt: 'desc' },
       select: { id: true, toAddress: true, ccAddress: true, subject: true, template: true, status: true, attempts: true, lastError: true, sentAt: true, createdAt: true },
     });
+    return hideEmailIdentity(rows);
   }
 
   /** A correction: a new revision with a mandatory reason, through review and approval again. */
@@ -799,6 +815,6 @@ export class ReportsService implements OnModuleInit {
   history(id: string) {
     return this.prisma.auditLog
       .findMany({ where: { entity: 'Report', entityId: id }, orderBy: { at: 'desc' }, take: 200 })
-      .then((rows) => rows.map((r) => ({ id: r.id.toString(), at: r.at, userName: r.userName, action: r.action, before: r.before, after: r.after, reason: r.reason })));
+      .then((rows) => hideIdentity(rows).map((r) => ({ id: r.id.toString(), at: r.at, userName: r.userName, action: r.action, before: r.before, after: r.after, reason: r.reason })));
   }
 }

@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Query
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { OkDto } from '../auth/auth.dto.js';
 import { NotificationPageDto, NotificationQuery, PreferenceDto, UpdatePreferencesDto } from './notifications.dto.js';
-import { SignedIn } from '../auth/decorators.js';
+import { Background, SignedIn } from '../auth/decorators.js';
 import { NotificationsService } from './notifications.service.js';
 
 @ApiTags('notifications')
@@ -11,7 +11,9 @@ import { NotificationsService } from './notifications.service.js';
 export class NotificationsController {
   constructor(private readonly notifications: NotificationsService) {}
 
+  /** The header bell asks every minute. */
   @Get()
+  @Background()
   @ApiOkResponse({ type: NotificationPageDto })
   list(@Query() q: NotificationQuery) {
     return this.notifications.list(q);

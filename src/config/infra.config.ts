@@ -202,6 +202,18 @@ function loadHelpConfig(env: NodeJS.ProcessEnv, frontendOrigin: string): HelpCon
   };
 }
 
+/**
+ * TRUST_PROXY: how many proxies stand in front (1 behind one load balancer), or their addresses, or true/false. With
+ * true every X-Forwarded-For entry is believed, so use it only behind a proxy that replaces what the caller sent (Caddy).
+ */
+export function parseTrustProxy(raw: string | undefined): boolean | number | string {
+  const v = raw?.trim() || 'false';
+  if (v === 'true' || v === 'false') return v === 'true';
+  if (/^\d{1,2}$/.test(v)) return Number(v);
+  if (/^[0-9a-fA-F.:]+(\/\d{1,3})?(\s*,\s*[0-9a-fA-F.:]+(\/\d{1,3})?)*$/.test(v)) return v;
+  throw new InfraConfigError('TRUST_PROXY must be true, false, a number of proxies, or a list of addresses');
+}
+
 export const INFRA_CONFIG = Symbol('INFRA_CONFIG');
 
 // Production: NIC's IRP 1 (IRP 2 is api.einvoice2.gst.gov.in). The sandbox's addresses are shown only after signing in

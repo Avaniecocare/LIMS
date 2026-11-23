@@ -197,6 +197,8 @@ export class SettingDto {
   value: unknown;
   default: unknown;
   version: number;
+  /** changing it needs a reason, which goes to the audit log */
+  sensitive: boolean;
 }
 
 export class UpdateSettingDto {

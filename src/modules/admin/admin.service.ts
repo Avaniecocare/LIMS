@@ -106,7 +106,10 @@ export class AdminService {
       if (dto.isActive === false && id === currentUser()?.id) throw badRequest('You cannot deactivate your own account');
       // Changing who has which roles, or switching an account off, needs the password confirmed.
       const rolesChange = roleIds !== undefined && (roleIds.length !== before.roles.length || roleIds.some((r) => !before.roles.some((x) => x.roleId === r)));
-      if (rolesChange || (dto.isActive === false && before.isActive)) requireRecentAuth();
+      if (rolesChange || (dto.isActive === false && before.isActive)) {
+        requireRecentAuth();
+        await this.assertCanManage(tx, id);
+      }
       await updateVersioned(tx.user as never, id, version, fields);
       if (roleIds) {
         await this.assertRolesExist(tx, roleIds);
@@ -135,12 +138,35 @@ export class AdminService {
     assertPasswordPolicy(newPassword);
     const user = await this.prisma.user.findFirst({ where: { id, deletedAt: null } });
     if (!user) throw notFound('User');
+    await this.assertCanManage(this.prisma, id);
     await this.prisma.user.update({
       where: { id },
       data: { passwordHash: await argon2.hash(newPassword), passwordChangedAt: new Date(), mustChangePassword: true, failedLogins: 0, lockedUntil: null },
     });
     await this.audit.record({ action: 'user.passwordReset', entity: 'User', entityId: id });
     await this.sessions.destroyAllForUser(id);
+  }
+
+  /** For someone who lost their phone. They sign in with their password alone and can set two-factor up again. */
+  async resetTotp(id: string) {
+    requireRecentAuth();
+    const user = await this.prisma.user.findFirst({ where: { id, deletedAt: null } });
+    if (!user) throw notFound('User');
+    await this.assertCanManage(this.prisma, id);
+    await this.prisma.user.update({ where: { id }, data: { totpEnabled: false, totpSecret: null } });
+    await this.audit.record({ action: 'user.totpReset', entity: 'User', entityId: id });
+    await this.sessions.destroyAllForUser(id);
+    await this.onPrivilegeChange?.({ summary: `${currentUser()?.name ?? 'Someone'} turned off two-factor sign-in for ${user.name}`, userId: id });
+  }
+
+  /**
+   * Taking over or weakening an account is as good as holding its roles, so a person who is not a full administrator
+   * may only do it to people who hold nothing they lack themselves.
+   */
+  private async assertCanManage(tx: Tx | PrismaService, userId: string) {
+    if (isFullAdministrator() || userId === currentUser()?.id) return;
+    const roles = await tx.role.findMany({ where: { users: { some: { userId } } }, include: { permissions: true } });
+    if (roles.some((r) => r.permissions.some((p) => !can(p.permissionCode)))) throw forbidden('This person holds permissions you don’t have. Ask a full administrator.');
   }
 
   private async assertRolesExist(tx: Tx, roleIds: string[]) {

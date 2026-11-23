@@ -3,7 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import argon2 from 'argon2';
 import { Secret, TOTP } from 'otpauth';
 import { currentUser, getContext } from '../../common/context.js';
-import { AppError, badRequest } from '../../common/errors.js';
+import { AppError, badRequest, requireRecentAuth } from '../../common/errors.js';
 import { CompanyService } from '../../core/company.service.js';
 import { EmailTemplateService } from '../../core/email-template.service.js';
 import { ModulesService } from '../../core/modules.service.js';
@@ -82,6 +82,26 @@ export class AuthService {
     if (n === 1) await this.redis.client.expire(key, IP_FAILURE_WINDOW_SECONDS);
   }
 
+  /** Counts in the database, so failures arriving together are all counted. Returns whether the account is now locked. */
+  private async countFailure(userId: string): Promise<boolean> {
+    const { failedLogins } = await this.prisma.user.update({ where: { id: userId }, data: { failedLogins: { increment: 1 } }, select: { failedLogins: true } });
+    if (failedLogins < MAX_FAILED_LOGINS) return false;
+    await this.prisma.user.update({ where: { id: userId }, data: { failedLogins: 0, lockedUntil: new Date(Date.now() + LOCK_MINUTES * 60_000) } });
+    return true;
+  }
+
+  /** The signed-in person's password, asked again. Guessing it in a stolen session is limited like a sign-in. */
+  private async ownPassword(userId: string, password: string): Promise<boolean> {
+    const key = `own-password:${userId}`;
+    const tries = await this.redis.client.incr(key);
+    if (tries === 1) await this.redis.client.expire(key, IP_FAILURE_WINDOW_SECONDS);
+    if (tries > RATE_MAX_ATTEMPTS) throw new AppError('RATE_LIMITED', 429, 'Too many wrong passwords. Wait ten minutes and try again.');
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const ok = await argon2.verify(user.passwordHash, password).catch(() => false);
+    if (ok) await this.redis.client.del(key);
+    return ok;
+  }
+
   /** Returns either a TOTP challenge or the id of the verified user. */
   async verifyCredentials(emailRaw: string, password: string): Promise<{ userId?: string; totpChallenge?: string }> {
     const email = emailRaw.trim().toLowerCase();
@@ -100,12 +120,7 @@ export class AuthService {
     }
     const ok = await argon2.verify(user.passwordHash, password).catch(() => false);
     if (!ok || !user.isActive) {
-      const failed = user.failedLogins + 1;
-      const lock = failed >= MAX_FAILED_LOGINS;
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: { failedLogins: lock ? 0 : failed, lockedUntil: lock ? new Date(Date.now() + LOCK_MINUTES * 60_000) : undefined },
-      });
+      const lock = await this.countFailure(user.id);
       await this.audit.record({ action: lock ? 'auth.account.locked' : 'auth.login.failed', entity: 'User', entityId: user.id });
       await this.countIpFailure();
       throw invalidLogin();
@@ -132,21 +147,36 @@ export class AuthService {
       throw new AppError('RATE_LIMITED', 429, 'Too many attempts. Start again.');
     }
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    // validate() returns the matched window offset, where 0 is a valid match; null means no match.
-    if (!user.totpSecret || this.totp(user.email, user.totpSecret).validate({ token: code, window: 1 }) === null) {
-      await this.audit.record({ action: 'auth.totp.failed', entity: 'User', entityId: user.id });
+    if (!user.isActive || user.deletedAt || (user.lockedUntil && user.lockedUntil > new Date())) {
+      await this.redis.client.del(key);
+      throw invalidLogin();
+    }
+    if (!(await this.totpMatches(user, code))) {
+      // A wrong code counts like a wrong password: otherwise a known password allows unlimited guesses at the code.
+      const lock = await this.countFailure(user.id);
+      await this.countIpFailure();
+      if (lock) await this.redis.client.del(key);
+      await this.audit.record({ action: lock ? 'auth.account.locked' : 'auth.totp.failed', entity: 'User', entityId: user.id });
       throw new AppError('INVALID_TOTP', 401, 'Incorrect code');
     }
     await this.redis.client.del(key);
     return user.id;
   }
 
-  /** Confirms the password for sensitive actions; wrong attempts count towards the lockout like a sign-in. */
+  /** Each code works once, so one read over a shoulder or on the wire cannot be used again. */
+  private async totpMatches(user: { id: string; email: string; totpSecret: string | null }, code: string): Promise<boolean> {
+    if (!user.totpSecret) return false;
+    // validate() returns the matched window offset, where 0 is a valid match; null means no match.
+    const delta = this.totp(user.email, user.totpSecret).validate({ token: code, window: 1 });
+    if (delta === null) return false;
+    const step = Math.floor(Date.now() / 30_000) + delta;
+    return (await this.redis.client.set(`totp-used:${user.id}:${step}`, '1', 'EX', 120, 'NX')) === 'OK';
+  }
+
+  /** Confirms the password for sensitive actions; repeated wrong attempts are refused for a while. */
   async reauthenticate(password: string) {
     const me = currentUser()!;
-    await this.rateLimit(`reauth:${me.id}`);
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: me.id } });
-    if (!(await argon2.verify(user.passwordHash, password).catch(() => false))) {
+    if (!(await this.ownPassword(me.id, password))) {
       await this.audit.record({ action: 'auth.reauth.failed', entity: 'User', entityId: me.id });
       throw new AppError('INVALID_PASSWORD', 403, 'Incorrect password', [{ field: 'password', message: 'Incorrect password' }]);
     }
@@ -202,8 +232,7 @@ export class AuthService {
 
   async changePassword(currentPassword: string, newPassword: string) {
     const me = currentUser()!;
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: me.id } });
-    if (!(await argon2.verify(user.passwordHash, currentPassword).catch(() => false))) {
+    if (!(await this.ownPassword(me.id, currentPassword))) {
       throw badRequest('Current password is incorrect', [{ field: 'currentPassword', message: 'Incorrect password' }]);
     }
     assertPasswordPolicy(newPassword);
@@ -259,25 +288,29 @@ export class AuthService {
   async totpSetup() {
     const me = currentUser()!;
     if (!me.roles.some((r) => TOTP_ROLES.has(r))) throw badRequest('Two-factor login is available for Admin, Signatory and Accounts roles');
+    // Kept aside until a code proves the phone has it: abandoning the set-up must not turn two-factor off.
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: me.id }, select: { totpEnabled: true } });
+    if (user.totpEnabled) requireRecentAuth();
     const secret = new Secret({ size: 20 }).base32;
-    await this.prisma.user.update({ where: { id: me.id }, data: { totpSecret: secret, totpEnabled: false } });
+    await this.redis.client.set(`totp-setup:${me.id}`, secret, 'EX', 900);
     return { secret, otpauthUrl: this.totp(me.email, secret).toString() };
   }
 
   async totpEnable(code: string) {
     const me = currentUser()!;
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: me.id } });
-    if (!user.totpSecret || this.totp(user.email, user.totpSecret).validate({ token: code, window: 1 }) === null) {
+    const secret = await this.redis.client.get(`totp-setup:${me.id}`);
+    if (!secret) throw badRequest('Set-up expired. Start again.', [{ field: 'code', message: 'Set-up expired. Start again.' }]);
+    if (!(await this.totpMatches({ id: me.id, email: me.email, totpSecret: secret }, code))) {
       throw badRequest('Incorrect code', [{ field: 'code', message: 'Incorrect code' }]);
     }
-    await this.prisma.user.update({ where: { id: me.id }, data: { totpEnabled: true } });
+    await this.prisma.user.update({ where: { id: me.id }, data: { totpEnabled: true, totpSecret: secret } });
+    await this.redis.client.del(`totp-setup:${me.id}`);
     await this.audit.record({ action: 'auth.totp.enabled', entity: 'User', entityId: me.id });
   }
 
   async totpDisable(password: string) {
     const me = currentUser()!;
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: me.id } });
-    if (!(await argon2.verify(user.passwordHash, password).catch(() => false))) {
+    if (!(await this.ownPassword(me.id, password))) {
       throw badRequest('Incorrect password', [{ field: 'password', message: 'Incorrect password' }]);
     }
     await this.prisma.user.update({ where: { id: me.id }, data: { totpEnabled: false, totpSecret: null } });
@@ -286,7 +319,6 @@ export class AuthService {
 
   /** Re-authentication for electronic signatures. */
   async confirmPassword(userId: string, password: string): Promise<boolean> {
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    return argon2.verify(user.passwordHash, password).catch(() => false);
+    return this.ownPassword(userId, password);
   }
 }

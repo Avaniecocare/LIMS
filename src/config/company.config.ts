@@ -12,6 +12,7 @@
 import { existsSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import { isValidGstin, PAN_RE } from '../common/india.js';
+import { numberFormatProblem } from '../core/number-format.js';
 
 export interface CompanyProfile {
   companyName: string;
@@ -167,7 +168,8 @@ export function validateProfile(p: CompanyProfile): { field: string; message: st
   if (!/^[A-Za-z0-9-]{1,10}$/.test(p.documentPrefix ?? '')) bad('documentPrefix', '1-10 letters, digits or hyphens');
   if (p.accreditation.nablMode && !filled(p.accreditation.nablCertificateNo)) bad('accreditation.nablCertificateNo', 'Required when NABL mode is on');
   if (p.accreditation.nablMode && !filled(p.accreditation.ulrFormat)) bad('accreditation.ulrFormat', 'Required when NABL mode is on');
-  if (filled(p.accreditation.ulrFormat) && !p.accreditation.ulrFormat.includes('{SEQ')) bad('accreditation.ulrFormat', 'Must contain a {SEQ:n} token');
+  const ulrProblem = filled(p.accreditation.ulrFormat) ? numberFormatProblem(p.accreditation.ulrFormat) : null;
+  if (ulrProblem) bad('accreditation.ulrFormat', ulrProblem);
   return problems;
 }
 
@@ -250,7 +252,7 @@ export function legacyCompanyFromEnv(env: NodeJS.ProcessEnv = process.env): Lega
   const ulrFormat = opt('COMPANY_ULR_FORMAT');
   if (nablMode && !nablCertificateNo) problems.push({ variable: 'COMPANY_NABL_CERTIFICATE_NO', problem: 'is required when COMPANY_NABL_MODE is on' });
   if (nablMode && !ulrFormat) problems.push({ variable: 'COMPANY_ULR_FORMAT', problem: 'is required when COMPANY_NABL_MODE is on' });
-  check('COMPANY_ULR_FORMAT', ulrFormat, (v) => v.includes('{SEQ'), 'must contain a {SEQ:n} token');
+  check('COMPANY_ULR_FORMAT', ulrFormat, (v) => numberFormatProblem(v) === null, 'must contain a {SEQ:n} token, and only {PREFIX}, {FY}, {YY} and {SEQ:n}');
 
   const documentPrefix = req('COMPANY_DOCUMENT_PREFIX');
   check('COMPANY_DOCUMENT_PREFIX', documentPrefix, (v) => /^[A-Za-z0-9-]{1,10}$/.test(v), 'must be 1-10 letters, digits or hyphens');

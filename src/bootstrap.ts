@@ -13,11 +13,13 @@ import { runWithContext } from './common/context.js';
 import { AllExceptionsFilter, AppError, flattenValidation } from './common/errors.js';
 import { installErrorWebhook } from './common/error-webhook.js';
 import { logger } from './common/logger.js';
-import { INFRA_CONFIG, type InfraConfig } from './config/infra.config.js';
+import { INFRA_CONFIG, parseTrustProxy, type InfraConfig } from './config/infra.config.js';
 
 /** Builds the API. Tests use this too, so they exercise the same middleware as production. */
-export async function createApp(options: { trustProxy?: boolean } = {}): Promise<NestFastifyApplication> {
-  const adapter = new FastifyAdapter({ trustProxy: options.trustProxy ?? process.env.TRUST_PROXY === 'true', bodyLimit: 2 * 1024 * 1024 });
+export async function createApp(options: { trustProxy?: boolean | number | string } = {}): Promise<NestFastifyApplication> {
+  const trust = options.trustProxy ?? parseTrustProxy(process.env.TRUST_PROXY);
+  // This Fastify takes a hop count only as a function: the nearest `trust` addresses are ours.
+  const adapter = new FastifyAdapter({ trustProxy: typeof trust === 'number' ? (_address: string, hop: number) => hop < trust : trust, bodyLimit: 2 * 1024 * 1024 });
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, { logger: ['warn', 'error'], rawBody: true }); // raw bodies: webhook signatures
   const infra = app.get<InfraConfig>(INFRA_CONFIG);
   installErrorWebhook(infra.errorTrackingDsn, 'lims');

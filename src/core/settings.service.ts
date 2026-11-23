@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { badRequest, conflict } from '../common/errors.js';
 import { AuditService } from './audit.service.js';
+import { numberFormatProblem } from './number-format.js';
 import { Prisma, PrismaService, type Tx } from './prisma.service.js';
 
 type Validator = (v: unknown) => boolean;
@@ -31,7 +32,7 @@ export const SETTINGS = {
       ULR: '{SEQ:8}',
       NC: '{PREFIX}/NC/{FY}/{SEQ:4}',
     } as Record<string, string>,
-    validate: (v: unknown) => typeof v === 'object' && v !== null && Object.values(v).every((f) => typeof f === 'string' && f.includes('{SEQ')),
+    validate: (v: unknown) => typeof v === 'object' && v !== null && Object.values(v).every((f) => numberFormatProblem(f) === null),
     label: 'Document number formats',
     group: 'Numbering',
   },
@@ -106,7 +107,7 @@ export class SettingsService {
       .map((key) => {
         const def = SETTINGS[key];
         const row = byKey.get(key);
-        return { key, label: def.label, group: def.group, value: row?.value ?? def.default, version: row?.version ?? 0, default: def.default };
+        return { key, label: def.label, group: def.group, value: row?.value ?? def.default, version: row?.version ?? 0, default: def.default, sensitive: 'sensitive' in def };
       });
   }
 

@@ -52,10 +52,13 @@ export class SessionService {
     return { id, data };
   }
 
-  /** Reads and slides the idle timeout, up to an absolute limit after sign-in. */
-  async touch(id: string): Promise<SessionData | null> {
+  /**
+   * Reads and slides the idle timeout, up to an absolute limit after sign-in. A request the page makes by itself
+   * (`active` false) reads only, so a screen left open still signs out.
+   */
+  async touch(id: string, active = true): Promise<SessionData | null> {
     const key = this.key(id);
-    const raw = await this.redis.client.getex(key, 'EX', this.ttl);
+    const raw = active ? await this.redis.client.getex(key, 'EX', this.ttl) : await this.redis.client.get(key);
     if (!raw) return null;
     const data = JSON.parse(raw) as SessionData;
     if (Date.now() - data.createdAt > this.cfg.sessionMaxHours * 3600_000) {
@@ -63,9 +66,9 @@ export class SessionService {
       return null;
     }
     // "Last active" for the sessions list, written at most once a minute.
-    if (!data.lastSeenAt || Date.now() - data.lastSeenAt > 60_000) {
+    if (active && (!data.lastSeenAt || Date.now() - data.lastSeenAt > 60_000)) {
       data.lastSeenAt = Date.now();
-      await this.redis.client.set(key, JSON.stringify(data), 'KEEPTTL');
+      await this.redis.client.set(key, JSON.stringify(data), 'EX', this.ttl, 'XX');
     }
     return data;
   }

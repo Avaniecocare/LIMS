@@ -1385,6 +1385,8 @@ model EInvoice {
   payload         Json?
   lastError       String?
   attempts        Int            @default(0)
+  /// sent to the IRP and no clear answer received: an IRN may exist there
+  uncertain       Boolean        @default(false)
   cancelledAt     DateTime?
   cancelReasonCode String?
   cancelRemark    String?

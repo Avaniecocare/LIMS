@@ -16,12 +16,17 @@ Choices made where the brief left room. Each is the default; anything a lab may 
 - **CSRF:** a per-session token returned by `/auth/me` and login, sent as `X-CSRF-Token`, in addition to `SameSite=Lax`. The UI keeps it in memory.
 - **Lockout:** 5 failures lock an account for 15 minutes. Login is also rate limited to 10 attempts per minute per IP and email.
 - **Password policy:** 10+ characters with upper, lower, digit and symbol. New users and admin resets must change the password at first sign-in.
+- **Two-factor sign-in.** Wrong codes count toward the lockout like wrong passwords, and each code works once. A lost phone is handled by an administrator (Admin, Users; audited, password confirmed, other administrators alerted) or, when there is no other administrator, on the server with `node dist/recover.js reset-2fa <email>`.
+- **Managing someone with more access than you** (password reset, two-factor reset, roles, deactivation) is refused unless you are a full administrator.
+- **The notification bell does not count as activity,** so a screen left open signs out after the idle timeout.
+- **`TRUST_PROXY` is a number of proxies on AWS (1),** because the load balancer appends to whatever `X-Forwarded-For` the caller sent. `true` is right only behind a proxy that replaces it, such as Caddy.
 - **First-run setup** is public only while no user exists, serialised by an advisory lock. Set `SETUP_TOKEN` to require a token as well; `LIMS-Deploy` always does.
 - **GSTIN validation** checks format and the mod-36 check digit, for both company and customers.
 - **Audit log is append-only at database level:** triggers reject UPDATE, DELETE and TRUNCATE. Because the app connects as the table owner, a DBA could still disable the trigger; `LIMS-Deploy` can run the app under a non-owner role to close this.
 
 ## Numbering
 - Formats are settings using `{PREFIX}`, `{FY}` and `{SEQ:n}`. Series reset each financial year, except customer numbers (CRN), which are unique for life.
+- **A series restarts only as often as its numbers show:** each financial year with `{FY}`, each calendar year with `{YY}`, otherwise never (it carries on after the highest number so far). Resetting a series whose numbers show no year would repeat old numbers. Unknown tokens are refused when a format is saved, because they would print as typed on signed documents.
 - A number is allocated with a row-locking upsert inside the caller's transaction, so concurrent creators serialise and a rollback does not burn a number.
 
 ## Settings and roles
@@ -143,6 +148,7 @@ Choices made where the brief left room. Each is the default; anything a lab may 
 ## GST e-invoicing
 - **B2B documents only, registered at the IRP right after issue, outside the issue transaction.** A tax invoice or credit note to a customer with a GSTIN is registered as soon as it is issued (the lab can switch that to manual). The IRP is a network call, so it runs after the invoice commits; a failure never undoes the invoice. The reason is stored and shown in plain words, with a retry. B2C invoices are outside e-invoicing.
 - **Nothing B2B leaves without its IRN.** Email and WhatsApp refuse a B2B invoice that is not registered yet (`IRN_MISSING`); issuing with an email address holds the email when registration fails.
+- **A lost answer blocks cancelling.** When a registration was sent and no clear answer came back, an IRN may exist at the IRP, so the invoice cannot be cancelled until it is registered again (the IRP then returns the existing IRN). A refusal of the document itself clears this; a sign-in error does not.
 - **Cancel the IRN first.** Cancelling an invoice with an IRN cancels it at the IRP first, with the IRP's reason code; if the IRP refuses, the invoice stays issued. After 24 hours the IRP no longer allows it, so the invoice cannot be cancelled here either: a credit note corrects it.
 - **Off until an Admin turns it on.** Unlike other modules, `einvoice` stays off once the server is set up (`OFF_UNTIL_TURNED_ON`), because switching it on changes what issuing does. Admin, E-invoicing lists what still stops registration: seller address, GSTIN mismatch, and number formats over the IRP's 16 characters.
 - **Credentials are server settings only** (`EINVOICE_*`), never in the database, Admin or a browser. A half-configured `nic` provider stops the server at start rather than failing at the first invoice.

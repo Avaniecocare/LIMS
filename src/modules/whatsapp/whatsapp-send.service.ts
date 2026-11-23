@@ -155,7 +155,7 @@ export class WhatsappSendService {
           ).map((c) => ({ name: c.name, phone: c.phone! }))
         : [];
     const seeNumbers = can('customers.view');
-    const messages = (await this.whatsapp.log(entity, entityId)).map((m) => ({ ...m, toNumber: seeNumbers ? m.toNumber : `••••${m.toNumber.slice(-4)}` }));
+    const messages = (await this.whatsapp.log(entity, entityId)).map((m) => ({ ...m, toNumber: seeNumbers ? m.toNumber : `••••${m.toNumber.slice(-4)}`, ...(seeNumbers ? {} : { params: [] }) }));
     return { available, contacts, messages };
   }
 

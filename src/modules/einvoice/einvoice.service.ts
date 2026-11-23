@@ -22,6 +22,9 @@ const IN_FLIGHT_MS = 2 * 60 * 1000;
 
 type Row = Prisma.EInvoiceGetPayload<object>;
 
+/** A refusal of the document itself. Codes starting with 1 are sign-in and session errors, which say nothing about it. */
+const isDecision = (e: unknown) => e instanceof IrpRejection && !e.existingIrn && e.codes.length > 0 && e.codes.every((c) => !c.startsWith('1'));
+
 export interface EInvoiceView {
   status: Row['status'];
   provider: string;
@@ -275,7 +278,15 @@ export class EInvoiceService {
     const claimed = existing
       ? await this.prisma.eInvoice.updateMany({
           where: { id: existing.id, updatedAt: existing.updatedAt },
-          data: { status: 'PENDING', attempts: { increment: 1 }, payload: payload ?? Prisma.DbNull, lastError: null, provider: c.provider, environment: c.environment },
+          data: {
+            status: 'PENDING',
+            attempts: { increment: 1 },
+            payload: payload ?? Prisma.DbNull,
+            lastError: null,
+            provider: c.provider,
+            environment: c.environment,
+            ...(payload ? { uncertain: true } : {}),
+          },
         })
       : await this.prisma.eInvoice
           .create({
@@ -289,6 +300,7 @@ export class EInvoiceService {
               provider: c.provider,
               environment: c.environment,
               payload: payload ?? Prisma.DbNull,
+              uncertain: !!payload,
               createdById: actorId(),
             },
           })
@@ -313,12 +325,12 @@ export class EInvoiceService {
           return this.fail(row, `The GST portal already has this ${what} (IRN ${e.existingIrn}), but its details could not be fetched: ${this.describe(e2)}`);
         }
       } else {
-        return this.fail(row, this.describe(e));
+        return this.fail(row, this.describe(e), isDecision(e));
       }
     }
     const saved = await this.prisma.eInvoice.update({
       where: { id: row.id },
-      data: { status: 'GENERATED', irn: reg.irn, ackNo: reg.ackNo, ackDate: reg.ackDate, signedInvoice: reg.signedInvoice, signedQrCode: reg.signedQrCode, lastError: null },
+      data: { status: 'GENERATED', irn: reg.irn, ackNo: reg.ackNo, ackDate: reg.ackDate, signedInvoice: reg.signedInvoice, signedQrCode: reg.signedQrCode, lastError: null, uncertain: false },
     });
     await this.audit.record({
       action: 'EInvoice.generated',
@@ -329,9 +341,10 @@ export class EInvoiceService {
     return saved;
   }
 
-  private async fail(row: Row, message: string) {
+  /** `decided`: the IRP answered that it did not register the document, so nothing can be live there. */
+  private async fail(row: Row, message: string, decided = false) {
     this.log.warn(`IRN for ${row.docType} ${row.docNo} failed: ${message}`);
-    const saved = await this.prisma.eInvoice.update({ where: { id: row.id }, data: { status: 'FAILED', lastError: message.slice(0, 2000) } });
+    const saved = await this.prisma.eInvoice.update({ where: { id: row.id }, data: { status: 'FAILED', lastError: message.slice(0, 2000), ...(decided ? { uncertain: false } : {}) } });
     await this.audit.record({ action: 'EInvoice.failed', entity: row.invoiceId ? 'Invoice' : 'CreditNote', entityId: (row.invoiceId ?? row.creditNoteId)!, after: { error: message.slice(0, 500) } });
     return saved;
   }
@@ -349,6 +362,9 @@ export class EInvoiceService {
    */
   async cancelInvoiceIrn(invoiceId: string, reason: CancelReason | undefined, remark: string) {
     const row = await this.prisma.eInvoice.findUnique({ where: { invoiceId } });
+    // A lost answer may have left a live IRN behind. Registering again finds it, so it can be cancelled properly.
+    if (row?.uncertain && row.status !== 'GENERATED')
+      throw rule('IRN_UNCERTAIN', 'The GST portal’s answer to the last registration was not received, so this invoice may have an IRN there. Register it again first; then it can be cancelled.');
     if (!row || row.status !== 'GENERATED' || !row.irn) return null;
     if (!row.ackDate || Date.now() - row.ackDate.getTime() > CANCEL_WINDOW_MS)
       throw rule('IRN_NOT_CANCELLABLE', 'This invoice was registered at the GST portal more than 24 hours ago, so its IRN can no longer be cancelled. Raise a credit note instead.');

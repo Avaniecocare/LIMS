@@ -3,6 +3,7 @@
   "entry": [
     "src/openapi.ts",
     "src/seed/cli.ts",
+    "src/recover.ts",
     "scripts/*.mjs",
     "load-test/*.mjs",
     "docker/dev-s3/*.mjs",
