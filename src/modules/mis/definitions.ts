@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- rows are shaped per report and described by their column list */
+import { SampleStatus, TestStatus } from '../../generated/prisma/client.js';
 import { Prisma, type ReadPrismaService } from '../../core/prisma.service.js';
 import { ageingBucket, daysOverdue } from '../invoices/ageing.js';
 import { enteredValue } from '../testing/calc.js';
@@ -61,12 +62,16 @@ const page = async <T>(find: (args: { skip: number; take: number }) => Promise<T
 /** Aggregate reports compute all groups, then page in memory; they stay small by construction. */
 const pageMemory = (rows: any[], c: MisContext) => ({ rows: rows.slice(c.skip, c.skip + c.take), total: rows.length });
 
+// Named, not "everything but": finished work is nearly the whole table, and only the list of names can use the index.
+const OPEN_TESTS = Object.values(TestStatus).filter((s) => s !== 'APPROVED' && s !== 'CANCELLED');
+const OPEN_SAMPLES = Object.values(SampleStatus).filter((s) => s !== 'COMPLETED' && s !== 'CANCELLED');
+
 /** ---- Shared definitions. The dashboard counts these same filters, so its numbers always match. ---- */
 export const WHERE = {
-  pendingSamples: (f: MisFilters): Prisma.SampleWhereInput => ({ deletedAt: null, status: { notIn: ['COMPLETED', 'CANCELLED'] }, ...sampleFilter(f) }),
+  pendingSamples: (f: MisFilters): Prisma.SampleWhereInput => ({ deletedAt: null, status: { in: OPEN_SAMPLES }, ...sampleFilter(f) }),
   tatCrossedTests: (f: MisFilters, today: Date): Prisma.SampleTestWhereInput => ({
     deletedAt: null,
-    status: { notIn: ['APPROVED', 'CANCELLED'] },
+    status: { in: OPEN_TESTS },
     dueDate: { lt: today },
     sample: { status: { not: 'CANCELLED' }, job: { status: { not: 'CANCELLED' } } },
     ...testFilter(f),
@@ -86,7 +91,7 @@ export const WHERE = {
   }),
   pendingTests: (f: MisFilters): Prisma.SampleTestWhereInput => ({
     deletedAt: null,
-    status: { notIn: ['APPROVED', 'CANCELLED'] },
+    status: { in: OPEN_TESTS },
     sample: { status: { not: 'CANCELLED' }, job: { status: { not: 'CANCELLED' } } },
     ...testFilter(f),
   }),
@@ -126,7 +131,8 @@ function testFilter(f: MisFilters): Prisma.SampleTestWhereInput {
     ...(f.stage ? { currentStage: f.stage } : {}),
     ...(f.departmentId ? { departmentId: f.departmentId } : {}),
     ...(f.technicianId ? { assignedToId: f.technicianId } : {}),
-    ...(f.customerId ? { sample: { job: { customerId: f.customerId } } } : {}),
+    // Beside, not instead of, what a report already asks of the sample (that it is not cancelled).
+    ...(f.customerId ? { AND: { sample: { job: { customerId: f.customerId } } } } : {}),
   };
 }
 
