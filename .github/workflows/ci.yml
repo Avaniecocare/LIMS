@@ -106,6 +106,16 @@ jobs:
             APP_VERSION=${{ github.sha }}
             "LICENCE_PUBLIC_KEY=${{ vars.LICENCE_PUBLIC_KEY }}"
           cache-from: type=gha,scope=${{ matrix.arch }}
+      - name: The licensed image holds exactly that key, and the other one none
+        if: vars.LICENCE_PUBLIC_KEY != ''
+        env:
+          KEY: ${{ vars.LICENCE_PUBLIC_KEY }}
+          IMAGE: ghcr.io/avaniecocare/lims:sha-${{ github.sha }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          held="$(docker run --rm --entrypoint cat "$IMAGE-licensed-$ARCH" /app/licence.pub)"
+          [ "$held" = "$KEY" ]
+          if docker run --rm --entrypoint test "$IMAGE-$ARCH" -e /app/licence.pub; then exit 1; fi
   # Known vulnerabilities, of high severity or worse, that have a fix. Nothing is tagged for use until it passes.
   scan:
     needs: image-build
