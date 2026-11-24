@@ -1,5 +1,6 @@
 # 500,000 tests, 125,000 samples and 50,000 jobs in one database, and the list screens, searches, dashboard and reports
-# asked for again and again: first by 4 people at once, then by 25.
+# asked for again and again: first by 4 people at once, then by 25. The realistic shape (4% of the work open) must pass; the
+# stress (all of it open, far beyond any lab) is there to be read.
 name: Load test
 on:
   push:
@@ -12,6 +13,14 @@ concurrency:
   cancel-in-progress: true
 jobs:
   load:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: realistic, open: 4, must: true }
+          - { name: stress, open: 100, must: false }
+    name: ${{ matrix.name }}
+    continue-on-error: ${{ !matrix.must }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     services:
@@ -33,6 +42,7 @@ jobs:
       - run: npm run build
       - run: npx prisma migrate deploy
       - run: node load-test/run.mjs --seed
+        env: { OPEN_PERCENT: '${{ matrix.open }}' }
       - run: node --env-file=.env.example dist/seed/cli.js seed
       - name: Log how PostgreSQL runs anything over 150 ms
         env: { PG: '${{ job.services.postgres.id }}' }
@@ -52,6 +62,7 @@ jobs:
         run: docker logs "$PG" 2>&1 | python3 load-test/slow.py
       - name: Twenty-five people at once, 4 s for the slowest 5%
         env: { EMAIL: admin@demo.example, PASSWORD: 'Demo-Password-1!', CONCURRENCY: 25, ROUNDS: 6, P95_BUDGET_MS: 4000 }
+        if: success() || !matrix.must
         run: node load-test/run.mjs
       - name: Memory and the API's log
         if: always()

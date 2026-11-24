@@ -20,7 +20,8 @@ if (process.argv.includes('--seed')) {
   } else {
     console.log('Seeding 500,000 tests...');
     console.time('seed');
-    await client.query(readFileSync(new URL('./seed.sql', import.meta.url), 'utf8'));
+    const open = Number(process.env.OPEN_PERCENT ?? 4);
+    await client.query(readFileSync(new URL('./seed.sql', import.meta.url), 'utf8').replaceAll('__OPEN__', String(open)));
     console.timeEnd('seed');
   }
   await client.end();

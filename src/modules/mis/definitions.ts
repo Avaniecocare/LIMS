@@ -52,6 +52,8 @@ const sqlFrom = (f: MisFilters) => (f.from ? dayStart(f.from) : new Date('2000-0
 const sqlTo = (f: MisFilters) => (f.to ? dayEnd(f.to) : new Date('2100-01-01'));
 
 const page = async <T>(find: (args: { skip: number; take: number }) => Promise<T[]>, count: () => Promise<number>, c: MisContext) => {
+  // Only the total is wanted: fetching a row to throw it away can cost as much as the report.
+  if (c.take === 0) return { rows: [], total: await count() };
   const [rows, total] = await Promise.all([find({ skip: c.skip, take: c.take }), count()]);
   return { rows, total };
 };
@@ -130,8 +132,16 @@ function testFilter(f: MisFilters): Prisma.SampleTestWhereInput {
 
 const sampleInclude = {
   job: { select: { jobNo: true, urgent: true, receivedAt: true, customer: { select: { name: true } } } },
-  _count: { select: { tests: { where: { deletedAt: null, status: { not: 'CANCELLED' as const } } } } },
 };
+/** How many tests each has, for these samples only: asked for with the samples, the database counts every test there is. */
+async function withTests<T extends { id: string }>(db: MisContext['db'], samples: T[]): Promise<(T & { testCount: number })[]> {
+  const counts = new Map<string, number>();
+  for (let i = 0; i < samples.length; i += 5_000) {
+    const ids = samples.slice(i, i + 5_000).map((s) => s.id);
+    for (const g of await db.sampleTest.groupBy({ by: ['sampleId'], where: { sampleId: { in: ids }, deletedAt: null, status: { not: 'CANCELLED' } }, _count: true })) counts.set(g.sampleId, g._count);
+  }
+  return samples.map((s) => ({ ...s, testCount: counts.get(s.id) ?? 0 }));
+}
 const sampleRow = (s: any) => ({
   sampleNo: s.sampleNo,
   jobNo: s.job.jobNo,
@@ -140,7 +150,7 @@ const sampleRow = (s: any) => ({
   status: s.status,
   urgent: s.job.urgent ? 'Yes' : 'No',
   receivedAt: s.job.receivedAt,
-  tests: s._count.tests,
+  tests: s.testCount,
   condition: s.condition,
   quantity: s.quantity,
   size: s.size,
@@ -236,7 +246,7 @@ export const REPORTS: MisReport[] = [
     columns: sampleColumns,
     run: (c) =>
       page(
-        (a) => c.db.sample.findMany({ where: WHERE.pendingSamples(c.f), include: sampleInclude, orderBy: { createdAt: 'asc' }, ...a }).then((r) => r.map(sampleRow)),
+        (a) => c.db.sample.findMany({ where: WHERE.pendingSamples(c.f), include: sampleInclude, orderBy: { createdAt: 'asc' }, ...a }).then(async (r) => (await withTests(c.db, r)).map(sampleRow)),
         () => c.db.sample.count({ where: WHERE.pendingSamples(c.f) }),
         c,
       ),
@@ -320,7 +330,7 @@ export const REPORTS: MisReport[] = [
     columns: sampleColumns,
     run: (c) =>
       page(
-        (a) => c.db.sample.findMany({ where: WHERE.samplesReceived(c.f), include: sampleInclude, orderBy: { createdAt: 'desc' }, ...a }).then((r) => r.map(sampleRow)),
+        (a) => c.db.sample.findMany({ where: WHERE.samplesReceived(c.f), include: sampleInclude, orderBy: { createdAt: 'desc' }, ...a }).then(async (r) => (await withTests(c.db, r)).map(sampleRow)),
         () => c.db.sample.count({ where: WHERE.samplesReceived(c.f) }),
         c,
       ),
@@ -338,7 +348,7 @@ export const REPORTS: MisReport[] = [
         (a) =>
           c.db.sample
             .findMany({ where: WHERE.samplesReceived(c.f), include: { ...sampleInclude, attributes: true }, orderBy: { createdAt: 'desc' }, ...a })
-            .then((r) => r.map((s) => ({ ...sampleRow(s), attributes: s.attributes.map((x) => `${x.label}: ${x.value}`).join('; ') }))),
+            .then(async (r) => (await withTests(c.db, r)).map((s) => ({ ...sampleRow(s), attributes: s.attributes.map((x) => `${x.label}: ${x.value}`).join('; ') }))),
         () => c.db.sample.count({ where: WHERE.samplesReceived(c.f) }),
         c,
       ),
@@ -463,7 +473,7 @@ export const REPORTS: MisReport[] = [
     run: (c) => {
       const where: Prisma.SampleWhereInput = { deletedAt: null, ...sampleFilter(c.f) };
       return page(
-        (a) => c.db.sample.findMany({ where, include: sampleInclude, orderBy: { createdAt: 'desc' }, ...a }).then((r) => r.map(sampleRow)),
+        (a) => c.db.sample.findMany({ where, include: sampleInclude, orderBy: { createdAt: 'desc' }, ...a }).then(async (r) => (await withTests(c.db, r)).map(sampleRow)),
         () => c.db.sample.count({ where }),
         c,
       );
@@ -492,7 +502,7 @@ export const REPORTS: MisReport[] = [
       const users = new Map(
         (await c.db.user.findMany({ where: { id: { in: res.rows.map((r) => r.job.receivedById).filter((x): x is string => !!x) } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]),
       );
-      return { rows: res.rows.map((s) => ({ ...sampleRow(s), collector: users.get(s.job.receivedById ?? '') ?? 'Unknown' })), total: res.total };
+      return { rows: (await withTests(c.db, res.rows)).map((s) => ({ ...sampleRow(s), collector: users.get(s.job.receivedById ?? '') ?? 'Unknown' })), total: res.total };
     },
   },
   {
@@ -618,8 +628,14 @@ export const REPORTS: MisReport[] = [
         (a) =>
           c.db.sample
             .findMany({ where, include: sampleInclude, orderBy: { createdAt: 'desc' }, ...a })
-            .then((r) =>
-              r.map((s) => ({ ...sampleRow(s), returnStatus: s.returnedAt ? s.returnStatus : 'Pending', returnedAt: s.returnedAt, retentionUntil: s.retentionUntil, disposedAt: s.disposedAt })),
+            .then(async (r) =>
+              (await withTests(c.db, r)).map((s) => ({
+                ...sampleRow(s),
+                returnStatus: s.returnedAt ? s.returnStatus : 'Pending',
+                returnedAt: s.returnedAt,
+                retentionUntil: s.retentionUntil,
+                disposedAt: s.disposedAt,
+              })),
             ),
         () => c.db.sample.count({ where }),
         c,

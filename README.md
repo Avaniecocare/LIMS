@@ -65,7 +65,7 @@ Quote values containing `#` or spaces in env files: `COMPANY_PRIMARY_COLOR="#0f4
 
 ## Load test
 
-Repeatable, against a dedicated database with 500,000 tests:
+Repeatable, against a dedicated database with 500,000 tests, 4% of them still open (`OPEN_PERCENT`). GitHub runs it on every `build/**` push, and a stress with all of them open:
 
 ```sh
 export DATABASE_URL=postgresql://lims@localhost:5432/lims_load

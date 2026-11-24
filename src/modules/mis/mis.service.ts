@@ -77,7 +77,7 @@ export class MisService implements OnModuleInit {
   /** The total for a report under given filters, the same number the report's own pager shows. */
   async count(key: string, f: MisFilters, today = istToday()): Promise<number> {
     const r = this.find(key);
-    return (await r.run({ db: this.read, f, today, skip: 0, take: 1 })).total;
+    return (await r.run({ db: this.read, f, today, skip: 0, take: 0 })).total;
   }
 
   async run(key: string, q: MisQuery) {

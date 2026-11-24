@@ -187,3 +187,8 @@ Choices made where the brief left room. Each is the default; anything a lab may 
 - **Images are tagged for use only after a vulnerability scan** (high severity or worse, with a fix available).
 - **Licensed images** are built beside the others when the repository variable `LICENCE_PUBLIC_KEY` is set, and end in `-licensed`. The browser tests use the unlicensed ones.
 - **The load test runs on GitHub,** on every `build/**` push.
+- **Two load shapes.** The seed has 500,000 tests with 4% still open, which a large lab with years of history has, and must stay within 800 ms. With all of them open (400,000) it is a stress to read, not a target: the cost of the open lists grows with the open work.
+- **Counts for a page of rows are asked for those rows,** in a second query. As a relation count, PostgreSQL counted every test in the database to show 25 samples.
+
+## The runtime image
+- **Debian slim with Chromium's headless shell, not Playwright's image,** which also carries Firefox and WebKit: gigabytes never used, whose vulnerabilities the scan rightly refuses.

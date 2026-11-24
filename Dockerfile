@@ -13,10 +13,19 @@ COPY src ./src
 RUN npx nest build && npm rebuild argon2 && npm prune --omit=dev --ignore-scripts \
   && test -f node_modules/prisma/package.json && test -e node_modules/.bin/prisma
 
-# Playwright's image carries Chromium and its system libraries for PDF rendering.
-FROM mcr.microsoft.com/playwright:v1.64.1-noble AS runtime
+# The same base as the build, with only what PDF rendering needs. Playwright's own image also carries Firefox and WebKit:
+# several gigabytes, and other people's vulnerabilities to answer for.
+FROM node:24-bookworm-slim AS runtime
 ENV NODE_ENV=production PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 WORKDIR /app
+# Its own layer, from the locked version alone, so a code change does not download the browser again.
+COPY --from=build /app/node_modules/playwright /opt/playwright/node_modules/playwright
+COPY --from=build /app/node_modules/playwright-core /opt/playwright/node_modules/playwright-core
+RUN apt-get update && apt-get upgrade -y \
+  && node /opt/playwright/node_modules/playwright/cli.js install --with-deps --only-shell chromium \
+  && apt-get install -y --no-install-recommends fonts-liberation fonts-noto-core fonts-freefont-ttf \
+  && rm -rf /opt/playwright /var/lib/apt/lists/* /root/.cache \
+  && groupadd -g 1001 lims && useradd -u 1001 -g 1001 -m lims
 # A vendor's public key (PEM). With it, the image needs a licence; without it, no licence is asked for.
 ARG LICENCE_PUBLIC_KEY=""
 RUN if [ -n "$LICENCE_PUBLIC_KEY" ]; then printf '%s\n' "$LICENCE_PUBLIC_KEY" > /app/licence.pub && chmod 444 /app/licence.pub; fi
@@ -27,9 +36,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/prisma.config.ts /app/package.json /app/package-lock.json ./
-# Chromium comes with this base image (PLAYWRIGHT_BROWSERS_PATH); the worker renders PDFs with it.
-# Nothing is installed here: every package comes, locked, from the build stage.
-# pwuser, by number: Kubernetes checks runAsNonRoot against a number.
+# By number: Kubernetes checks runAsNonRoot against a number.
 USER 1001:1001
 # 9464 is the operations port: never publish it.
 EXPOSE 3000 9464
