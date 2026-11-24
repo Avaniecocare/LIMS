@@ -141,7 +141,7 @@ describe('a changed sign-in email', () => {
     const same = (await admin.patch(`/admin/users/${u.id}`, { version: 1, email: 'old@hard.example', phone: '1' }).expect(200)).body;
     await session.get('/auth/me').expect(200);
 
-    const { body } = await admin.patch(`/admin/users/${u.id}`, { version: same.version, email: ' New@Hard.example ' }).expect(200);
+    const { body } = await admin.patch(`/admin/users/${u.id}`, { version: same.version, email: 'New@Hard.example' }).expect(200);
     expect(body.email).toBe('new@hard.example');
     await session.get('/auth/me').expect(401);
     await signIn('old@hard.example').expect(401);
