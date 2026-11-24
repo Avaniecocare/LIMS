@@ -80,7 +80,7 @@
     "eslint": "^10.14.0",
     "husky": "^9.1.7",
     "knip": "^5.88.1",
-    "lint-staged": "^16.4.0",
+    "lint-staged": "^17.6.1",
     "prettier": "^3.9.10",
     "prisma": "7.10",
     "s3rver": "^3.7.1",
