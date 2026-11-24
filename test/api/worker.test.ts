@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { registry } from '../../src/common/metrics.js';
 import { QueueService } from '../../src/core/queue.service.js';
+import { StatusService } from '../../src/modules/operations/status.service.js';
 import { startWorker, type WorkerHandle } from '../../src/worker/worker.js';
 import { bootApp, resetDb, type Ctx } from '../support/harness.js';
 
@@ -25,6 +26,15 @@ describe('the worker', () => {
     await ctx.app.get(QueueService).email.add('send', { emailLogId: log.id });
     await expect.poll(async () => (await ctx.prisma.emailLog.findUniqueOrThrow({ where: { id: log.id } })).status, { timeout: 15_000 }).toBe('SENT');
     await expect.poll(async () => await registry.metrics(), { timeout: 5_000 }).toContain('lims_jobs_total{queue="email",result="completed"} 1');
+  }, 30_000);
+
+  it('makes a data export, and is seen by the status page', async () => {
+    const row = await ctx.prisma.dataExport.create({ data: { requestedById: 'nobody', requestedByName: 'Asha Admin' } });
+    await ctx.prisma.user.create({ data: { id: 'nobody', email: 'nobody@x.example', name: 'Asha Admin', passwordHash: 'x' } });
+    await ctx.app.get(QueueService).documents.add('company-export', { exportId: row.id }, { attempts: 1 });
+    await expect.poll(async () => (await ctx.prisma.dataExport.findUniqueOrThrow({ where: { id: row.id } })).status, { timeout: 20_000 }).toBe('DONE');
+    const { checks } = await ctx.app.get(StatusService).status();
+    expect(checks.find((c) => c.key === 'worker')).toMatchObject({ state: 'OK' });
   }, 30_000);
 
   it('reports the state of the installation without naming anyone in it', async () => {

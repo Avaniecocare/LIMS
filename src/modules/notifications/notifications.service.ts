@@ -29,6 +29,8 @@ export const NOTIFICATION_TYPES: Record<string, string> = {
   NC_ASSIGNED: 'Non-conformances assigned to you',
   PRIVACY_REQUEST: 'Privacy requests to answer',
   LICENCE: 'Licence or trial ending',
+  EMAIL_FAILED: 'Emails that could not be sent',
+  DATA_EXPORT: 'Your data export is ready',
 };
 
 interface Message {

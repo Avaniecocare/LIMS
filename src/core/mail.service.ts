@@ -2,6 +2,7 @@ import { escapeHtml } from '../common/html.js';
 import { Inject, Injectable } from '@nestjs/common';
 import nodemailer, { type Transporter } from 'nodemailer';
 import { actorId } from '../common/context.js';
+import { conflict } from '../common/errors.js';
 import { INFRA_CONFIG, type InfraConfig } from '../config/infra.config.js';
 import { CompanyService } from './company.service.js';
 import { Prisma, PrismaService, type Tx } from './prisma.service.js';
@@ -10,6 +11,7 @@ import { StorageService } from './storage.service.js';
 
 /** Provider-neutral adapter: everything goes through this one interface. */
 export interface MailAdapter {
+  verify(): Promise<void>;
   send(message: { from: string; to: string; cc?: string; subject: string; html: string; attachments: { filename: string; content: Buffer; contentType: string }[] }): Promise<void>;
 }
 
@@ -28,6 +30,11 @@ export class SmtpMailAdapter implements MailAdapter {
             secure: cfg.smtp.secure,
             auth: cfg.smtp.user ? { user: cfg.smtp.user, pass: cfg.smtp.password ?? '' } : undefined,
           });
+  }
+
+  /** Signs in to the mail server without sending anything. */
+  async verify(): Promise<void> {
+    if (this.cfg.smtp.transport !== 'json') await this.transport.verify();
   }
 
   async send(message: Parameters<MailAdapter['send']>[0]): Promise<void> {
@@ -112,6 +119,44 @@ export class MailService {
 
   async dispatch(emailLogId: string): Promise<void> {
     await this.queue.email.add('send', { emailLogId }, { jobId: `email-${emailLogId}` });
+  }
+
+  /** Sends the same email again, as a new one. */
+  async copy(log: {
+    toAddress: string;
+    ccAddress: string | null;
+    subject: string;
+    template: string;
+    html: string;
+    attachments: Prisma.JsonValue;
+    entity: string | null;
+    entityId: string | null;
+  }): Promise<string> {
+    const { toAddress, ccAddress, subject, template, html, entity, entityId } = log;
+    const { id } = await this.prisma.emailLog.create({
+      data: { toAddress, ccAddress, subject, template, html, entity, entityId, attachments: log.attachments as Prisma.InputJsonValue, createdById: actorId() },
+    });
+    await this.dispatch(id);
+    return id;
+  }
+
+  /** Tries a failed or waiting email again now, whether or not its own retries are used up. */
+  async retry(emailLogId: string): Promise<void> {
+    const job = await this.queue.email.getJob(`email-${emailLogId}`);
+    const state = await job?.getState();
+    if (state === 'active') throw conflict('This email is being sent right now. Look again in a moment.');
+    await this.prisma.emailLog.update({ where: { id: emailLogId }, data: { status: 'QUEUED', lastError: null } });
+    if (state === 'delayed') return job!.promote();
+    if (state === 'waiting') return;
+    // A finished job keeps its id, and adding the same id again would do nothing.
+    await job?.remove();
+    await this.dispatch(emailLogId);
+  }
+
+  /** Of these failed emails, the ones that will still be tried again by themselves. */
+  async retrying(emailLogIds: string[]): Promise<Set<string>> {
+    const states = await Promise.all(emailLogIds.map((id) => this.queue.email.getJobState(`email-${id}`)));
+    return new Set(emailLogIds.filter((_, i) => ['delayed', 'waiting', 'active'].includes(states[i])));
   }
 
   /** Worker side. Throws on failure so BullMQ retries. */

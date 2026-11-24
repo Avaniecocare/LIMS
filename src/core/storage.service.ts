@@ -1,5 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { CreateBucketCommand, GetObjectCommand, HeadBucketCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { Transform, type Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { CreateBucketCommand, DeleteObjectCommand, GetObjectCommand, HeadBucketCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Inject, Injectable } from '@nestjs/common';
 import { actorId } from '../common/context.js';
@@ -145,6 +148,63 @@ export class StorageService {
         createdById: actorId(),
       },
     });
+  }
+
+  /** A large file made by the system, sent to the store as it is produced. */
+  async storeStream(body: Readable, input: Omit<StoreInput, 'buffer'>) {
+    await this.ensureBucket();
+    const storageKey = `${input.category}/${new Date().getFullYear()}/${randomUUID()}`;
+    const hash = createHash('sha256');
+    let sizeBytes = 0;
+    const counted = new Transform({
+      transform(chunk: Buffer, _enc, done) {
+        hash.update(chunk);
+        sizeBytes += chunk.length;
+        done(null, chunk);
+      },
+    });
+    const upload = new Upload({ client: this.s3, params: { Bucket: this.cfg.s3.bucket, Key: storageKey, Body: counted, ContentType: input.mimeType }, partSize: 8 * 1024 * 1024, queueSize: 2 });
+    try {
+      await Promise.all([pipeline(body, counted), upload.done()]);
+    } catch (err) {
+      await upload.abort().catch(() => undefined);
+      throw err;
+    }
+    return this.prisma.fileObject.create({
+      data: {
+        storageKey,
+        originalName: input.originalName,
+        mimeType: input.mimeType,
+        sizeBytes,
+        sha256: hash.digest('hex'),
+        category: input.category,
+        entity: input.entity ?? null,
+        entityId: input.entityId ?? null,
+        createdById: actorId(),
+      },
+    });
+  }
+
+  /** Null when the store does not have it. */
+  async open(storageKey: string): Promise<Readable | null> {
+    try {
+      return (await this.s3.send(new GetObjectCommand({ Bucket: this.cfg.s3.bucket, Key: storageKey }))).Body as Readable;
+    } catch (err) {
+      if ((err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) return null;
+      throw err;
+    }
+  }
+
+  /** Only for files that were temporary to begin with. */
+  async remove(fileId: string): Promise<void> {
+    const file = await this.prisma.fileObject.findUniqueOrThrow({ where: { id: fileId } });
+    await this.s3.send(new DeleteObjectCommand({ Bucket: this.cfg.s3.bucket, Key: file.storageKey }));
+    await this.prisma.fileObject.update({ where: { id: fileId }, data: { deletedAt: new Date() } });
+  }
+
+  /** Rejects when the store does not answer or refuses us. */
+  async ping(): Promise<void> {
+    await this.s3.send(new HeadBucketCommand({ Bucket: this.cfg.s3.bucket }));
   }
 
   async read(fileId: string): Promise<{ buffer: Buffer; mimeType: string; originalName: string }> {

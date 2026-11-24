@@ -20,6 +20,9 @@ WORKDIR /app
 # A vendor's public key (PEM). With it, the image needs a licence; without it, no licence is asked for.
 ARG LICENCE_PUBLIC_KEY=""
 RUN if [ -n "$LICENCE_PUBLIC_KEY" ]; then printf '%s\n' "$LICENCE_PUBLIC_KEY" > /app/licence.pub && chmod 444 /app/licence.pub; fi
+# Shown to administrators on the status page.
+ARG APP_VERSION=""
+ENV APP_VERSION=$APP_VERSION
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma

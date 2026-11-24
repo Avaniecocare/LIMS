@@ -50,6 +50,9 @@ export const setSensitiveExportHook = (fn: typeof onSensitiveExport) => {
   onSensitiveExport = fn;
 };
 
+/** For exports that are not documents, such as the whole company's data. */
+export const reportSensitiveExport = (kind: string) => onSensitiveExport?.(kind) ?? Promise.resolve();
+
 /** Keys only the server sets on a job: an email or WhatsApp message to send, or "this is the official file". Never accepted from a client. */
 const SERVER_ONLY_PARAMS = ['email', 'whatsapp', 'final'];
 
@@ -105,7 +108,7 @@ export class DocumentsService {
       requireRecentAuth();
     }
     const job = await this.enqueue(kind, params);
-    if (handler.sensitive) await onSensitiveExport?.(kind);
+    if (handler.sensitive) await reportSensitiveExport(kind);
     return job;
   }
 

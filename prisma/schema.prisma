@@ -1747,3 +1747,33 @@ model HelpPageFeedback {
   createdAt DateTime @default(now())
   @@index([path, createdAt])
 }
+
+enum DataExportStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+}
+
+/// Everything the lab has, as ZIP files: for moving away, or for its own records.
+model DataExport {
+  id              String           @id @default(uuid(7))
+  status          DataExportStatus @default(QUEUED)
+  /// [{ fileId, name, sizeBytes, sha256 }], in order
+  parts           Json             @default("[]")
+  tables          Int              @default(0)
+  rows            Int              @default(0)
+  files           Int              @default(0)
+  /// files the records name but the store does not have; listed inside the export
+  missingFiles    Int              @default(0)
+  error           String?
+  requestedById   String
+  requestedByName String
+  createdAt       DateTime         @default(now())
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  /// the ZIP files are removed after this
+  expiresAt       DateTime?
+  removedAt       DateTime?
+  @@index([createdAt])
+}

@@ -231,6 +231,26 @@ describe('e-invoice answers that never arrive', () => {
 
     // A clear refusal leaves nothing at the portal, so that invoice can be cancelled straight away.
     await cancel(await issueWith(new IrpRejection('Invalid HSN', ['2176']))).expect(200);
+    // The portal cancelled it and the answer was lost: ask, and follow it. Without a clear answer it stays issued.
+    const { job } = await issuedJob(ctx, team, customer.id, [fx.tests.f], { P: 'OK' });
+    const draft = (await accounts.post('/invoices', { customerId: customer.id, jobIds: [job.id] }).expect(201)).body;
+    const live = (await accounts.post(`/invoices/${draft.id}/issue`, { version: draft.version }).expect(200)).body;
+    expect(live.einvoice.status).toBe('GENERATED');
+    const atPortal = { irn: live.einvoice.irn, ackNo: '1', ackDate: new Date(), signedInvoice: 'x', signedQrCode: 'y' };
+    const cancelSpy = vi.spyOn(MockIrp.prototype, 'cancel').mockRejectedValue(new Error('socket hang up'));
+    const fetchSpy = vi.spyOn(MockIrp.prototype, 'fetch').mockResolvedValueOnce({ ...atPortal, cancelled: false });
+    expect((await cancel(live)).body.error?.code).toBe('IRN_CANCEL_FAILED');
+    fetchSpy.mockResolvedValueOnce({ ...atPortal, cancelled: true });
+    const cancelled = (await cancel(live).expect(200)).body;
+    expect([cancelled.status, cancelled.einvoice.status]).toEqual(['CANCELLED', 'CANCELLED']);
+    cancelSpy.mockRestore();
+    // A document the portal has as cancelled is never shown as registered.
+    fetchSpy.mockResolvedValueOnce({ ...atPortal, cancelled: true });
+    const dead = await issueWith(new IrpRejection('Duplicate IRN', ['2150'], atPortal.irn));
+    expect(dead.einvoice.lastError).toMatch(/as cancelled/);
+    await cancel(dead).expect(200);
+    fetchSpy.mockRestore();
+
     // A sign-in error says nothing about the document.
     expect((await cancel(await issueWith(new IrpRejection('Invalid token', ['1005'])))).status).toBe(422);
   }, 180000);

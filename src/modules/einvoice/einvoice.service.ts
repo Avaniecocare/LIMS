@@ -325,6 +325,8 @@ export class EInvoiceService {
         } catch (e2) {
           return this.fail(row, `The GST portal already has this ${what} (IRN ${e.existingIrn}), but its details could not be fetched: ${this.describe(e2)}`);
         }
+        // The portal never takes the number of a cancelled document again, and a cancelled IRN must not look like a live one.
+        if (reg.cancelled) return this.fail(row, `The GST portal has this ${what} as cancelled (IRN ${reg.irn}), and does not accept its number again. Cancel it here and raise a new one.`, true);
       } else {
         return this.fail(row, this.describe(e), isDecision(e));
       }
@@ -372,7 +374,14 @@ export class EInvoiceService {
     if (!reason) throw rule('IRN_CANCEL_REASON', 'Choose why the IRN is being cancelled (duplicate, data entry mistake, order cancelled, or other).');
     if (!this.provider) throw rule('EINVOICE_NOT_SET_UP', 'E-invoicing is not set up on the server, so the IRN cannot be cancelled.');
     try {
-      const { cancelledAt } = await this.provider.cancel(row.irn, reason, remark.slice(0, 100));
+      const provider = this.provider;
+      const irn = row.irn;
+      const { cancelledAt } = await provider.cancel(irn, reason, remark.slice(0, 100)).catch(async (e: unknown) => {
+        // The portal may have cancelled it and the answer been lost, now or on an earlier try. Ask before saying it failed.
+        const there = await provider.fetch(irn).catch(() => null);
+        if (!there?.cancelled) throw e;
+        return { cancelledAt: new Date() };
+      });
       const saved = await this.prisma.eInvoice.update({ where: { id: row.id }, data: { status: 'CANCELLED', cancelledAt, cancelReasonCode: reason, cancelRemark: remark.slice(0, 100) } });
       await this.audit.record({ action: 'EInvoice.cancelled', entity: 'Invoice', entityId: invoiceId, after: { irn: row.irn, reason: CANCEL_REASONS[reason] }, reason: remark });
       return saved;

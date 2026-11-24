@@ -21,6 +21,13 @@ const FORBIDDEN_ALERT_AT = 20;
  * Access requests, the access review, and alerts on the events that matter for access: repeated refusals,
  * privileges widening, and bulk exports of customer or money data.
  */
+const EXPORT_NAMES: Record<string, string> = {
+  'customer-export': 'all customers and their contacts',
+  'due-invoices-export': 'all due invoices',
+  'audit-export': 'the audit log',
+  'company-export': 'all of the lab’s data and files',
+};
+
 @Injectable()
 export class SecurityService implements OnModuleInit {
   constructor(
@@ -34,10 +41,7 @@ export class SecurityService implements OnModuleInit {
   onModuleInit() {
     setForbiddenHook((userId) => this.onForbidden(userId));
     setSensitiveExportHook((kind) =>
-      this.alert(
-        `${currentUser()?.name ?? 'Someone'} exported ${kind === 'customer-export' ? 'all customers and their contacts' : 'all due invoices'}`,
-        `export:${kind}:${currentUser()?.id}:${new Date().toISOString().slice(0, 13)}`,
-      ),
+      this.alert(`${currentUser()?.name ?? 'Someone'} exported ${EXPORT_NAMES[kind] ?? kind}`, `export:${kind}:${currentUser()?.id}:${new Date().toISOString().slice(0, 13)}`),
     );
     this.admin.onPrivilegeChange = (c) => this.alert(c.summary, null);
   }

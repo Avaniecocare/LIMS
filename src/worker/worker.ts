@@ -15,6 +15,8 @@ import { WhatsappService } from '../core/whatsapp.service.js';
 import { QUEUE_DOCUMENTS, QUEUE_EMAIL, QUEUE_SCHEDULED, QUEUE_WHATSAPP, redisConnection } from '../core/queue.service.js';
 import { DocumentsService } from '../modules/documents/documents.service.js';
 import { installErrorWebhook } from '../common/error-webhook.js';
+import { DataExportService } from '../modules/operations/data-export.service.js';
+import { OutboxService } from '../modules/operations/outbox.service.js';
 import { SchedulerService } from '../modules/scheduler/scheduler.service.js';
 
 @Module({ imports: [CoreModule, ...DOMAIN_MODULES] })
@@ -39,10 +41,12 @@ export async function startWorker(): Promise<WorkerHandle> {
   const documents = app.get(DocumentsService);
   const scheduler = app.get(SchedulerService);
   const whatsapp = app.get(WhatsappService);
+  const exports = app.get(DataExportService);
+  const outbox = app.get(OutboxService);
 
   const workers = [
     new Worker(QUEUE_EMAIL, async (job) => mail.deliver(job.data.emailLogId), { connection, concurrency: 5 }),
-    new Worker(QUEUE_DOCUMENTS, async (job) => documents.process(job.data.documentJobId), { connection, concurrency: 2 }),
+    new Worker(QUEUE_DOCUMENTS, async (job) => (job.name === 'company-export' ? exports.run(job.data.exportId) : documents.process(job.data.documentJobId)), { connection, concurrency: 2 }),
     new Worker(QUEUE_WHATSAPP, async (job) => whatsapp.deliver(job.data.messageId), { connection, concurrency: 3 }),
     new Worker(QUEUE_SCHEDULED, async (job) => scheduler.run(job.name), { connection, concurrency: 1 }),
   ];
@@ -68,6 +72,11 @@ export async function startWorker(): Promise<WorkerHandle> {
       reportError(err, { queue: w.name, jobId: job?.id });
     });
   }
+  // Given up on: someone has to know, because nobody is watching a queue.
+  workers[0].on('failed', (job) => {
+    if (job && job.attemptsMade >= (job.opts.attempts ?? 1))
+      void outbox.onGivenUp(job.data.emailLogId).catch((err: unknown) => logger.error({ err, jobId: job.id }, 'could not tell anyone about a failed email'));
+  });
   await scheduler.install();
   measureInstallation(app);
   logger.info('worker started');

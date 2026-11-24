@@ -7,6 +7,8 @@ export const PERMISSIONS: Record<string, { module: string; description: string }
   'admin.roles': { module: 'Admin', description: 'Manage roles and permissions' },
   'admin.settings': { module: 'Admin', description: 'Change lab operating settings' },
   'admin.audit': { module: 'Admin', description: 'View the audit log' },
+  'admin.emails': { module: 'Admin', description: 'View sent and failed emails, and send them again' },
+  'admin.dataExport': { module: 'Admin', description: 'Export all of the lab’s data and files' },
   'admin.company.view': { module: 'Admin', description: 'View company details' },
   'quality.view': { module: 'Quality', description: 'View equipment status, authorisations, training and non-conformances' },
   'quality.manage': { module: 'Quality', description: 'Record calibration and maintenance, authorise staff, and work non-conformances' },
@@ -195,5 +197,10 @@ export const ROLE_UPGRADES: { key: string; createRoles: string[]; grants: Record
     key: 'rbac.upgrade.quality-v1',
     createRoles: ['Quality Manager'],
     grants: { 'quality.view': ['Admin', 'Management', 'Lab Manager / Planner', 'Head of Department'], 'quality.manage': ['Admin'], 'privacy.manage': ['Admin'] },
+  },
+  {
+    key: 'rbac.upgrade.operations-v1',
+    createRoles: [],
+    grants: { 'admin.emails': ['Admin'], 'admin.dataExport': ['Admin'] },
   },
 ];

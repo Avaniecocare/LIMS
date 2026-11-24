@@ -10,6 +10,7 @@ import { SettingsService } from '../../core/settings.service.js';
 import { assertPasswordPolicy } from '../auth/auth.service.js';
 import { SessionService } from '../auth/session.service.js';
 import { PERMISSIONS } from '../rbac/catalog.js';
+import { auditWhere } from './audit-filter.js';
 import type { AuditQuery, CreateRoleDto, CreateSavedFilterDto, CreateUserDto, UpdateRoleDto, UpdateUserDto, UserListQuery } from './admin.dto.js';
 
 const userInclude = { roles: { include: { role: { select: { id: true, name: true } } } } } as const;
@@ -333,16 +334,7 @@ export class AdminService {
 
   // ------------------------------------------------------------- audit
   async listAudit(q: AuditQuery) {
-    const where: Prisma.AuditLogWhereInput = {
-      ...(q.entity ? { entity: q.entity } : {}),
-      ...(q.entityId ? { entityId: q.entityId } : {}),
-      ...(q.action ? { action: { startsWith: q.action } } : {}),
-      ...(q.userId ? { userId: q.userId } : {}),
-      ...(q.from || q.to
-        ? { at: { ...(q.from ? { gte: new Date(`${q.from.slice(0, 10)}T00:00:00+05:30`) } : {}), ...(q.to ? { lte: new Date(`${q.to.slice(0, 10)}T23:59:59.999+05:30`) } : {}) } }
-        : {}),
-      ...(q.q ? { OR: [{ userName: { contains: q.q, mode: 'insensitive' } }, { reason: { contains: q.q, mode: 'insensitive' } }] } : {}),
-    };
+    const where = auditWhere(q);
     const [rows, total] = await Promise.all([
       this.prisma.auditLog.findMany({ where, orderBy: orderBy(q, ['at', 'action', 'entity', 'userName'], 'at'), ...skipTake(q) }),
       this.prisma.auditLog.count({ where }),

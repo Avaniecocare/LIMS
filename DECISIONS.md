@@ -171,3 +171,11 @@ Choices made where the brief left room. Each is the default; anything a lab may 
 - **Storage keys are optional.** Without `S3_ACCESS_KEY` and `S3_SECRET_KEY` the identity given to the machine or pod is used. The app makes its bucket only when there is none; being refused is an error, not a reason to try making one.
 - **Health and metrics on their own port** (`OPS_PORT`, 9464), in the API and the worker, never published. The worker had no health check that could tell a hung one. Labels are fixed words: no ids, names or addresses. One number that cannot be measured does not take the others away. Installation-wide numbers come from the worker only, so they are not counted once per API copy.
 - **Images name their user by number and need no writable files** except `/tmp` (and `/dev/shm` for Chromium). The screens' container copies its files to `/tmp` and changes them there.
+
+## Looking after an installation
+- **The data export reads the database's own catalogue,** not a list in the code, so a table added later is in it. What is left out is a short list; a test fails when a new column looks like a secret and is on neither list.
+- **CSV for people, JSON Lines for programs.** JSON Lines is written by PostgreSQL itself, so amounts keep every digit. Only the CSV protects against formulas, and the README in the export says so.
+- **ZIP files are streamed to the store in parts of about 1 GB.** The worker's memory stays flat, and a failed download costs one part. The rows are not one snapshot: holding one open for an hour would keep the database from cleaning up.
+- **One export at a time, kept seven days, never through the general file links.** A run that dies with its worker is marked failed and not started again unasked.
+- **Emails can be sent again only to the same people.** Changing an address there would be a way to send a report to anyone; the record's own send button checks who may do that. Password resets are never sent again, and no email's body is ever shown in the list.
+- **The status page shows no addresses, versions of other software or error texts.** Those are in the server's log.

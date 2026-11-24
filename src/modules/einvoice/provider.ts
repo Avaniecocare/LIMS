@@ -8,6 +8,8 @@ export interface Registered {
   ackDate: Date;
   signedInvoice: string;
   signedQrCode: string;
+  /** set when the IRP says this IRN has been cancelled there */
+  cancelled?: boolean;
 }
 
 /** Why a document is being cancelled, as the IRP codes it. */

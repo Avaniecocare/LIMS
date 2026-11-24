@@ -156,8 +156,8 @@ export class NicIrp implements IrpProvider {
     );
   }
 
-  private registered(d: { Irn: string; AckNo: number | string; AckDt: string; SignedInvoice: string; SignedQRCode: string }): Registered {
-    return { irn: d.Irn, ackNo: String(d.AckNo), ackDate: parseIrpTime(d.AckDt), signedInvoice: d.SignedInvoice, signedQrCode: d.SignedQRCode };
+  private registered(d: { Irn: string; AckNo: number | string; AckDt: string; SignedInvoice: string; SignedQRCode: string; Status?: string }): Registered {
+    return { irn: d.Irn, ackNo: String(d.AckNo), ackDate: parseIrpTime(d.AckDt), signedInvoice: d.SignedInvoice, signedQrCode: d.SignedQRCode, cancelled: d.Status === 'CNL' };
   }
 
   async generate(payload: InvPayload): Promise<Registered> {
