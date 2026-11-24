@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import argon2 from 'argon2';
+import { escapeHtml } from '../../common/html.js';
 import { can, currentUser } from '../../common/context.js';
 import { badRequest, forbidden, notFound, requireRecentAuth } from '../../common/errors.js';
 import { orderBy, skipTake, toPage } from '../../common/pagination.dto.js';
 import { AuditService } from '../../core/audit.service.js';
+import { MailService } from '../../core/mail.service.js';
 import { CompanyService } from '../../core/company.service.js';
 import { Prisma, PrismaService, updateVersioned, type Tx } from '../../core/prisma.service.js';
 import { SettingsService } from '../../core/settings.service.js';
@@ -48,6 +50,7 @@ export class AdminService {
     private readonly settings: SettingsService,
     private readonly company: CompanyService,
     private readonly sessions: SessionService,
+    private readonly mail: MailService,
   ) {}
 
   // ------------------------------------------------------------- users
@@ -100,18 +103,24 @@ export class AdminService {
   }
 
   async updateUser(id: string, dto: UpdateUserDto) {
-    const { version, roleIds, ...fields } = dto;
+    const { version, roleIds, ...rest } = dto;
+    const email = dto.email?.trim().toLowerCase();
+    const fields = email === undefined ? rest : { ...rest, email };
     const result = await this.prisma.$transaction(async (tx) => {
       const before = await tx.user.findFirst({ where: { id, deletedAt: null }, include: userInclude });
       if (!before) throw notFound('User');
       if (dto.isActive === false && id === currentUser()?.id) throw badRequest('You cannot deactivate your own account');
       // Changing who has which roles, or switching an account off, needs the password confirmed.
       const rolesChange = roleIds !== undefined && (roleIds.length !== before.roles.length || roleIds.some((r) => !before.roles.some((x) => x.roleId === r)));
-      if (rolesChange || (dto.isActive === false && before.isActive)) {
+      const emailChange = email !== undefined && email !== before.email;
+      if (emailChange && (await tx.user.count({ where: { email, id: { not: id } } })))
+        throw badRequest('Someone else already signs in with this email', [{ field: 'email', message: 'Already in use' }]);
+      if (rolesChange || emailChange || (dto.isActive === false && before.isActive)) {
         requireRecentAuth();
         await this.assertCanManage(tx, id);
       }
       await updateVersioned(tx.user as never, id, version, fields);
+      if (emailChange) await this.onEmailChange(tx, before, email);
       if (roleIds) {
         await this.assertRolesExist(tx, roleIds);
         // Only roles that are being added need checking: removing a role someone already has is always allowed.
@@ -128,10 +137,30 @@ export class AdminService {
       await this.audit.record({ action: 'user.update', entity: 'User', entityId: id, before: toUserDto(before), after: toUserDto(after) }, tx);
       const added = after.roles.filter((r) => !before.roles.some((b) => b.roleId === r.roleId)).map((r) => r.role.name);
       if (added.length) await this.onPrivilegeChange?.({ summary: `${currentUser()?.name ?? 'Someone'} gave ${after.name} ${added.join(', ')}`, userId: id });
-      return toUserDto(after);
+      return { user: toUserDto(after), emailChanged: emailChange };
     });
-    if (dto.isActive === false) await this.sessions.destroyAllForUser(id);
-    return result;
+    if (dto.isActive === false || result.emailChanged) await this.sessions.destroyAllForUser(id);
+    return result.user;
+  }
+
+  /** Whoever reads the address can reset the password, so both addresses and the other administrators are told. */
+  private async onEmailChange(tx: Tx, before: { id: string; name: string; email: string }, email: string) {
+    // Links already sent went to the old address.
+    await tx.passwordResetToken.deleteMany({ where: { userId: before.id } });
+    const by = currentUser()?.name ?? 'An administrator';
+    for (const to of [before.email, email])
+      await this.mail.enqueue(
+        {
+          to,
+          subject: 'Your sign-in email was changed',
+          template: 'account-email-changed',
+          entity: 'User',
+          entityId: before.id,
+          bodyHtml: `<p>Hello ${escapeHtml(before.name)},</p><p>${escapeHtml(by)} changed the email you sign in with from ${escapeHtml(before.email)} to ${escapeHtml(email)}.</p><p>If you did not expect this, tell your administrator at once.</p>`,
+        },
+        tx,
+      );
+    await this.onPrivilegeChange?.({ summary: `${by} changed the sign-in email of ${before.name}`, userId: before.id });
   }
 
   async adminResetPassword(id: string, newPassword: string) {

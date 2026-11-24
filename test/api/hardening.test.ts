@@ -52,6 +52,7 @@ describe('delegated user managers', () => {
     await desk.post(`/admin/users/${target.id}/reset-2fa`).expect(403);
     await desk.patch(`/admin/users/${target.id}`, { version, isActive: false }).expect(403);
     await desk.patch(`/admin/users/${target.id}`, { version, roleIds: [] }).expect(403);
+    await desk.patch(`/admin/users/${target.id}`, { version, email: 'mine@hard.example' }).expect(403);
     await signIn('boss@hard.example').expect(200);
     // Their own level is theirs to manage, and an Admin manages everyone.
     await desk.post(`/admin/users/${peer.id}/reset-password`, { newPassword: 'Peer-Reset-12!' }).expect(200);
@@ -124,6 +125,32 @@ describe('idle timeout', () => {
     expect(await redis.ttl(key)).toBeLessThanOrEqual(100);
     await s.get('/auth/me').expect(200);
     expect(await redis.ttl(key)).toBeGreaterThan(100);
+  });
+});
+
+describe('a changed sign-in email', () => {
+  it('takes over at once, ends what the old address could do, and both addresses are told', async () => {
+    const u = await createUser(ctx, 'old@hard.example', [ROLE_NAMES.sales], 'Meera <b>');
+    const session = await login(ctx, 'old@hard.example');
+    await ctx.prisma.passwordResetToken.create({ data: { userId: u.id, tokenHash: 'h', expiresAt: new Date(Date.now() + 60_000) } });
+    const taken = await admin.patch(`/admin/users/${u.id}`, { version: 1, email: 'TECH@hard.example' }).expect(400);
+    expect(taken.body.error.fields[0].field).toBe('email');
+    const fresh = await login(ctx, 'admin@hard.example', undefined, { reauth: false });
+    expect((await fresh.patch(`/admin/users/${u.id}`, { version: 1, email: 'new@hard.example' }).expect(403)).body.error.code).toBe('REAUTH_REQUIRED');
+    // The same address, sent back by the form, changes nothing and signs nobody out.
+    const same = (await admin.patch(`/admin/users/${u.id}`, { version: 1, email: 'old@hard.example', phone: '1' }).expect(200)).body;
+    await session.get('/auth/me').expect(200);
+
+    const { body } = await admin.patch(`/admin/users/${u.id}`, { version: same.version, email: ' New@Hard.example ' }).expect(200);
+    expect(body.email).toBe('new@hard.example');
+    await session.get('/auth/me').expect(401);
+    await signIn('old@hard.example').expect(401);
+    await signIn('new@hard.example').expect(200);
+    expect(await ctx.prisma.passwordResetToken.count({ where: { userId: u.id } })).toBe(0);
+    const told = await ctx.prisma.emailLog.findMany({ where: { template: 'account-email-changed', entityId: u.id } });
+    expect(told.map((e) => e.toAddress).sort()).toEqual(['new@hard.example', 'old@hard.example']);
+    expect(told[0].html).toContain('Meera &lt;b&gt;');
+    expect(await ctx.prisma.auditLog.count({ where: { action: 'security.alert', after: { path: ['title'], string_contains: 'changed the sign-in email' } } })).toBe(1);
   });
 });
 

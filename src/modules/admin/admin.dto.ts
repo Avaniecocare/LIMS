@@ -61,6 +61,12 @@ export class UpdateUserDto {
   @Min(1)
   version: number;
 
+  /** what they sign in with; changing it needs the password confirmed, and signs them out everywhere */
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(254)
+  email?: string;
+
   @IsOptional()
   @IsString()
   @MinLength(2)
