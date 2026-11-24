@@ -192,3 +192,6 @@ Choices made where the brief left room. Each is the default; anything a lab may 
 
 ## The runtime image
 - **Debian slim with Chromium's headless shell, not Playwright's image,** which also carries Firefox and WebKit: gigabytes never used, whose vulnerabilities the scan rightly refuses.
+
+## The supplier's name
+- **Taravik (https://taravik.com) by default, in three places only:** "Powered by" on the sign-in page, which a lab can switch off, Admin > Licence, and the foot of the help. `VENDOR_NAME` and `VENDOR_URL` name another. A lab's reports, invoices and emails never carry it.

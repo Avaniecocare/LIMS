@@ -6,7 +6,7 @@ import type { FastifyReply } from 'fastify';
 import { AppError, badRequest } from '../../common/errors.js';
 import { INFRA_CONFIG, type InfraConfig } from '../../config/infra.config.js';
 import { AuditService } from '../../core/audit.service.js';
-import { brandName } from '../../config/company.config.js';
+import { vendor } from '../../config/company.config.js';
 import { CompanyService, type BrandImageKind } from '../../core/company.service.js';
 import { PrismaService } from '../../core/prisma.service.js';
 import { SettingsService } from '../../core/settings.service.js';
@@ -46,7 +46,8 @@ export class PublicController {
       loginImageUrl: url('login'),
       loginTagline: c.branding.loginTagline,
       poweredBy: c.branding.poweredBy,
-      poweredByName: brandName(),
+      poweredByName: vendor().name,
+      poweredByUrl: vendor().url,
       primaryColor: c.branding.primaryColor,
       accentColor: c.branding.accentColor,
       surfaceColor: c.branding.surfaceColor,

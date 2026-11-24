@@ -17,6 +17,9 @@ export class LicenceDto {
   @ApiProperty({ type: Date, nullable: true }) endsAt: Date | null;
   @ApiProperty({ type: Date, nullable: true }) readOnlyFrom: Date | null;
   @ApiProperty({ type: Number, nullable: true }) daysLeft: number | null;
+  /** whom to ask for a licence */
+  vendorName: string;
+  @ApiProperty({ type: String, nullable: true }) vendorUrl: string | null;
 }
 
 /** What everyone signed in may know: enough for the banner. */

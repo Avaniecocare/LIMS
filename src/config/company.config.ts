@@ -99,7 +99,16 @@ const URL_RE = /^https?:\/\/\S+$/;
 // TODO(product-decision): the neutral default palette for a fresh install (slate), before the lab picks colours.
 export const DEFAULT_COLORS = { primaryColor: '#334155', accentColor: '#475569', surfaceColor: '#f5f6f8', navColor: '#f5f6f8' };
 
-export const brandName = (env: NodeJS.ProcessEnv = process.env) => env.BRAND_NAME?.trim() || 'LIMS';
+/** Who supplies the product: on the sign-in page (the lab can hide it), in Admin, Licence, and in the help. Never on a lab's documents or emails. */
+export function vendor(env: NodeJS.ProcessEnv = process.env): { name: string; url: string | null } {
+  const name = env.VENDOR_NAME?.trim();
+  if (!name) return { name: 'Taravik', url: 'https://taravik.com' };
+  const url = env.VENDOR_URL?.trim() ?? '';
+  // Another supplier's name never carries our address, and nothing but a web address becomes a link.
+  return { name, url: /^https?:\/\/[^\s"'<>]+$/i.test(url) ? url : null };
+}
+
+const brandName = (env: NodeJS.ProcessEnv = process.env) => env.BRAND_NAME?.trim() || 'LIMS';
 
 /** Letters and digits from the brand, for document numbers until the lab sets its own prefix. */
 function prefixFrom(name: string): string {

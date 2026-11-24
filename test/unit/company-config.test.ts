@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CompanyConfigError, loadCompanyConfig } from '../../src/config/company.config.js';
+import { CompanyConfigError, loadCompanyConfig, vendor } from '../../src/config/company.config.js';
 import { bluepeak, greenfield } from '../support/company-env.js';
 
 const problems = (env: Record<string, string>) => {
@@ -60,5 +60,15 @@ describe('company configuration', () => {
 
   it('rejects branding files that do not exist', () => {
     expect(problems({ ...bluepeak, COMPANY_LOGO_PATH: 'missing.png' })).toContain('COMPANY_LOGO_PATH');
+  });
+});
+
+describe('the supplier', () => {
+  it('is Taravik unless another is named, whose address is its own', () => {
+    expect(vendor({})).toEqual({ name: 'Taravik', url: 'https://taravik.com' });
+    expect(vendor({ VENDOR_NAME: ' ' })).toEqual({ name: 'Taravik', url: 'https://taravik.com' });
+    expect(vendor({ VENDOR_NAME: 'Acme', VENDOR_URL: 'https://acme.example' })).toEqual({ name: 'Acme', url: 'https://acme.example' });
+    expect(vendor({ VENDOR_NAME: 'Acme' })).toEqual({ name: 'Acme', url: null });
+    for (const VENDOR_URL of ['javascript:alert(1)', 'https://x.example/"onclick=', 'acme.example']) expect(vendor({ VENDOR_NAME: 'Acme', VENDOR_URL }).url).toBeNull();
   });
 });

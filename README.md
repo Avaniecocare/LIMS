@@ -1,5 +1,7 @@
 # LIMS backend
 
+By [Taravik](https://taravik.com).
+
 NestJS (Fastify) modular monolith for the white-label laboratory information management system. It owns all business logic, permissions, status changes, calculations, GST, numbering, PDFs and audit logging. The frontend is in `LIMS-UI`, deployment in `LIMS-Deploy`.
 
 ## Quick start

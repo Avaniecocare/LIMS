@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { vendor } from '../../config/company.config.js';
 import { Background, Perm, SignedIn, WhenReadOnly } from '../auth/decorators.js';
 import { ActivateLicenceDto, LicenceDto, LicenceNoticeDto } from './licence.dto.js';
 import { LicenceService } from './licence.service.js';
@@ -24,7 +25,7 @@ export class LicenceController {
   @ApiOkResponse({ type: LicenceDto })
   async details(): Promise<LicenceDto> {
     const { licence, ...s } = await this.licence.status();
-    return { ...s, kind: licence?.kind ?? null, customer: licence?.customer ?? null, licenceId: licence?.id ?? null };
+    return { ...s, kind: licence?.kind ?? null, customer: licence?.customer ?? null, licenceId: licence?.id ?? null, vendorName: vendor().name, vendorUrl: vendor().url };
   }
 
   @Post('admin/licence')

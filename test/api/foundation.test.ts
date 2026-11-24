@@ -24,6 +24,7 @@ describe('public branding', () => {
       'navColor',
       'poweredBy',
       'poweredByName',
+      'poweredByUrl',
       'primaryColor',
       'privacyContactEmail',
       'privacyUrl',

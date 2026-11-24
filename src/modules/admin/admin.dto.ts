@@ -415,10 +415,11 @@ export class BrandingDto {
   /** a picture beside the sign-in form, if the lab has set one */
   loginImageUrl: string | null;
   loginTagline: string | null;
-  /** show "Powered by" with the product's own name */
+  /** show "Powered by" with the supplier's name */
   poweredBy: boolean;
-  /** the product's own name (BRAND_NAME), for that line */
+  /** the supplier (VENDOR_NAME), for that line */
   poweredByName: string;
+  poweredByUrl: string | null;
   supportEmail: string | null;
   supportPhone: string | null;
   termsUrl: string | null;
