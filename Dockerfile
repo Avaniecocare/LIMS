@@ -36,9 +36,10 @@ ENV APP_VERSION=$APP_VERSION
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
+COPY LICENSE ./
 COPY --from=build /app/prisma.config.ts /app/package.json /app/package-lock.json ./
 # Who makes it; what it is and which commit come from the build.
-LABEL org.opencontainers.image.vendor="Taravik" org.opencontainers.image.url="https://taravik.com"
+LABEL org.opencontainers.image.vendor="Taravik" org.opencontainers.image.url="https://taravik.com" org.opencontainers.image.licenses="LicenseRef-Taravik-Proprietary"
 # By number: Kubernetes checks runAsNonRoot against a number.
 USER 1001:1001
 # 9464 is the operations port: never publish it.
