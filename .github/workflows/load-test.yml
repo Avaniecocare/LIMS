@@ -34,6 +34,11 @@ jobs:
       - run: npx prisma migrate deploy
       - run: node load-test/run.mjs --seed
       - run: node --env-file=.env.example dist/seed/cli.js seed
+      - name: Log how PostgreSQL runs anything over 150 ms
+        env: { PG: '${{ job.services.postgres.id }}' }
+        run: |
+          docker exec "$PG" psql -qU lims -d lims -c "ALTER DATABASE lims SET session_preload_libraries = 'auto_explain'" -c "ALTER DATABASE lims SET auto_explain.log_min_duration = 150" \
+            -c "ALTER DATABASE lims SET auto_explain.log_analyze = on" -c "ALTER DATABASE lims SET auto_explain.log_timing = off" -c "ALTER DATABASE lims SET auto_explain.log_buffers = on"
       - name: Start the API
         run: |
           node --env-file=.env.example dist/main.js api > api.log 2>&1 &
@@ -41,6 +46,10 @@ jobs:
       - name: Four people at once, 800 ms for the slowest 5%
         env: { EMAIL: admin@demo.example, PASSWORD: 'Demo-Password-1!' }
         run: node load-test/run.mjs
+      - name: The slow queries, once each
+        if: failure()
+        env: { PG: '${{ job.services.postgres.id }}' }
+        run: docker logs "$PG" 2>&1 | python3 load-test/slow.py
       - name: Twenty-five people at once, 4 s for the slowest 5%
         env: { EMAIL: admin@demo.example, PASSWORD: 'Demo-Password-1!', CONCURRENCY: 25, ROUNDS: 6, P95_BUDGET_MS: 4000 }
         run: node load-test/run.mjs
