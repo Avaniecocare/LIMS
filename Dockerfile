@@ -18,13 +18,14 @@ RUN npx nest build && npm rebuild argon2 && npm prune --omit=dev --ignore-script
 FROM node:24-bookworm-slim AS runtime
 ENV NODE_ENV=production PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 WORKDIR /app
-# Its own layer, from the locked version alone, so a code change does not download the browser again.
+# No npm either: nothing is installed at run time, and it brings old copies of libraries. Its own layer, from the locked version alone, so a code change does not download the browser again.
 COPY --from=build /app/node_modules/playwright /opt/playwright/node_modules/playwright
 COPY --from=build /app/node_modules/playwright-core /opt/playwright/node_modules/playwright-core
 RUN apt-get update && apt-get upgrade -y \
   && node /opt/playwright/node_modules/playwright/cli.js install --with-deps --only-shell chromium \
   && apt-get install -y --no-install-recommends fonts-liberation fonts-noto-core fonts-freefont-ttf \
   && rm -rf /opt/playwright /var/lib/apt/lists/* /root/.cache \
+  && rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /opt/yarn* /usr/local/bin/yarn* \
   && groupadd -g 1001 lims && useradd -u 1001 -g 1001 -m lims
 # A vendor's public key (PEM). With it, the image needs a licence; without it, no licence is asked for.
 ARG LICENCE_PUBLIC_KEY=""

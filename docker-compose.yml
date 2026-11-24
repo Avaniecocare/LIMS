@@ -35,7 +35,7 @@ services:
     ports: ['8025:8025', '1025:1025']
   migrate:
     <<: *app
-    command: ['sh', '-c', 'npx prisma migrate deploy && node dist/seed/cli.js seed']
+    command: ['sh', '-c', 'node_modules/.bin/prisma migrate deploy && node dist/seed/cli.js seed']
     depends_on:
       postgres: { condition: service_healthy }
     restart: 'no'
