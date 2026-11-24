@@ -1,6 +1,7 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "entry": [
+    "src/main.ts",
     "src/openapi.ts",
     "src/seed/cli.ts",
     "src/recover.ts",
