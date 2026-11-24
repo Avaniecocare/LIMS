@@ -204,7 +204,9 @@ export class StorageService {
 
   /** Rejects when the store does not answer or refuses us. */
   async ping(): Promise<void> {
-    await this.s3.send(new HeadBucketCommand({ Bucket: this.cfg.s3.bucket }));
+    // A new installation has no bucket until its first file. That is not a fault.
+    this.bucketChecked = false;
+    await this.ensureBucket();
   }
 
   async read(fileId: string): Promise<{ buffer: Buffer; mimeType: string; originalName: string }> {

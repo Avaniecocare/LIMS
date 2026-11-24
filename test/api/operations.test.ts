@@ -44,6 +44,15 @@ describe('system status', () => {
     expect(JSON.stringify(body)).not.toMatch(/localhost|127\.0\.0\.1|S3RVER|redis:\/\//);
   });
 
+  it('does not call a new installation’s store broken', async () => {
+    const storage = ctx.app.get(StorageService) as unknown as { cfg: { s3: { bucket: string } }; ping: () => Promise<void> };
+    const { bucket } = storage.cfg.s3;
+    storage.cfg.s3.bucket = `lims-new-${Date.now()}`;
+    await storage.ping();
+    await storage.ping();
+    storage.cfg.s3.bucket = bucket;
+  });
+
   it('shows what is broken', async () => {
     const storage = ctx.app.get(StorageService);
     const ping = storage.ping.bind(storage);
