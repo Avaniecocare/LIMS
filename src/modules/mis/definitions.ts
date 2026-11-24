@@ -626,17 +626,15 @@ export const REPORTS: MisReport[] = [
       const where: Prisma.SampleWhereInput = { ...WHERE.samplesReceived(c.f), returnable: true };
       return page(
         (a) =>
-          c.db.sample
-            .findMany({ where, include: sampleInclude, orderBy: { createdAt: 'desc' }, ...a })
-            .then(async (r) =>
-              (await withTests(c.db, r)).map((s) => ({
-                ...sampleRow(s),
-                returnStatus: s.returnedAt ? s.returnStatus : 'Pending',
-                returnedAt: s.returnedAt,
-                retentionUntil: s.retentionUntil,
-                disposedAt: s.disposedAt,
-              })),
-            ),
+          c.db.sample.findMany({ where, include: sampleInclude, orderBy: { createdAt: 'desc' }, ...a }).then(async (r) =>
+            (await withTests(c.db, r)).map((s) => ({
+              ...sampleRow(s),
+              returnStatus: s.returnedAt ? s.returnStatus : 'Pending',
+              returnedAt: s.returnedAt,
+              retentionUntil: s.retentionUntil,
+              disposedAt: s.disposedAt,
+            })),
+          ),
         () => c.db.sample.count({ where }),
         c,
       );
