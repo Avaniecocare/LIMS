@@ -1,5 +1,5 @@
 # One image, two processes: `node dist/main.js api` or `node dist/main.js worker`.
-FROM node:24-bookworm-slim AS build
+FROM node:25-bookworm-slim AS build
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
 # tsconfig.json must be present for generate: the client's import style follows it.
@@ -15,7 +15,7 @@ RUN npx nest build && npm rebuild argon2 && npm prune --omit=dev --ignore-script
 
 # The same base as the build, with only what PDF rendering needs. Playwright's own image also carries Firefox and WebKit:
 # several gigabytes, and other people's vulnerabilities to answer for.
-FROM node:24-bookworm-slim AS runtime
+FROM node:25-bookworm-slim AS runtime
 ENV NODE_ENV=production PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 WORKDIR /app
 # No npm either: nothing is installed at run time, and it brings old copies of libraries. Its own layer, from the locked version alone, so a code change does not download the browser again.
