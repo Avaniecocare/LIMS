@@ -9,7 +9,7 @@ import { AuditService } from '../../core/audit.service.js';
 import { CompanyService } from '../../core/company.service.js';
 import { ModulesService } from '../../core/modules.service.js';
 import { renderNumber } from '../../core/numbering.service.js';
-import { Prisma, PrismaService } from '../../core/prisma.service.js';
+import { Prisma, PrismaService, type Tx } from '../../core/prisma.service.js';
 import { SettingsService } from '../../core/settings.service.js';
 import { NicIrp } from './nic.js';
 import { buildPayload, checkDocument, DOC_NO_RE, type Document, type Party, type Problem } from './payload.js';
@@ -276,8 +276,15 @@ export class EInvoiceService {
 
     const problems = [...(await this.readiness()), ...checkDocument(built.doc)];
     const payload = problems.length ? null : buildPayload(built.doc);
-    const claimed = existing
-      ? await this.prisma.eInvoice.updateMany({
+    // Locking the invoice decides between this and a cancellation at the same moment: whichever comes second sees the first.
+    const claim = async (tx: Tx) => {
+      if ('invoiceId' in key) {
+        await tx.$queryRaw`SELECT 1 FROM "Invoice" WHERE "id" = ${key.invoiceId} FOR UPDATE`;
+        const inv = await tx.invoice.findUniqueOrThrow({ where: { id: key.invoiceId }, select: { status: true } });
+        if (inv.status === 'CANCELLED') throw rule('CANCELLED', 'This invoice is cancelled');
+      }
+      if (existing)
+        return tx.eInvoice.updateMany({
           where: { id: existing.id, updatedAt: existing.updatedAt },
           data: {
             status: 'PENDING',
@@ -288,28 +295,28 @@ export class EInvoiceService {
             environment: c.environment,
             ...(payload ? { uncertain: true } : {}),
           },
-        })
-      : await this.prisma.eInvoice
-          .create({
-            data: {
-              ...where,
-              docType: built.doc.type,
-              docNo: built.docNo,
-              docDate: built.docDate,
-              status: 'PENDING',
-              attempts: 1,
-              provider: c.provider,
-              environment: c.environment,
-              payload: payload ?? Prisma.DbNull,
-              uncertain: !!payload,
-              createdById: actorId(),
-            },
-          })
-          .then(() => ({ count: 1 }))
-          .catch((e: unknown) => {
-            if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') return { count: 0 };
-            throw e;
-          });
+        });
+      await tx.eInvoice.create({
+        data: {
+          ...where,
+          docType: built.doc.type,
+          docNo: built.docNo,
+          docDate: built.docDate,
+          status: 'PENDING',
+          attempts: 1,
+          provider: c.provider,
+          environment: c.environment,
+          payload: payload ?? Prisma.DbNull,
+          uncertain: !!payload,
+          createdById: actorId(),
+        },
+      });
+      return { count: 1 };
+    };
+    const claimed = await this.prisma.$transaction(claim).catch((e: unknown) => {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') return { count: 0 };
+      throw e;
+    });
     if (claimed.count !== 1) throw rule('IRN_IN_PROGRESS', `This ${what} is being registered right now. Wait a moment and refresh.`);
     const row = (await this.prisma.eInvoice.findFirst({ where }))!;
 
@@ -357,6 +364,15 @@ export class EInvoiceService {
     if (e instanceof AppError) return e.message;
     this.log.error(e);
     return 'The GST portal could not be reached or did not answer. Try again in a few minutes.';
+  }
+
+  /** In the transaction that cancels an invoice, after locking it: nothing may be on its way to the IRP, or live there. */
+  async assertNothingLive(tx: Tx, invoiceId: string) {
+    const row = await tx.eInvoice.findUnique({ where: { invoiceId }, select: { status: true, uncertain: true, updatedAt: true } });
+    if (!row) return;
+    const inFlight = row.status === 'PENDING' && Date.now() - row.updatedAt.getTime() < IN_FLIGHT_MS;
+    if (inFlight || row.status === 'GENERATED' || (row.uncertain && row.status !== 'CANCELLED'))
+      throw rule('IRN_IN_PROGRESS', 'This invoice was being registered at the GST portal at the same moment, so it was not cancelled. Refresh, and cancel it again.');
   }
 
   /**

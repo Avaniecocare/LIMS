@@ -4,6 +4,7 @@ import { createApp } from '../../src/bootstrap.js';
 import { parseTrustProxy } from '../../src/config/infra.config.js';
 import { NumberingService } from '../../src/core/numbering.service.js';
 import { RedisService } from '../../src/core/redis.service.js';
+import { EInvoiceService } from '../../src/modules/einvoice/einvoice.service.js';
 import { MockIrp, IrpRejection } from '../../src/modules/einvoice/provider.js';
 import { issuedJob, type FullTeam } from '../support/cycle.js';
 import { billingFixture } from '../support/fixtures.js';
@@ -277,6 +278,41 @@ describe('e-invoice answers that never arrive', () => {
     expect(dead.einvoice.lastError).toMatch(/as cancelled/);
     await cancel(dead).expect(200);
     fetchSpy.mockRestore();
+
+    // Registered and cancelled at the same moment: the cancellation arrives while the portal is being asked.
+    const both = await issueWith(new IrpRejection('Invalid HSN', ['2176']));
+    let during!: { status: number; body: { error?: { code: string } } };
+    const real = MockIrp.prototype.generate;
+    const slow = vi.spyOn(MockIrp.prototype, 'generate').mockImplementationOnce(async function (this: MockIrp, payload) {
+      during = await cancel(both);
+      return real.call(this, payload);
+    });
+    await accounts.post(`/invoices/${both.id}/einvoice`).expect(200);
+    slow.mockRestore();
+    expect([during.status, during.body.error?.code]).toEqual([422, 'IRN_UNCERTAIN']);
+    // And the last moment: the cancellation passed its first check before the registration began.
+    const einvoice = ctx.app.get(EInvoiceService);
+    const late = await issueWith(new IrpRejection('Invalid HSN', ['2176']));
+    const firstCheck = vi.spyOn(einvoice, 'cancelInvoiceIrn').mockImplementationOnce(async () => {
+      await accounts.post(`/invoices/${late.id}/einvoice`).expect(200);
+      return null;
+    });
+    expect((await cancel(late)).body.error?.code).toBe('IRN_IN_PROGRESS');
+    firstCheck.mockRestore();
+    const after = (await accounts.get(`/invoices/${late.id}`).expect(200)).body;
+    expect([after.status, after.einvoice.status]).toEqual(['ISSUED', 'GENERATED']);
+    await cancel(after).expect(200);
+    // The other way round: cancelled first, so it is never sent.
+    const gone = await issueWith(new IrpRejection('Invalid HSN', ['2176']));
+    const sent = vi.spyOn(MockIrp.prototype, 'generate');
+    const readiness = vi.spyOn(einvoice, 'readiness').mockImplementationOnce(async () => {
+      await cancel(gone).expect(200);
+      return [];
+    });
+    expect((await accounts.post(`/invoices/${gone.id}/einvoice`)).body.error?.code).toBe('CANCELLED');
+    expect(sent).not.toHaveBeenCalled();
+    readiness.mockRestore();
+    sent.mockRestore();
 
     // A sign-in error says nothing about the document.
     expect((await cancel(await issueWith(new IrpRejection('Invalid token', ['1005'])))).status).toBe(422);

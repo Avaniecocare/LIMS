@@ -556,6 +556,8 @@ export class InvoicesService implements OnModuleInit {
     // An IRN is cancelled at the IRP first: if the IRP refuses, the invoice stays issued, matching the IRP.
     await this.einvoice.cancelInvoiceIrn(id, irnCancelReason, reason);
     await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "Invoice" WHERE "id" = ${id} FOR UPDATE`;
+      await this.einvoice.assertNothingLive(tx, id);
       const inv = await this.load(id, tx);
       assertTransition(INVOICE, inv.status, 'CANCELLED', reason);
       if (Number(inv.paidAmount) > 0 || Number(inv.creditedAmount) > 0) throw rule('HAS_PAYMENTS', 'This invoice has payments or credit notes. Reverse them first.');

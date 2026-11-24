@@ -179,3 +179,11 @@ Choices made where the brief left room. Each is the default; anything a lab may 
 - **One export at a time, kept seven days, never through the general file links.** A run that dies with its worker is marked failed and not started again unasked.
 - **Emails can be sent again only to the same people.** Changing an address there would be a way to send a report to anyone; the record's own send button checks who may do that. Password resets are never sent again, and no email's body is ever shown in the list.
 - **The status page shows no addresses, versions of other software or error texts.** Those are in the server's log.
+
+## Registering and cancelling an invoice at once
+- **The invoice's row lock decides.** Claiming a registration and cancelling the invoice both lock it first, so whichever comes second sees the first: nothing is sent for a cancelled invoice, and an invoice is not cancelled while it is on its way to the portal.
+
+## Continuous integration
+- **Images are tagged for use only after a vulnerability scan** (high severity or worse, with a fix available).
+- **Licensed images** are built beside the others when the repository variable `LICENCE_PUBLIC_KEY` is set, and end in `-licensed`. The browser tests use the unlicensed ones.
+- **The load test runs on GitHub,** on every `build/**` push.

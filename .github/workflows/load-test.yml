@@ -1,0 +1,49 @@
+# 500,000 tests, 125,000 samples and 50,000 jobs in one database, and the list screens, searches, dashboard and reports
+# asked for again and again: first by 4 people at once, then by 25.
+name: Load test
+on:
+  push:
+    branches: ['build/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: load-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env: { POSTGRES_USER: lims, POSTGRES_PASSWORD: lims, POSTGRES_DB: lims }
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U lims" --health-interval 5s --health-retries 20 --shm-size 256m
+      redis:
+        image: redis:8-alpine
+        ports: ['6379:6379']
+    env:
+      DATABASE_URL: postgresql://lims:lims@localhost:5432/lims
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npm run build
+      - run: npx prisma migrate deploy
+      - run: node load-test/run.mjs --seed
+      - run: node --env-file=.env.example dist/seed/cli.js seed
+      - name: Start the API
+        run: |
+          node --env-file=.env.example dist/main.js api > api.log 2>&1 &
+          timeout 60 sh -c 'until curl -sf http://localhost:3000/health/ready >/dev/null; do sleep 1; done'
+      - name: Four people at once, 800 ms for the slowest 5%
+        env: { EMAIL: admin@demo.example, PASSWORD: 'Demo-Password-1!' }
+        run: node load-test/run.mjs
+      - name: Twenty-five people at once, 4 s for the slowest 5%
+        env: { EMAIL: admin@demo.example, PASSWORD: 'Demo-Password-1!', CONCURRENCY: 25, ROUNDS: 6, P95_BUDGET_MS: 4000 }
+        run: node load-test/run.mjs
+      - name: Memory and the API's log
+        if: always()
+        run: ps -o rss,cmd -C node | head; tail -20 api.log
